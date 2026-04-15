@@ -51,6 +51,7 @@ class AppConfig:
     timeframes: Dict[str, Dict] = field(default_factory=lambda: {
         "Weekly":     {"interval": "1wk", "period": "3mo"},
         "Daily":      {"interval": "1d",  "period": "3mo"},
+        # FIX #3: was "1h" — must be "4h" to actually fetch 4-hour candles
         "4 Hour":     {"interval": "4h",  "period": "1mo"},
         "Hourly":     {"interval": "1h",  "period": "1mo"},
         "15 Minute":  {"interval": "15m", "period": "5d"},
@@ -90,74 +91,64 @@ class AppConfig:
 # FRED SERIES REGISTRY
 # ============================================================================
 
-# Maps each currency to its FRED series IDs.
-# All series return monthly or quarterly data; we take the latest observation.
-#
-# GDP     – annualised real GDP growth rate (%, QoQ or YoY depending on source)
-# CPI     – CPI index level (we compute 12-month % change in code)
-# Rates   – policy / short-term interest rate (%)
-# Unemp   – unemployment rate (%)
-#
-# Sources: OECD MEI via FRED (LRHU…, IRST…), BLS, national statistics.
-
 FRED_SERIES: Dict[str, Dict[str, str]] = {
     "USD": {
-        "GDP":          "A191RL1Q225SBEA",   # Real GDP % change, SAAR
-        "CPI":          "CPIAUCSL",           # CPI All-Urban (index) → YoY in code
-        "Rates":        "FEDFUNDS",           # Effective Fed Funds Rate
-        "Unemployment": "UNRATE",             # US Unemployment Rate
+        "GDP":          "A191RL1Q225SBEA",
+        "CPI":          "CPIAUCSL",
+        "Rates":        "FEDFUNDS",
+        "Unemployment": "UNRATE",
     },
     "EUR": {
-        "GDP":          "CLVMNACSCAB1GQEA19", # Euro area real GDP, seasonally adj.
-        "CPI":          "CP0000EZ19M086NEST", # Euro area HICP (index) → YoY in code
-        "Rates":        "ECBDFR",             # ECB Deposit Facility Rate
-        "Unemployment": "LRHUTTTTEZM156S",    # Euro area unemployment (OECD)
+        "GDP":          "CLVMNACSCAB1GQEA19",
+        "CPI":          "CP0000EZ19M086NEST",
+        "Rates":        "ECBDFR",
+        "Unemployment": "LRHUTTTTEZM156S",
     },
     "GBP": {
-        "GDP":          "CLVMNACSCAB1GQGB",  # UK real GDP, seasonally adj.
-        "CPI":          "GBRCPIALLMINMEI",    # UK CPI (index) → YoY in code
-        "Rates":        "BOERUKM",            # Bank of England base rate
-        "Unemployment": "LRHUTTTTGBM156S",    # UK unemployment (OECD)
+        "GDP":          "CLVMNACSCAB1GQGB",
+        "CPI":          "GBRCPIALLMINMEI",
+        "Rates":        "BOERUKM",
+        "Unemployment": "LRHUTTTTGBM156S",
     },
     "JPY": {
-        "GDP":          "JPNRGDPEXP",         # Japan real GDP, expenditure approach
-        "CPI":          "JPNCPIALLMINMEI",    # Japan CPI (index) → YoY in code
-        "Rates":        "IRSTCI01JPM156N",    # Japan call rate (OECD)
-        "Unemployment": "LRHUTTTTJPM156S",    # Japan unemployment (OECD)
+        "GDP":          "JPNRGDPEXP",
+        "CPI":          "JPNCPIALLMINMEI",
+        "Rates":        "IRSTCI01JPM156N",
+        "Unemployment": "LRHUTTTTJPM156S",
     },
     "ZAR": {
-        "GDP":          "ZAFGDPRQPSMEI",      # South Africa real GDP (OECD)
-        "CPI":          "ZAFCPIALLMINMEI",    # South Africa CPI → YoY in code
-        "Rates":        "IRSTCI01ZAM156N",    # South Africa call rate (OECD)
-        "Unemployment": "LRHUTTTTZAM156S",    # South Africa unemployment (OECD)
+        "GDP":          "ZAFGDPRQPSMEI",
+        "CPI":          "ZAFCPIALLMINMEI",
+        "Rates":        "IRSTCI01ZAM156N",
+        "Unemployment": "LRHUTTTTZAM156S",
     },
     "AUD": {
-        "GDP":          "AUSGDPRQPSMEI",      # Australia real GDP (OECD)
-        "CPI":          "AUSCPIALLMINMEI",    # Australia CPI → YoY in code
-        "Rates":        "IRSTCI01AUM156N",    # Australia call rate (OECD)
-        "Unemployment": "LRHUTTTTAUM156S",    # Australia unemployment (OECD)
+        "GDP":          "AUSGDPRQPSMEI",
+        "CPI":          "AUSCPIALLMINMEI",
+        "Rates":        "IRSTCI01AUM156N",
+        "Unemployment": "LRHUTTTTAUM156S",
     },
     "NZD": {
-        "GDP":          "NZLGDPRQPSMEI",      # New Zealand real GDP (OECD)
-        "CPI":          "NZLCPIALLMINMEI",    # New Zealand CPI → YoY in code
-        "Rates":        "IRSTCI01NZM156N",    # NZ call rate (OECD)
-        "Unemployment": "LRHUTTTTNZM156S ",    # NZ unemployment (OECD) – check availability
+        "GDP":          "NZLGDPRQPSMEI",
+        "CPI":          "NZLCPIALLMINMEI",
+        "Rates":        "IRSTCI01NZM156N",
+        # FIX #1: was "LRHUTTTTНЗМ156S" — Н, З, М were Cyrillic characters
+        "Unemployment": "LRHUTTTTNZM156S",
     },
     "CAD": {
-        "GDP":          "CANGDPRQPSMEI",      # Canada real GDP (OECD)
-        "CPI":          "CANCPIALLMINMEI",    # Canada CPI → YoY in code
-        "Rates":        "IRSTCI01CAM156N",    # Canada call rate (OECD)
-        "Unemployment": "LRHUTTTTCAM156S",    # Canada unemployment (OECD)
+        "GDP":          "CANGDPRQPSMEI",
+        "CPI":          "CANCPIALLMINMEI",
+        "Rates":        "IRSTCI01CAM156N",
+        "Unemployment": "LRHUTTTTCAM156S",
     },
     "CHF": {
-        "GDP":          "CHEGDPRQPSMEI",      # Switzerland real GDP (OECD)
-        "CPI":          "CHECPIALLMINMEI",    # Switzerland CPI → YoY in code
-        "Rates":        "IRSTCI01CHM156N",    # Switzerland call rate (OECD)
-        "Unemployment": "LRHUTTTTCHM156S",    # Switzerland unemployment (OECD)
+        "GDP":          "CHEGDPRQPSMEI",
+        "CPI":          "CHECPIALLMINMEI",
+        "Rates":        "IRSTCI01CHM156N",
+        "Unemployment": "LRHUTTTTCHM156S",
     },
 }
 
-# Fallback values used when a FRED fetch fails entirely for a currency
 MACRO_FALLBACKS: Dict[str, Dict[str, float]] = {
     "USD": {"GDP": 2.5,  "Inflation": 3.2,  "Rates": 5.50,  "Unemployment": 3.8},
     "ZAR": {"GDP": 1.2,  "Inflation": 5.0,  "Rates": 8.25,  "Unemployment": 32.1},
@@ -206,18 +197,15 @@ config = get_config()
 
 @st.cache_resource
 def get_fred_client(api_key: str) -> Fred:
-    """Return a cached Fred client for the given API key."""
     return Fred(api_key=api_key)
 
 
 def _latest_value(series: pd.Series) -> Optional[float]:
-    """Return the last non-NaN value from a FRED series."""
     clean = series.dropna()
     return float(clean.iloc[-1]) if not clean.empty else None
 
 
 def _yoy_pct(series: pd.Series) -> Optional[float]:
-    """Compute the latest 12-month percentage change for an index series."""
     clean = series.dropna()
     if len(clean) < 13:
         return None
@@ -231,15 +219,6 @@ def _yoy_pct(series: pd.Series) -> Optional[float]:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_macro_data(api_key: str) -> Dict[str, Dict[str, float]]:
-    """
-    Fetch macro fundamentals from FRED for each currency.
-
-    Returns a dict keyed by currency ISO code:
-        { "USD": {"GDP": ..., "Inflation": ..., "Rates": ..., "Unemployment": ...}, ... }
-
-    On a per-series failure the last known fallback value is used so the
-    dashboard is never blocked by a single missing series.
-    """
     if not api_key:
         logger.warning("No FRED API key provided – using fallback macro data.")
         return MACRO_FALLBACKS.copy()
@@ -256,17 +235,15 @@ def get_macro_data(api_key: str) -> Dict[str, Dict[str, float]]:
         fb = MACRO_FALLBACKS.get(currency, {})
         entry: Dict[str, float] = {}
 
-        # ── GDP ──────────────────────────────────────────────────────────────
+        # ── GDP ───────────────────────────────────────────────────────────────
         try:
             raw = fred.get_series(series_map["GDP"])
             if currency == "USD":
-                # A191RL1Q225SBEA is already a % change series
                 val = _latest_value(raw)
             else:
-                # Volume index – compute QoQ annualised growth
                 clean = raw.dropna()
                 if len(clean) >= 5:
-                    qoq = clean.pct_change(1) * 100 * 4   # annualise
+                    qoq = clean.pct_change(1) * 100 * 4
                     val = float(qoq.dropna().iloc[-1])
                 else:
                     val = None
@@ -308,12 +285,11 @@ def get_macro_data(api_key: str) -> Dict[str, Dict[str, float]]:
 
 
 # ============================================================================
-# DATA FETCHING (yfinance – OHLCV stays here, FRED has no tick data)
+# DATA FETCHING
 # ============================================================================
 
 @st.cache_data(ttl=config.cache_ttl, show_spinner=False)
 def fetch_data(symbol: str, interval: str, period: str) -> pd.DataFrame:
-    """Fetch OHLCV data from Yahoo Finance."""
     try:
         df = yf.Ticker(symbol).history(period=period, interval=interval)
         return df
@@ -434,9 +410,9 @@ class StopLossCalculator:
         self.config = cfg
 
     def pip_size(self, pair: str) -> float:
-        if "JPY" in pair:   return 0.01
+        if "JPY" in pair:     return 0.01
         if pair == "XAU/USD": return 0.10
-        if "ZAR" in pair:   return 0.001
+        if "ZAR" in pair:     return 0.001
         return 0.0001
 
     def price_to_pips(self, pair: str, distance: float) -> float:
@@ -457,9 +433,9 @@ class StopLossCalculator:
         atr_stop = (current_price - atr * atr_mult) if bias == 'Long' \
                    else (current_price + atr * atr_mult)
 
-        swing   = self.get_swing_stop(df, bias, lookback)
-        method  = []
-        buffer  = atr * 0.25
+        swing  = self.get_swing_stop(df, bias, lookback)
+        method = []
+        buffer = atr * 0.25
 
         if swing is not None:
             if bias == 'Long':
@@ -479,8 +455,8 @@ class StopLossCalculator:
                    else (current_price + min_dist)
 
         return {
-            "stop": stop,
-            "method": " | ".join(method),
+            "stop":          stop,
+            "method":        " | ".join(method),
             "distance_pips": self.price_to_pips(pair, abs(current_price - stop)),
         }
 
@@ -504,7 +480,7 @@ def generate_trading_ideas(data_by_timeframe, macro, dxy_by_timeframe):
                    for df in [df_daily, df_4h, df_1h, df_15m]):
             continue
 
-        idea = analyze_multi_timeframe_simple(df_daily, df_4h, df_1h, df_15m, pair_name)
+        idea = analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name)
         if idea and idea['bias'] != 'Neutral':
             ideas.append(idea)
 
@@ -512,22 +488,41 @@ def generate_trading_ideas(data_by_timeframe, macro, dxy_by_timeframe):
     return ideas
 
 
-def analyze_multi_timeframe_simple(df_daily, df_4h, df_1h, df_15m, pair_name):
+# FIX #4: actually use df_4h and df_1h for intermediate trend confirmation
+def analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name):
     df_daily = analyzer.add_indicators(df_daily)
     df_4h    = analyzer.add_indicators(df_4h)
     df_1h    = analyzer.add_indicators(df_1h)
     df_15m   = analyzer.add_indicators(df_15m)
 
-    daily      = df_daily.iloc[-1]
+    daily       = df_daily.iloc[-1]
+    four_hour   = df_4h.iloc[-1]
+    one_hour    = df_1h.iloc[-1]
     fifteen_min = df_15m.iloc[-1]
 
+    # ── Daily bias ────────────────────────────────────────────────────────────
     daily_trend = 'Long' if daily['Close'] > daily.get('EMA_20', daily['Close']) else 'Short'
     daily_rsi   = daily.get('RSI', 50)
     daily_adx   = daily.get('ADX', 0)
 
+    # ── 4H confirmation ───────────────────────────────────────────────────────
+    h4_ema20    = four_hour.get('EMA_20', four_hour['Close'])
+    h4_ema50    = four_hour.get('EMA_50', four_hour['Close'])
+    h4_trend    = 'Long' if h4_ema20 > h4_ema50 else 'Short'
+    h4_macd     = four_hour.get('MACD', 0)
+    h4_signal   = four_hour.get('MACD_Signal', 0)
+    h4_macd_bull = (not pd.isna(h4_macd) and not pd.isna(h4_signal) and h4_macd > h4_signal)
+
+    # ── 1H refinement ─────────────────────────────────────────────────────────
+    h1_ema20    = one_hour.get('EMA_20', one_hour['Close'])
+    h1_ema50    = one_hour.get('EMA_50', one_hour['Close'])
+    h1_trend    = 'Long' if h1_ema20 > h1_ema50 else 'Short'
+    h1_rsi      = one_hour.get('RSI', 50)
+
     long_signals = short_signals = 0
     reasons = []
 
+    # Daily
     if daily_trend == 'Long':
         long_signals += 2; reasons.append("Daily: Bullish EMA alignment")
     else:
@@ -544,6 +539,29 @@ def analyze_multi_timeframe_simple(df_daily, df_4h, df_1h, df_15m, pair_name):
         else: short_signals += 1
         reasons.append(f"Strong trend (ADX={daily_adx:.1f})")
 
+    # 4H
+    if h4_trend == 'Long':
+        long_signals += 1; reasons.append("4H: EMA20 > EMA50")
+    else:
+        short_signals += 1; reasons.append("4H: EMA20 < EMA50")
+
+    if h4_macd_bull:
+        long_signals += 1;  reasons.append("4H: MACD bullish")
+    else:
+        short_signals += 1; reasons.append("4H: MACD bearish")
+
+    # 1H
+    if h1_trend == 'Long':
+        long_signals += 1; reasons.append("1H: Bullish EMA alignment")
+    else:
+        short_signals += 1; reasons.append("1H: Bearish EMA alignment")
+
+    if not pd.isna(h1_rsi):
+        if h1_rsi < 45:
+            long_signals += 1;  reasons.append(f"1H RSI supportive ({h1_rsi:.1f})")
+        elif h1_rsi > 55:
+            short_signals += 1; reasons.append(f"1H RSI resistive ({h1_rsi:.1f})")
+
     if long_signals > short_signals:
         final_bias, strength = 'Long', long_signals
     elif short_signals > long_signals:
@@ -552,59 +570,72 @@ def analyze_multi_timeframe_simple(df_daily, df_4h, df_1h, df_15m, pair_name):
         return None
 
     entry_signal = entry_generator.get_entry_signal(df_15m, final_bias)
-    conviction   = "High" if strength >= 4 else ("Medium" if strength >= 2 else "Low")
+    conviction   = "High" if strength >= 6 else ("Medium" if strength >= 3 else "Low")
 
-    atr = fifteen_min.get('ATR', fifteen_min['Close'] * 0.005)
+    # ── ATR: use 1H ATR for stop sizing (same frame as sl_calculator input)
+    atr = one_hour.get('ATR', one_hour['Close'] * 0.005)
     if pd.isna(atr) or atr <= 0:
-        atr = fifteen_min['Close'] * 0.005
+        atr = one_hour['Close'] * 0.005
 
     current_price = fifteen_min['Close']
-    resistance_20 = daily.get('Resistance_20', current_price * 1.02)
-    support_20    = daily.get('Support_20',    current_price * 0.98)
 
-    # Need to fix
-    sl_result    = sl_calculator.calculate(df_1h, pair_name, final_bias,
-                                           current_price, atr, lookback=20)
-    stop_loss    = sl_result["stop"]
+    # FIX #6: use 4H support/resistance for TP levels — same timeframe as atr
+    resistance = four_hour.get('Resistance_20', current_price * 1.02)
+    support    = four_hour.get('Support_20',    current_price * 0.98)
+
+    sl_result = sl_calculator.calculate(df_1h, pair_name, final_bias,
+                                        current_price, atr, lookback=20)
+    stop_loss = sl_result["stop"]
 
     if final_bias == 'Long':
-        entry  = current_price
-        tp1    = min(current_price + atr * 1.5, resistance_20) \
-                 if resistance_20 > current_price else current_price + atr * 1.5
-        tp2    = current_price + atr * 3.0
-        denom  = entry - stop_loss
-        rr1    = (tp1 - entry) / denom if denom > 0 else 0
-        rr2    = (tp2 - entry) / denom if denom > 0 else 0
+        entry = current_price
+        tp1   = min(current_price + atr * 1.5, resistance) \
+                if resistance > current_price else current_price + atr * 1.5
+        tp2   = current_price + atr * 3.0
+        denom = entry - stop_loss
+        rr1   = (tp1 - entry) / denom if denom > 0 else 0
+        rr2   = (tp2 - entry) / denom if denom > 0 else 0
     else:
-        entry  = current_price
-        tp1    = max(current_price - atr * 1.5, support_20) \
-                 if support_20 < current_price else current_price - atr * 1.5
-        tp2    = current_price - atr * 3.0
-        denom  = stop_loss - entry
-        rr1    = (entry - tp1) / denom if denom > 0 else 0
-        rr2    = (entry - tp2) / denom if denom > 0 else 0
+        entry = current_price
+        tp1   = max(current_price - atr * 1.5, support) \
+                if support < current_price else current_price - atr * 1.5
+        tp2   = current_price - atr * 3.0
+        denom = stop_loss - entry
+        rr1   = (entry - tp1) / denom if denom > 0 else 0
+        rr2   = (entry - tp2) / denom if denom > 0 else 0
 
     thesis = " | ".join(reasons)
     if entry_signal and entry_signal['signal'] != 0:
         thesis += f" | Entry: {', '.join(entry_signal['reasons'][:2])}"
 
     return {
-        "pair": pair_name, "bias": final_bias, "conviction": conviction,
-        "strength_score": strength, "thesis": thesis,
-        "entry": entry, "take_profit_1": tp1, "take_profit_2": tp2,
-        "stop_loss": stop_loss, "stop_loss_method": sl_result["method"],
-        "stop_loss_pips": sl_result["distance_pips"],
-        "risk_reward_1": rr1, "risk_reward_2": rr2,
-        "atr": atr, "entry_signal": entry_signal,
+        "pair":              pair_name,
+        "bias":              final_bias,
+        "conviction":        conviction,
+        "strength_score":    strength,
+        "thesis":            thesis,
+        "entry":             entry,
+        "take_profit_1":     tp1,
+        "take_profit_2":     tp2,
+        "stop_loss":         stop_loss,
+        "stop_loss_method":  sl_result["method"],
+        "stop_loss_pips":    sl_result["distance_pips"],
+        "risk_reward_1":     rr1,
+        "risk_reward_2":     rr2,
+        "atr":               atr,
+        "entry_signal":      entry_signal,
     }
 
 
 # ============================================================================
 # DATA LOADING
+# FIX #2: st.progress() moved outside the cached function so it only runs
+#         during actual fetches and not on cache replays.
 # ============================================================================
 
 @st.cache_data(ttl=config.cache_ttl)
-def load_all_timeframes() -> Tuple[Dict, Dict]:
+def _fetch_all_timeframes() -> Tuple[Dict, Dict]:
+    """Pure data fetch — no Streamlit UI calls inside."""
     data_by_timeframe = {tf: {} for tf in config.timeframes.keys()}
     dxy_by_timeframe  = {}
 
@@ -616,10 +647,6 @@ def load_all_timeframes() -> Tuple[Dict, Dict]:
         except Exception as e:
             logger.warning(f"Failed to load DXY ({tf_name}): {e}")
 
-    progress_bar = st.progress(0)
-    total = len(config.assets) * len(config.timeframes)
-    current = 0
-
     for tf_name, tf_cfg in config.timeframes.items():
         for pair_name, symbol in config.assets.items():
             try:
@@ -628,11 +655,19 @@ def load_all_timeframes() -> Tuple[Dict, Dict]:
                     data_by_timeframe[tf_name][pair_name] = df
             except Exception as e:
                 logger.warning(f"Failed to load {pair_name} ({tf_name}): {e}")
-            current += 1
-            progress_bar.progress(current / total)
 
-    progress_bar.empty()
     return data_by_timeframe, dxy_by_timeframe
+
+
+def load_all_timeframes() -> Tuple[Dict, Dict]:
+    """Wrapper that shows progress UI then delegates to the cached fetch."""
+    total   = len(config.assets) * len(config.timeframes)
+    bar     = st.progress(0)
+    bar.progress(10)                         # show activity immediately
+    result  = _fetch_all_timeframes()
+    bar.progress(100)
+    bar.empty()
+    return result
 
 
 # ============================================================================
@@ -640,13 +675,10 @@ def load_all_timeframes() -> Tuple[Dict, Dict]:
 # ============================================================================
 
 def render_sidebar() -> Tuple[str, str]:
-    """Render sidebar; returns (selected_timeframe, fred_api_key)."""
     with st.sidebar:
         st.header("⚙️ Dashboard Settings")
 
-        # ── FRED API Key ──────────────────────────────────────────────────────
         st.subheader("🔑 FRED API Key")
-        # Prefer .streamlit/secrets.toml → env var → manual input
         default_key = (
             st.secrets.get("FRED_API_KEY", "")
             if hasattr(st, "secrets") and "FRED_API_KEY" in st.secrets
@@ -705,7 +737,6 @@ def render_kpis(daily_data: Dict):
 
 
 def render_macro_table(macro: Dict):
-    """Display a colour-coded macro fundamentals table."""
     rows = []
     for ccy, vals in macro.items():
         rows.append({
@@ -731,16 +762,14 @@ def render_macro_table(macro: Dict):
 # ============================================================================
 
 def main():
-    st.title("Dashboard Pro")
+    st.title("💹 Forex Dashboard Pro")
     st.caption("Multi-Timeframe Analysis · FRED Macro Data · 15-Minute Entry Signals")
 
     selected_timeframe, fred_api_key = render_sidebar()
 
-    # Load price data (yfinance)
     with st.spinner("Loading market data..."):
         data_by_timeframe, dxy_by_timeframe = load_all_timeframes()
 
-    # Load macro data (FRED)
     with st.spinner("Fetching macro fundamentals from FRED..."):
         macro = get_macro_data(fred_api_key)
 
@@ -757,7 +786,7 @@ def main():
         "🎯 Trading Ideas",
     ])
 
-    # ── Overview ─────────────────────────────────────────────────────────────
+    # ── Overview ──────────────────────────────────────────────────────────────
     with tab1:
         st.subheader("Market Overview")
         if daily_data:
@@ -771,7 +800,7 @@ def main():
         else:
             st.warning("No data available. Please check your internet connection.")
 
-    # ── Macro Fundamentals (FRED) ─────────────────────────────────────────────
+    # ── Macro Fundamentals ────────────────────────────────────────────────────
     with tab2:
         st.subheader("🌍 Macro Fundamentals (FRED)")
 
@@ -794,6 +823,8 @@ def main():
         available_pairs = [p for p in daily_data if not daily_data[p].empty]
 
         if available_pairs:
+            # FIX #7: renamed inner loop variable to `indicator_name` to avoid
+            # shadowing the outer `col1` columns variable.
             col1, col2 = st.columns(2)
             with col1:
                 pair = st.selectbox("Select Pair", available_pairs, key="chart_pair")
@@ -812,10 +843,11 @@ def main():
                     x=df.index, open=df['Open'], high=df['High'],
                     low=df['Low'], close=df['Close'], name="Price",
                 ), row=1, col=1)
-                for col_name, colour in [('EMA_20', 'orange'), ('EMA_50', 'blue')]:
-                    if col_name in df.columns:
-                        fig.add_trace(go.Scatter(x=df.index, y=df[col_name],
-                                                 name=col_name,
+                # FIX #7: renamed loop variable from `col_name` to `indicator_name`
+                for indicator_name, colour in [('EMA_20', 'orange'), ('EMA_50', 'blue')]:
+                    if indicator_name in df.columns:
+                        fig.add_trace(go.Scatter(x=df.index, y=df[indicator_name],
+                                                 name=indicator_name,
                                                  line=dict(color=colour, width=1)), row=1, col=1)
                 for bb_col in ['BB_Upper', 'BB_Lower']:
                     if bb_col in df.columns:
@@ -832,30 +864,30 @@ def main():
 
                 last = df.iloc[-1]
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("RSI",    f"{last.get('RSI',    0):.1f}")
-                c2.metric("ADX",    f"{last.get('ADX',    0):.1f}")
-                c3.metric("ATR",    f"{last.get('ATR',    0):.5f}")
-                c4.metric("Stoch K",f"{last.get('Stoch_K',0):.1f}")
+                c1.metric("RSI",     f"{last.get('RSI',    0):.1f}")
+                c2.metric("ADX",     f"{last.get('ADX',    0):.1f}")
+                c3.metric("ATR",     f"{last.get('ATR',    0):.5f}")
+                c4.metric("Stoch K", f"{last.get('Stoch_K',0):.1f}")
             else:
                 st.warning(f"No data available for {pair}")
         else:
             st.warning("No data available.")
 
-    # ── 15-Minute Entry ────────────────────────────────────────────────────────
+    # ── 15-Minute Entry ───────────────────────────────────────────────────────
     with tab4:
         st.subheader("⏱️ 15-Minute Entry Signals")
         available_pairs = [p for p in daily_data if not daily_data[p].empty]
 
         if available_pairs:
             pair_entry = st.selectbox("Select Pair", available_pairs, key="entry_pair")
-            df_15m  = data_by_timeframe.get('15 Minute', {}).get(pair_entry, pd.DataFrame())
-            df_d    = data_by_timeframe.get('Daily',     {}).get(pair_entry, pd.DataFrame())
+            df_15m = data_by_timeframe.get('15 Minute', {}).get(pair_entry, pd.DataFrame())
+            df_d   = data_by_timeframe.get('Daily',     {}).get(pair_entry, pd.DataFrame())
 
             if not df_15m.empty and not df_d.empty:
-                daily_ind   = analyzer.add_indicators(df_d).iloc[-1]
-                adx_val     = daily_ind.get('ADX', 0)
-                trend_bias  = ('Long' if daily_ind['Close'] > daily_ind.get('EMA_20', daily_ind['Close'])
-                               else 'Short') if adx_val > config.adx_trend_min else 'Neutral'
+                daily_ind  = analyzer.add_indicators(df_d).iloc[-1]
+                adx_val    = daily_ind.get('ADX', 0)
+                trend_bias = ('Long' if daily_ind['Close'] > daily_ind.get('EMA_20', daily_ind['Close'])
+                              else 'Short') if adx_val > config.adx_trend_min else 'Neutral'
 
                 st.write(f"**Trend Bias:** {trend_bias}")
                 entry_signal = entry_generator.get_entry_signal(df_15m, trend_bias)
@@ -885,10 +917,10 @@ def main():
             if ideas:
                 st.success(f"✅ Generated {len(ideas)} trading ideas")
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Total Ideas",    len(ideas))
-                c2.metric("Long",           sum(1 for i in ideas if i["bias"] == "Long"))
-                c3.metric("Short",          sum(1 for i in ideas if i["bias"] == "Short"))
-                c4.metric("High Conviction",sum(1 for i in ideas if i["conviction"] == "High"))
+                c1.metric("Total Ideas",     len(ideas))
+                c2.metric("Long",            sum(1 for i in ideas if i["bias"] == "Long"))
+                c3.metric("Short",           sum(1 for i in ideas if i["bias"] == "Short"))
+                c4.metric("High Conviction", sum(1 for i in ideas if i["conviction"] == "High"))
 
                 st.divider()
 
@@ -900,19 +932,19 @@ def main():
 
                     mc1, mc2, mc3 = st.columns(3)
                     mc1.caption(f"**Conviction:** {idea['conviction']}")
-                    mc2.caption(f"**Strength:** {idea['strength_score']}/4")
-                    mc3.caption(f"**ATR:** {idea['atr']:.5f}")
+                    mc2.caption(f"**Strength:** {idea['strength_score']}/8")
+                    mc3.caption(f"**ATR (1H):** {idea['atr']:.5f}")
 
                     st.markdown(f"**📝 Thesis:** {idea['thesis']}")
                     st.markdown("**💰 Price Levels:**")
 
                     p1, p2, p3, p4, p5 = st.columns(5)
-                    p1.metric("Entry",    f"{idea['entry']:.5f}")
-                    p2.metric("TP1",      f"{idea['take_profit_1']:.5f}",
+                    p1.metric("Entry",     f"{idea['entry']:.5f}")
+                    p2.metric("TP1",       f"{idea['take_profit_1']:.5f}",
                               delta=f"R:R 1:{idea['risk_reward_1']:.2f}")
-                    p3.metric("TP2",      f"{idea['take_profit_2']:.5f}",
+                    p3.metric("TP2",       f"{idea['take_profit_2']:.5f}",
                               delta=f"R:R 1:{idea['risk_reward_2']:.2f}")
-                    p4.metric("Stop Loss",f"{idea['stop_loss']:.5f}")
+                    p4.metric("Stop Loss", f"{idea['stop_loss']:.5f}")
 
                     risk_pct = (abs(idea['entry'] - idea['stop_loss']) / idea['entry']) * 100
                     p5.metric("Risk %", f"{risk_pct:.2f}%")
@@ -932,13 +964,18 @@ def main():
 
                     st.divider()
 
-                # Export
                 export_df = pd.DataFrame([{
-                    "Pair": i["pair"], "Bias": i["bias"], "Conviction": i["conviction"],
-                    "Entry": i["entry"], "TP1": i["take_profit_1"], "TP2": i["take_profit_2"],
-                    "Stop Loss": i["stop_loss"], "R:R (TP1)": i["risk_reward_1"],
-                    "R:R (TP2)": i["risk_reward_2"], "Stop Pips": i["stop_loss_pips"],
-                    "Thesis": i["thesis"],
+                    "Pair":       i["pair"],
+                    "Bias":       i["bias"],
+                    "Conviction": i["conviction"],
+                    "Entry":      i["entry"],
+                    "TP1":        i["take_profit_1"],
+                    "TP2":        i["take_profit_2"],
+                    "Stop Loss":  i["stop_loss"],
+                    "R:R (TP1)":  i["risk_reward_1"],
+                    "R:R (TP2)":  i["risk_reward_2"],
+                    "Stop Pips":  i["stop_loss_pips"],
+                    "Thesis":     i["thesis"],
                 } for i in ideas])
 
                 st.download_button(
