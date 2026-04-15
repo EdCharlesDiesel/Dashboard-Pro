@@ -762,7 +762,7 @@ def render_macro_table(macro: Dict):
 # ============================================================================
 
 def main():
-    st.title("💹 Forex Dashboard Pro")
+    st.title("💹 Dashboard Pro")
     st.caption("Multi-Timeframe Analysis · FRED Macro Data · 15-Minute Entry Signals")
 
     selected_timeframe, fred_api_key = render_sidebar()
