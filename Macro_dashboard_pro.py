@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import ta
+import time  # Added for notification timing
 
 warnings.filterwarnings('ignore')
 
@@ -104,6 +105,10 @@ class AppConfig:
     
     # Cache TTL (seconds)
     cache_ttl: int = 300
+    
+    # Notification settings
+    enable_notifications: bool = True
+    notification_check_interval: int = 60  # seconds
 
 
 # ============================================================================
@@ -126,6 +131,83 @@ def setup_logging() -> logging.Logger:
     return logger
 
 logger = setup_logging()
+
+
+# ============================================================================
+# NOTIFICATION MANAGER
+# ============================================================================
+
+class NotificationManager:
+    """Manages desktop and in-app notifications for trading signals"""
+    
+    def __init__(self):
+        self.last_notification_time = {}
+        self.notification_cooldown = 300  # 5 minutes between same pair notifications
+        
+    def show_notification(self, title: str, message: str, notification_type: str = "info"):
+        """Show a notification in the app"""
+        if notification_type == "success":
+            st.toast(f"🎯 {title}", icon="🎯")
+            st.balloons()
+            time.sleep(0.5)
+        elif notification_type == "warning":
+            st.toast(f"⚠️ {title}", icon="⚠️")
+        elif notification_type == "error":
+            st.toast(f"❌ {title}", icon="❌")
+        else:
+            st.toast(f"ℹ️ {title}", icon="ℹ️")
+        
+        # Also show in sidebar for visibility
+        with st.sidebar:
+            if notification_type == "success":
+                st.success(f"**{title}**\n{message}")
+            elif notification_type == "warning":
+                st.warning(f"**{title}**\n{message}")
+            else:
+                st.info(f"**{title}**\n{message}")
+    
+    def notify_high_conviction(self, idea: Dict):
+        """Send notification for high conviction trading idea"""
+        pair = idea['pair']
+        current_time = time.time()
+        
+        # Check cooldown
+        if pair in self.last_notification_time:
+            if current_time - self.last_notification_time[pair] < self.notification_cooldown:
+                return False
+        
+        # Create notification message
+        direction = "LONG 📈" if idea['bias'] == 'Long' else "SHORT 📉"
+        title = f"HIGH CONVICTION {direction} - {pair}"
+        
+        message = f"""
+        **Entry:** {idea['entry']:.5f}
+        **Stop Loss:** {idea['stop_loss']:.5f} ({idea['stop_loss_pips']} pips)
+        **Take Profit 1:** {idea['take_profit_1']:.5f}
+        **Take Profit 2:** {idea['take_profit_2']:.5f}
+        **Risk/Reward:** 1:{idea['risk_reward']:.2f}
+        **Confidence Score:** {idea['strength_score']}/5
+        
+        **Thesis:** {idea['thesis']}
+        **Stop Method:** {idea['stop_loss_method']}
+        """
+        
+        self.show_notification(title, message, "success")
+        self.last_notification_time[pair] = current_time
+        return True
+    
+    def notify_multiple_opportunities(self, ideas: List[Dict]):
+        """Notify when multiple trading opportunities exist"""
+        high_conviction = [i for i in ideas if i['conviction'] == 'High']
+        
+        if len(high_conviction) >= 3:
+            title = f"🔥 MULTIPLE HIGH CONVICTION SIGNALS ({len(high_conviction)})"
+            message = "\n".join([f"• {i['pair']}: {i['bias']} (Score: {i['strength_score']}/5)" 
+                                for i in high_conviction[:5]])
+            self.show_notification(title, message, "success")
+
+
+notification_manager = NotificationManager()
 
 
 # ============================================================================
@@ -453,8 +535,6 @@ def generate_trading_ideas(data_by_timeframe, macro, dxy_by_timeframe):
     """Generate trading ideas using multi-timeframe analysis"""
     ideas = []
     
-    st.write("🔍 Debug: Checking data availability...")
-    
     for pair_name in config.assets.keys():
         # Get data for all timeframes
         df_daily = data_by_timeframe.get('Daily', {}).get(pair_name, pd.DataFrame())
@@ -470,8 +550,6 @@ def generate_trading_ideas(data_by_timeframe, macro, dxy_by_timeframe):
         
         if not (daily_ok and h4_ok and h1_ok and m15_ok):
             continue
-        
-        st.write(f"✅ {pair_name}: Daily({len(df_daily)}), 4H({len(df_4h)}), 1H({len(df_1h)}), 15M({len(df_15m)})")
         
         idea = analyze_multi_timeframe_simple(df_daily, df_4h, df_1h, df_15m, pair_name)
         
@@ -669,6 +747,11 @@ def render_sidebar() -> str:
             "Default Chart Timeframe",
             ["Daily", "4 Hour", "Hourly", "15 Minute"]
         )
+        
+        # Notification toggle
+        enable_notifications = st.checkbox("🔔 Enable Pop-up Notifications", value=True)
+        config.enable_notifications = enable_notifications
+        
         st.divider()
         
         st.header("🎯 Strategy Parameters")
@@ -686,6 +769,12 @@ def render_sidebar() -> str:
         - Min R/R: {config.min_rr}:1
         """)
         st.divider()
+        
+        # Auto-refresh option
+        auto_refresh = st.checkbox("🔄 Auto-refresh (60s)", value=False)
+        if auto_refresh:
+            time.sleep(config.notification_check_interval)
+            st.rerun()
         
         st.caption(f"Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
@@ -907,6 +996,23 @@ def main():
             if ideas:
                 st.success(f"Generated {len(ideas)} trading ideas")
                 
+                # Check for high conviction ideas and send notifications
+                if config.enable_notifications:
+                    high_conviction_ideas = [i for i in ideas if i['conviction'] == 'High']
+                    
+                    # Notify for each high conviction idea
+                    for idea in high_conviction_ideas:
+                        notification_manager.notify_high_conviction(idea)
+                    
+                    # Notify if multiple opportunities
+                    if len(high_conviction_ideas) >= 3:
+                        notification_manager.notify_multiple_opportunities(ideas)
+                    
+                    # Show notification count
+                    if high_conviction_ideas:
+                        with st.sidebar:
+                            st.success(f"🔔 {len(high_conviction_ideas)} High Conviction Signals!")
+                
                 # Summary
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -921,10 +1027,17 @@ def main():
                 # Display ideas
                 for idea in ideas:
                     with st.container():
-                        if idea["bias"] == "Long":
-                            st.success(f"### {idea['pair']} - LONG 📈")
+                        # Highlight high conviction ideas
+                        if idea["conviction"] == "High":
+                            if idea["bias"] == "Long":
+                                st.success(f"### 🔥 {idea['pair']} - LONG 📈 (HIGH CONVICTION)")
+                            else:
+                                st.error(f"### 🔥 {idea['pair']} - SHORT 📉 (HIGH CONVICTION)")
                         else:
-                            st.error(f"### {idea['pair']} - SHORT 📉")
+                            if idea["bias"] == "Long":
+                                st.success(f"### {idea['pair']} - LONG 📈")
+                            else:
+                                st.error(f"### {idea['pair']} - SHORT 📉")
                         
                         st.caption(f"**Conviction:** {idea['conviction']} | **Strength:** {idea['strength_score']}/5")
                         st.markdown(f"**Thesis:** {idea['thesis']}")
