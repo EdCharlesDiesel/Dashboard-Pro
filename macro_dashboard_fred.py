@@ -84,7 +84,7 @@ class AppConfig:
     ny_end:       int = 21
 
     dxy_symbol: str = "DX-Y.NYB"
-    cache_ttl:  int = 300
+    notification_check_interval:  int = 300000
 
 
 # ============================================================================
