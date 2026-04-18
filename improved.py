@@ -51,7 +51,6 @@ class AppConfig:
     timeframes: Dict[str, Dict] = field(default_factory=lambda: {
         "Weekly":     {"interval": "1wk", "period": "3mo"},
         "Daily":      {"interval": "1d",  "period": "3mo"},
-        # FIX #3: was "1h" — must be "4h" to actually fetch 4-hour candles
         "4 Hour":     {"interval": "4h",  "period": "1mo"},
         "Hourly":     {"interval": "1h",  "period": "1mo"},
         "15 Minute":  {"interval": "15m", "period": "5d"},
@@ -85,6 +84,7 @@ class AppConfig:
 
     dxy_symbol: str = "DX-Y.NYB"
     notification_check_interval:  int = 300000
+    cache_ttl: int = 300
 
 
 # ============================================================================
@@ -132,7 +132,6 @@ FRED_SERIES: Dict[str, Dict[str, str]] = {
         "GDP":          "NZLGDPRQPSMEI",
         "CPI":          "NZLCPIALLMINMEI",
         "Rates":        "IRSTCI01NZM156N",
-        # FIX #1: was "LRHUTTTTНЗМ156S" — Н, З, М were Cyrillic characters
         "Unemployment": "LRHUTTTTNZM156S",
     },
     "CAD": {
@@ -196,21 +195,34 @@ config = get_config()
 # ============================================================================
 
 @st.cache_resource
-def get_fred_client(api_key: str) -> Fred:
-    return Fred(api_key=api_key)
+def get_fred_client(api_key: str) -> Optional[Fred]:
+    """Initialize FRED client with error handling."""
+    if not api_key:
+        return None
+    try:
+        return Fred(api_key=api_key)
+    except Exception as e:
+        logger.error(f"Failed to initialize FRED client: {e}")
+        return None
 
 
 def _latest_value(series: pd.Series) -> Optional[float]:
+    """Safely extract latest value from series."""
+    if series is None or series.empty:
+        return None
     clean = series.dropna()
     return float(clean.iloc[-1]) if not clean.empty else None
 
 
 def _yoy_pct(series: pd.Series) -> Optional[float]:
+    """Calculate year-over-year percentage change."""
+    if series is None or series.empty:
+        return None
     clean = series.dropna()
     if len(clean) < 13:
         return None
     yoy = clean.pct_change(12) * 100
-    return float(yoy.dropna().iloc[-1])
+    return float(yoy.dropna().iloc[-1]) if not yoy.dropna().empty else None
 
 
 # ============================================================================
@@ -219,14 +231,14 @@ def _yoy_pct(series: pd.Series) -> Optional[float]:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_macro_data(api_key: str) -> Dict[str, Dict[str, float]]:
+    """Fetch macro data from FRED or use fallbacks."""
     if not api_key:
         logger.warning("No FRED API key provided – using fallback macro data.")
         return MACRO_FALLBACKS.copy()
 
-    try:
-        fred = get_fred_client(api_key)
-    except Exception as e:
-        logger.error(f"Failed to initialise FRED client: {e}")
+    fred = get_fred_client(api_key)
+    if fred is None:
+        logger.warning("FRED client initialization failed – using fallback data.")
         return MACRO_FALLBACKS.copy()
 
     result: Dict[str, Dict[str, float]] = {}
@@ -238,16 +250,19 @@ def get_macro_data(api_key: str) -> Dict[str, Dict[str, float]]:
         # ── GDP ───────────────────────────────────────────────────────────────
         try:
             raw = fred.get_series(series_map["GDP"])
-            if currency == "USD":
-                val = _latest_value(raw)
-            else:
-                clean = raw.dropna()
-                if len(clean) >= 5:
-                    qoq = clean.pct_change(1) * 100 * 4
-                    val = float(qoq.dropna().iloc[-1])
+            if raw is not None and not raw.empty:
+                if currency == "USD":
+                    val = _latest_value(raw)
                 else:
-                    val = None
-            entry["GDP"] = val if val is not None else fb.get("GDP", 0.0)
+                    clean = raw.dropna()
+                    if len(clean) >= 5:
+                        qoq = clean.pct_change(1) * 100 * 4
+                        val = float(qoq.dropna().iloc[-1]) if not qoq.dropna().empty else None
+                    else:
+                        val = None
+                entry["GDP"] = val if val is not None else fb.get("GDP", 0.0)
+            else:
+                entry["GDP"] = fb.get("GDP", 0.0)
         except Exception as e:
             logger.warning(f"FRED GDP fetch failed for {currency}: {e}")
             entry["GDP"] = fb.get("GDP", 0.0)
@@ -288,10 +303,13 @@ def get_macro_data(api_key: str) -> Dict[str, Dict[str, float]]:
 # DATA FETCHING
 # ============================================================================
 
-@st.cache_data(ttl=config.cache_ttl, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_data(symbol: str, interval: str, period: str) -> pd.DataFrame:
+    """Fetch data from yfinance with error handling."""
     try:
         df = yf.Ticker(symbol).history(period=period, interval=interval)
+        if df.empty:
+            logger.warning(f"No data returned for {symbol} ({interval})")
         return df
     except Exception as e:
         logger.error(f"Error fetching {symbol}: {e}")
@@ -305,37 +323,63 @@ def fetch_data(symbol: str, interval: str, period: str) -> pd.DataFrame:
 class TechnicalAnalyzer:
     @staticmethod
     def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
+        """Add technical indicators to dataframe."""
         if df.empty or len(df) < 20:
             return df
+        
         df = df.copy()
+        
+        # Ensure required columns exist
+        required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+        if not all(col in df.columns for col in required_cols):
+            logger.warning("Missing required columns for indicator calculation")
+            return df
+        
         try:
+            # RSI
             df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=14).rsi()
+            
+            # MACD
             macd = ta.trend.MACD(df['Close'])
             df['MACD'] = macd.macd()
             df['MACD_Signal'] = macd.macd_signal()
             df['MACD_Histogram'] = macd.macd_diff()
+            
+            # Moving Averages
             df['SMA_20'] = ta.trend.sma_indicator(df['Close'], window=20)
             df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
             df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
             df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
+            
+            # Bollinger Bands
             bb = ta.volatility.BollingerBands(df['Close'], window=20, window_dev=2)
-            df['BB_Upper']  = bb.bollinger_hband()
+            df['BB_Upper'] = bb.bollinger_hband()
             df['BB_Middle'] = bb.bollinger_mavg()
-            df['BB_Lower']  = bb.bollinger_lband()
+            df['BB_Lower'] = bb.bollinger_lband()
+            
+            # ATR
             atr = ta.volatility.AverageTrueRange(df['High'], df['Low'], df['Close'], window=14)
             df['ATR'] = atr.average_true_range()
+            
+            # Stochastic
             stoch = ta.momentum.StochasticOscillator(
                 df['High'], df['Low'], df['Close'], window=14, smooth_window=3)
             df['Stoch_K'] = stoch.stoch()
             df['Stoch_D'] = stoch.stoch_signal()
+            
+            # ADX
             adx_ind = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'], window=14)
-            df['ADX']     = adx_ind.adx()
+            df['ADX'] = adx_ind.adx()
             df['ADX_Pos'] = adx_ind.adx_pos()
             df['ADX_Neg'] = adx_ind.adx_neg()
+            
+            # Support/Resistance
             df['Resistance_20'] = df['High'].rolling(window=20).max()
-            df['Support_20']    = df['Low'].rolling(window=20).min()
+            df['Support_20'] = df['Low'].rolling(window=20).min()
+            
         except Exception as e:
             logger.error(f"Error calculating indicators: {e}")
+        
         return df
 
 
@@ -351,50 +395,72 @@ class EntrySignalGenerator:
         self.config = config
 
     def get_entry_signal(self, df_15m: pd.DataFrame, bias: str) -> Dict:
+        """Generate entry signal based on 15-minute data."""
         if df_15m.empty or len(df_15m) < 5:
             return {'signal': 0, 'confidence': 0, 'reasons': ['Insufficient data']}
 
-        df   = analyzer.add_indicators(df_15m)
+        df = analyzer.add_indicators(df_15m)
+        if df.empty or len(df) < 2:
+            return {'signal': 0, 'confidence': 0, 'reasons': ['Indicator calculation failed']}
+        
         last = df.iloc[-1]
-        prev = df.iloc[-2] if len(df) > 1 else last
+        prev = df.iloc[-2]
 
         def safe(row, col, default=50):
-            v = row.get(col, default)
-            return default if pd.isna(v) else v
+            """Safely get value from row, handling NaN."""
+            if col not in row.index:
+                return default
+            v = row[col]
+            return default if pd.isna(v) else float(v)
 
-        k      = safe(last, 'Stoch_K')
-        d      = safe(last, 'Stoch_D')
+        k = safe(last, 'Stoch_K')
+        d = safe(last, 'Stoch_D')
         prev_k = safe(prev, 'Stoch_K')
         prev_d = safe(prev, 'Stoch_D')
-        rsi    = safe(last, 'RSI')
-        price  = last['Close']
-        bb_lower = last.get('BB_Lower', price * 0.99)
-        bb_upper = last.get('BB_Upper', price * 1.01)
+        rsi = safe(last, 'RSI')
+        
+        # Handle price safely
+        price = last['Close'] if 'Close' in last.index else 0.0
+        if price == 0.0:
+            return {'signal': 0, 'confidence': 0, 'reasons': ['Invalid price data']}
+        
+        bb_lower = safe(last, 'BB_Lower', price * 0.99)
+        bb_upper = safe(last, 'BB_Upper', price * 1.01)
 
         signal, confidence, reasons = 0, 0, []
 
         if bias == 'Long':
             if prev_k <= prev_d and k > d and k < self.config.stoch_os:
-                signal = 1; confidence += 2
+                signal = 1
+                confidence += 2
                 reasons.append(f"Stochastic bullish crossover (K={k:.1f})")
             if rsi < self.config.rsi_os:
-                confidence += 1; reasons.append(f"RSI oversold ({rsi:.1f})")
+                confidence += 1
+                reasons.append(f"RSI oversold ({rsi:.1f})")
             if price <= bb_lower * 1.002:
-                confidence += 1; reasons.append("Price at lower Bollinger Band")
+                confidence += 1
+                reasons.append("Price at lower Bollinger Band")
 
         elif bias == 'Short':
             if prev_k >= prev_d and k < d and k > self.config.stoch_ob:
-                signal = -1; confidence += 2
+                signal = -1
+                confidence += 2
                 reasons.append(f"Stochastic bearish crossover (K={k:.1f})")
             if rsi > self.config.rsi_ob:
-                confidence += 1; reasons.append(f"RSI overbought ({rsi:.1f})")
+                confidence += 1
+                reasons.append(f"RSI overbought ({rsi:.1f})")
             if price >= bb_upper * 0.998:
-                confidence += 1; reasons.append("Price at upper Bollinger Band")
+                confidence += 1
+                reasons.append("Price at upper Bollinger Band")
 
         return {
-            'signal': signal, 'confidence': min(confidence, 5),
-            'reasons': reasons, 'stoch_k': k, 'stoch_d': d,
-            'rsi': rsi, 'price': price,
+            'signal': signal,
+            'confidence': min(confidence, 5),
+            'reasons': reasons,
+            'stoch_k': k,
+            'stoch_d': d,
+            'rsi': rsi,
+            'price': price,
         }
 
 
@@ -410,9 +476,12 @@ class StopLossCalculator:
         self.config = cfg
 
     def pip_size(self, pair: str) -> float:
-        if "JPY" in pair:     return 0.01
-        if pair == "XAU/USD": return 0.10
-        if "ZAR" in pair:     return 0.001
+        if "JPY" in pair:
+            return 0.01
+        if pair == "XAU/USD":
+            return 0.10
+        if "ZAR" in pair:
+            return 0.001
         return 0.0001
 
     def price_to_pips(self, pair: str, distance: float) -> float:
@@ -420,20 +489,29 @@ class StopLossCalculator:
         return round(distance / ps, 1) if ps > 0 else 0.0
 
     def get_swing_stop(self, df: pd.DataFrame, bias: str, lookback: int = 20) -> Optional[float]:
+        """Get swing low/high for stop placement."""
         if df.empty or len(df) < lookback:
             return None
+        
+        # Check required columns exist
+        if bias == 'Long' and 'Low' not in df.columns:
+            return None
+        if bias == 'Short' and 'High' not in df.columns:
+            return None
+        
         recent = df.tail(lookback)
         return float(recent['Low'].min()) if bias == 'Long' else float(recent['High'].max())
 
     def calculate(self, df: pd.DataFrame, pair: str, bias: str,
                   current_price: float, atr: float, lookback: int = 20) -> Dict:
+        """Calculate stop loss level."""
         atr_mult = self.config.pair_atr_multipliers.get(pair, self.config.atr_sl_mult)
         min_dist = self.config.pair_min_stop.get(pair, 0.0010)
 
         atr_stop = (current_price - atr * atr_mult) if bias == 'Long' \
                    else (current_price + atr * atr_mult)
 
-        swing  = self.get_swing_stop(df, bias, lookback)
+        swing = self.get_swing_stop(df, bias, lookback)
         method = []
         buffer = atr * 0.25
 
@@ -450,13 +528,14 @@ class StopLossCalculator:
             stop = atr_stop
             method.append("ATR")
 
+        # Ensure minimum stop distance
         if abs(current_price - stop) < min_dist:
             stop = (current_price - min_dist) if bias == 'Long' \
                    else (current_price + min_dist)
 
         return {
-            "stop":          stop,
-            "method":        " | ".join(method),
+            "stop": stop,
+            "method": " | ".join(method) if method else "ATR",
             "distance_pips": self.price_to_pips(pair, abs(current_price - stop)),
         }
 
@@ -473,9 +552,16 @@ class TakeProfitCalculator:
         self.config = cfg
 
     def get_swing_target(self, df: pd.DataFrame, bias: str, lookback: int = 20) -> Optional[float]:
-        """Nearest swing high (Long) or swing low (Short) within lookback."""
+        """Get nearest swing high (Long) or swing low (Short) within lookback."""
         if df.empty or len(df) < lookback:
             return None
+        
+        # Check required columns exist
+        if bias == 'Long' and 'High' not in df.columns:
+            return None
+        if bias == 'Short' and 'Low' not in df.columns:
+            return None
+        
         recent = df.tail(lookback)
         return float(recent['High'].max()) if bias == 'Long' else float(recent['Low'].min())
 
@@ -489,60 +575,56 @@ class TakeProfitCalculator:
         stop_loss: float,
         lookback: int = 20,
     ) -> Dict:
-        """
-        Returns TP1 and TP2 levels using:
-          - TP1: ATR × 1.5  capped/floored at nearest swing structure
-          - TP2: ATR × 3.0  (pure ATR projection — no structure cap)
-          - Validates both levels against min_rr from config
-        """
-        atr_mult = self.config.pair_atr_multipliers.get(pair, self.config.atr_sl_mult)
+        """Calculate TP1 and TP2 levels."""
         stop_dist = abs(current_price - stop_loss)
+        if stop_dist <= 0:
+            stop_dist = atr  # Fallback to ATR if stop distance is invalid
 
         swing = self.get_swing_target(df, bias, lookback)
 
         if bias == 'Long':
-            tp1_atr  = current_price + atr * 1.5
-            tp2_atr  = current_price + atr * 3.0
+            tp1_atr = current_price + atr * 1.5
+            tp2_atr = current_price + atr * 3.0
             # Use swing resistance if it sits between price and tp1_atr
             if swing is not None and current_price < swing < tp1_atr:
                 tp1 = swing
                 method_tp1 = "Swing High"
             else:
                 tp1 = tp1_atr
-                method_tp1 = "ATR ×1.5"
+                method_tp1 = "ATR x1.5"
             tp2 = tp2_atr
-            method_tp2 = "ATR ×3.0"
-            rr1 = (tp1 - current_price) / stop_dist if stop_dist > 0 else 0.0
-            rr2 = (tp2 - current_price) / stop_dist if stop_dist > 0 else 0.0
+            method_tp2 = "ATR x3.0"
+            rr1 = (tp1 - current_price) / stop_dist
+            rr2 = (tp2 - current_price) / stop_dist
 
         else:  # Short
-            tp1_atr  = current_price - atr * 1.5
-            tp2_atr  = current_price - atr * 3.0
+            tp1_atr = current_price - atr * 1.5
+            tp2_atr = current_price - atr * 3.0
             # Use swing support if it sits between tp1_atr and price
             if swing is not None and tp1_atr < swing < current_price:
                 tp1 = swing
                 method_tp1 = "Swing Low"
             else:
                 tp1 = tp1_atr
-                method_tp1 = "ATR ×1.5"
+                method_tp1 = "ATR x1.5"
             tp2 = tp2_atr
-            method_tp2 = "ATR ×3.0"
-            rr1 = (current_price - tp1) / stop_dist if stop_dist > 0 else 0.0
-            rr2 = (current_price - tp2) / stop_dist if stop_dist > 0 else 0.0
+            method_tp2 = "ATR x3.0"
+            rr1 = (current_price - tp1) / stop_dist
+            rr2 = (current_price - tp2) / stop_dist
 
         # Flag if either level fails the minimum R:R threshold
         tp1_valid = rr1 >= self.config.min_rr
         tp2_valid = rr2 >= self.config.min_rr
 
         return {
-            "tp1":          tp1,
-            "tp2":          tp2,
-            "method_tp1":   method_tp1,
-            "method_tp2":   method_tp2,
-            "rr1":          round(rr1, 2),
-            "rr2":          round(rr2, 2),
-            "tp1_valid":    tp1_valid,
-            "tp2_valid":    tp2_valid,
+            "tp1": tp1,
+            "tp2": tp2,
+            "method_tp1": method_tp1,
+            "method_tp2": method_tp2,
+            "rr1": round(rr1, 2),
+            "rr2": round(rr2, 2),
+            "tp1_valid": tp1_valid,
+            "tp2_valid": tp2_valid,
         }
 
 
@@ -553,99 +635,130 @@ tp_calculator = TakeProfitCalculator(config)
 # TRADING IDEAS ENGINE
 # ============================================================================
 
-def generate_trading_ideas(data_by_timeframe, macro, dxy_by_timeframe):
+def generate_trading_ideas(data_by_timeframe: Dict) -> List[Dict]:
+    """Generate trading ideas from multi-timeframe analysis."""
     ideas = []
+    
     for pair_name in config.assets.keys():
-        df_daily = data_by_timeframe.get('Daily',     {}).get(pair_name, pd.DataFrame())
-        df_4h    = data_by_timeframe.get('4 Hour',    {}).get(pair_name, pd.DataFrame())
-        df_1h    = data_by_timeframe.get('Hourly',    {}).get(pair_name, pd.DataFrame())
-        df_15m   = data_by_timeframe.get('15 Minute', {}).get(pair_name, pd.DataFrame())
+        df_daily = data_by_timeframe.get('Daily', {}).get(pair_name, pd.DataFrame())
+        df_4h = data_by_timeframe.get('4 Hour', {}).get(pair_name, pd.DataFrame())
+        df_1h = data_by_timeframe.get('Hourly', {}).get(pair_name, pd.DataFrame())
+        df_15m = data_by_timeframe.get('15 Minute', {}).get(pair_name, pd.DataFrame())
 
-        if not all(not df.empty and len(df) >= 20
-                   for df in [df_daily, df_4h, df_1h, df_15m]):
+        # Check if we have sufficient data
+        if any(df.empty or len(df) < 20 for df in [df_daily, df_4h, df_1h, df_15m]):
             continue
 
         idea = analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name)
-        if idea and idea['bias'] != 'Neutral':
+        if idea and idea.get('bias') != 'Neutral':
             ideas.append(idea)
 
+    # Sort by conviction and strength
     ideas.sort(key=lambda x: (x['conviction'] == 'High', x['strength_score']), reverse=True)
+      
     return ideas
 
 
-# FIX #4: actually use df_4h and df_1h for intermediate trend confirmation
-def analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name):
+def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, 
+                           df_1h: pd.DataFrame, df_15m: pd.DataFrame, 
+                           pair_name: str) -> Optional[Dict]:
+    """Analyze multiple timeframes for trading bias."""
+    
+    # Add indicators to all timeframes
     df_daily = analyzer.add_indicators(df_daily)
-    df_4h    = analyzer.add_indicators(df_4h)
-    df_1h    = analyzer.add_indicators(df_1h)
-    df_15m   = analyzer.add_indicators(df_15m)
+    df_4h = analyzer.add_indicators(df_4h)
+    df_1h = analyzer.add_indicators(df_1h)
+    df_15m = analyzer.add_indicators(df_15m)
 
-    daily       = df_daily.iloc[-1]
-    four_hour   = df_4h.iloc[-1]
-    one_hour    = df_1h.iloc[-1]
+    # Check if we have valid data after adding indicators
+    if any(df.empty for df in [df_daily, df_4h, df_1h, df_15m]):
+        return None
+
+    daily = df_daily.iloc[-1]
+    four_hour = df_4h.iloc[-1]
+    one_hour = df_1h.iloc[-1]
     fifteen_min = df_15m.iloc[-1]
 
+    # Validate required columns exist
+    if 'Close' not in daily.index or 'Close' not in four_hour.index:
+        return None
+
     # ── Daily bias ────────────────────────────────────────────────────────────
-    daily_trend = 'Long' if daily['Close'] > daily.get('EMA_20', daily['Close']) else 'Short'
-    daily_rsi   = daily.get('RSI', 50)
-    daily_adx   = daily.get('ADX', 0)
+    ema_20 = daily.get('EMA_20', daily['Close'])
+    daily_trend = 'Long' if daily['Close'] > ema_20 else 'Short'
+    daily_rsi = daily.get('RSI', 50)
+    daily_adx = daily.get('ADX', 0)
 
     # ── 4H confirmation ───────────────────────────────────────────────────────
-    h4_ema20    = four_hour.get('EMA_20', four_hour['Close'])
-    h4_ema50    = four_hour.get('EMA_50', four_hour['Close'])
-    h4_trend    = 'Long' if h4_ema20 > h4_ema50 else 'Short'
-    h4_macd     = four_hour.get('MACD', 0)
-    h4_signal   = four_hour.get('MACD_Signal', 0)
+    h4_ema20 = four_hour.get('EMA_20', four_hour['Close'])
+    h4_ema50 = four_hour.get('EMA_50', four_hour['Close'])
+    h4_trend = 'Long' if h4_ema20 > h4_ema50 else 'Short'
+    h4_macd = four_hour.get('MACD', 0)
+    h4_signal = four_hour.get('MACD_Signal', 0)
     h4_macd_bull = (not pd.isna(h4_macd) and not pd.isna(h4_signal) and h4_macd > h4_signal)
 
     # ── 1H refinement ─────────────────────────────────────────────────────────
-    h1_ema20    = one_hour.get('EMA_20', one_hour['Close'])
-    h1_ema50    = one_hour.get('EMA_50', one_hour['Close'])
-    h1_trend    = 'Long' if h1_ema20 > h1_ema50 else 'Short'
-    h1_rsi      = one_hour.get('RSI', 50)
+    h1_ema20 = one_hour.get('EMA_20', one_hour['Close'])
+    h1_ema50 = one_hour.get('EMA_50', one_hour['Close'])
+    h1_trend = 'Long' if h1_ema20 > h1_ema50 else 'Short'
+    h1_rsi = one_hour.get('RSI', 50)
 
     long_signals = short_signals = 0
     reasons = []
 
     # Daily
     if daily_trend == 'Long':
-        long_signals += 2; reasons.append("Daily: Bullish EMA alignment")
+        long_signals += 2
+        reasons.append("Daily: Bullish EMA alignment")
     else:
-        short_signals += 2; reasons.append("Daily: Bearish EMA alignment")
+        short_signals += 2
+        reasons.append("Daily: Bearish EMA alignment")
 
     if not pd.isna(daily_rsi):
         if daily_rsi < 40:
-            long_signals += 1; reasons.append(f"Daily RSI oversold ({daily_rsi:.1f})")
+            long_signals += 1
+            reasons.append(f"Daily RSI oversold ({daily_rsi:.1f})")
         elif daily_rsi > 60:
-            short_signals += 1; reasons.append(f"Daily RSI overbought ({daily_rsi:.1f})")
+            short_signals += 1
+            reasons.append(f"Daily RSI overbought ({daily_rsi:.1f})")
 
     if not pd.isna(daily_adx) and daily_adx > config.adx_trend_min:
-        if daily_trend == 'Long': long_signals += 1
-        else: short_signals += 1
+        if daily_trend == 'Long':
+            long_signals += 1
+        else:
+            short_signals += 1
         reasons.append(f"Strong trend (ADX={daily_adx:.1f})")
 
     # 4H
     if h4_trend == 'Long':
-        long_signals += 1; reasons.append("4H: EMA20 > EMA50")
+        long_signals += 1
+        reasons.append("4H: EMA20 > EMA50")
     else:
-        short_signals += 1; reasons.append("4H: EMA20 < EMA50")
+        short_signals += 1
+        reasons.append("4H: EMA20 < EMA50")
 
     if h4_macd_bull:
-        long_signals += 1;  reasons.append("4H: MACD bullish")
+        long_signals += 1
+        reasons.append("4H: MACD bullish")
     else:
-        short_signals += 1; reasons.append("4H: MACD bearish")
+        short_signals += 1
+        reasons.append("4H: MACD bearish")
 
     # 1H
     if h1_trend == 'Long':
-        long_signals += 1; reasons.append("1H: Bullish EMA alignment")
+        long_signals += 1
+        reasons.append("1H: Bullish EMA alignment")
     else:
-        short_signals += 1; reasons.append("1H: Bearish EMA alignment")
+        short_signals += 1
+        reasons.append("1H: Bearish EMA alignment")
 
     if not pd.isna(h1_rsi):
         if h1_rsi < 45:
-            long_signals += 1;  reasons.append(f"1H RSI supportive ({h1_rsi:.1f})")
+            long_signals += 1
+            reasons.append(f"1H RSI supportive ({h1_rsi:.1f})")
         elif h1_rsi > 55:
-            short_signals += 1; reasons.append(f"1H RSI resistive ({h1_rsi:.1f})")
+            short_signals += 1
+            reasons.append(f"1H RSI resistive ({h1_rsi:.1f})")
 
     if long_signals > short_signals:
         final_bias, strength = 'Long', long_signals
@@ -655,75 +768,64 @@ def analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name):
         return None
 
     entry_signal = entry_generator.get_entry_signal(df_15m, final_bias)
-    conviction   = "High" if strength >= 6 else ("Medium" if strength >= 3 else "Low")
+    conviction = "High" if strength >= 6 else ("Medium" if strength >= 3 else "Low")
 
-    # ── ATR: use 1H ATR for stop sizing (same frame as sl_calculator input)
-    atr = one_hour.get('ATR', one_hour['Close'] * 0.005)
+    # ATR: use 1H ATR for stop sizing
+    atr = one_hour.get('ATR', one_hour.get('Close', 0) * 0.005)
     if pd.isna(atr) or atr <= 0:
-        atr = one_hour['Close'] * 0.005
+        atr = one_hour['Close'] * 0.005 if 'Close' in one_hour.index else 0.001
 
-    current_price = fifteen_min['Close']
+    current_price = fifteen_min['Close'] if 'Close' in fifteen_min.index else 0.0
+    if current_price == 0.0:
+        return None
 
-    # FIX #6: use 4H support/resistance for TP levels — same timeframe as atr
-    resistance = four_hour.get('Resistance_20', current_price * 1.02)
-    support    = four_hour.get('Support_20',    current_price * 0.98)
-
+    # ── Stop Loss ─────────────────────────────────────────────────────────────
     sl_result = sl_calculator.calculate(df_1h, pair_name, final_bias,
                                         current_price, atr, lookback=20)
     stop_loss = sl_result["stop"]
 
-    if final_bias == 'Long':
-        entry = current_price
-        tp1   = min(current_price + atr * 1.5, resistance) \
-                if resistance > current_price else current_price + atr * 1.5
-        tp2   = current_price + atr * 3.0
-        denom = entry - stop_loss
-        rr1   = (tp1 - entry) / denom if denom > 0 else 0
-        rr2   = (tp2 - entry) / denom if denom > 0 else 0
-    else:
-        entry = current_price
-        tp1   = max(current_price - atr * 1.5, support) \
-                if support < current_price else current_price - atr * 1.5
-        tp2   = current_price - atr * 3.0
-        denom = stop_loss - entry
-        rr1   = (entry - tp1) / denom if denom > 0 else 0
-        rr2   = (entry - tp2) / denom if denom > 0 else 0
+    # ── Take Profit ───────────────────────────────────────────────────────────
+    tp_result = tp_calculator.calculate(df_4h, pair_name, final_bias,
+                                        current_price, atr, stop_loss, lookback=20)
 
     thesis = " | ".join(reasons)
     if entry_signal and entry_signal['signal'] != 0:
         thesis += f" | Entry: {', '.join(entry_signal['reasons'][:2])}"
 
     return {
-        "pair":              pair_name,
-        "bias":              final_bias,
-        "conviction":        conviction,
-        "strength_score":    strength,
-        "thesis":            thesis,
-        "entry":             entry,
-        "take_profit_1":     tp1,
-        "take_profit_2":     tp2,
-        "stop_loss":         stop_loss,
-        "stop_loss_method":  sl_result["method"],
-        "stop_loss_pips":    sl_result["distance_pips"],
-        "risk_reward_1":     rr1,
-        "risk_reward_2":     rr2,
-        "atr":               atr,
-        "entry_signal":      entry_signal,
+        "pair": pair_name,
+        "bias": final_bias,
+        "conviction": conviction,
+        "strength_score": strength,
+        "thesis": thesis,
+        "entry": current_price,
+        "take_profit_1": tp_result["tp1"],
+        "take_profit_2": tp_result["tp2"],
+        "tp1_method": tp_result["method_tp1"],
+        "tp2_method": tp_result["method_tp2"],
+        "tp1_valid": tp_result["tp1_valid"],
+        "tp2_valid": tp_result["tp2_valid"],
+        "stop_loss": stop_loss,
+        "stop_loss_method": sl_result["method"],
+        "stop_loss_pips": sl_result["distance_pips"],
+        "risk_reward_1": tp_result["rr1"],
+        "risk_reward_2": tp_result["rr2"],
+        "atr": atr,
+        "entry_signal": entry_signal,
     }
 
 
 # ============================================================================
 # DATA LOADING
-# FIX #2: st.progress() moved outside the cached function so it only runs
-#         during actual fetches and not on cache replays.
 # ============================================================================
 
-@st.cache_data(ttl=config.cache_ttl)
+@st.cache_data(ttl=300, show_spinner=False)
 def _fetch_all_timeframes() -> Tuple[Dict, Dict]:
     """Pure data fetch — no Streamlit UI calls inside."""
     data_by_timeframe = {tf: {} for tf in config.timeframes.keys()}
-    dxy_by_timeframe  = {}
+    dxy_by_timeframe = {}
 
+    # Fetch DXY data for all timeframes
     for tf_name, tf_cfg in config.timeframes.items():
         try:
             dxy_df = fetch_data(config.dxy_symbol, tf_cfg["interval"], tf_cfg["period"])
@@ -732,6 +834,7 @@ def _fetch_all_timeframes() -> Tuple[Dict, Dict]:
         except Exception as e:
             logger.warning(f"Failed to load DXY ({tf_name}): {e}")
 
+    # Fetch pair data for all timeframes
     for tf_name, tf_cfg in config.timeframes.items():
         for pair_name, symbol in config.assets.items():
             try:
@@ -745,14 +848,19 @@ def _fetch_all_timeframes() -> Tuple[Dict, Dict]:
 
 
 def load_all_timeframes() -> Tuple[Dict, Dict]:
-    """Wrapper that shows progress UI then delegates to the cached fetch."""
-    total   = len(config.assets) * len(config.timeframes)
-    bar     = st.progress(0)
-    bar.progress(10)                         # show activity immediately
-    result  = _fetch_all_timeframes()
-    bar.progress(100)
-    bar.empty()
-    return result
+    """Wrapper that shows progress UI."""
+    progress_bar = st.progress(0, text="Loading market data...")
+    
+    # Update progress during fetch
+    progress_bar.progress(10, text="Fetching DXY data...")
+    
+    # Fetch all data (cached internally)
+    data_by_timeframe, dxy_by_timeframe = _fetch_all_timeframes()
+    
+    progress_bar.progress(100, text="Data loaded successfully!")
+    progress_bar.empty()
+    
+    return data_by_timeframe, dxy_by_timeframe
 
 
 # ============================================================================
@@ -760,15 +868,22 @@ def load_all_timeframes() -> Tuple[Dict, Dict]:
 # ============================================================================
 
 def render_sidebar() -> Tuple[str, str]:
+    """Render sidebar and return selected timeframe and API key."""
     with st.sidebar:
         st.header("⚙️ Dashboard Settings")
 
         st.subheader("🔑 FRED API Key")
-        default_key = (
-            st.secrets.get("FRED_API_KEY", "")
-            if hasattr(st, "secrets") and "FRED_API_KEY" in st.secrets
-            else os.environ.get("FRED_API_KEY", "")
-        )
+        
+        # Safely get FRED API key from secrets or environment
+        default_key = ""
+        try:
+            if hasattr(st, "secrets") and "FRED_API_KEY" in st.secrets:
+                default_key = st.secrets["FRED_API_KEY"]
+            else:
+                default_key = os.environ.get("FRED_API_KEY", "")
+        except Exception:
+            default_key = os.environ.get("FRED_API_KEY", "")
+            
         fred_api_key = st.text_input(
             "API Key",
             value=default_key,
@@ -804,42 +919,54 @@ def render_sidebar() -> Tuple[str, str]:
         """)
         st.divider()
         st.caption(f"Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
+        
     return selected_timeframe, fred_api_key
 
 
 def render_kpis(daily_data: Dict):
-    cols  = st.columns(4)
+    """Render KPI metrics for major pairs."""
+    cols = st.columns(4)
     pairs = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"]
     for i, pair in enumerate(pairs):
         if i < len(cols):
             with cols[i]:
                 df = daily_data.get(pair)
-                if df is not None and not df.empty:
-                    price  = df['Close'].iloc[-1]
+                if df is not None and not df.empty and 'Close' in df.columns:
+                    price = df['Close'].iloc[-1]
                     change = df['Close'].pct_change().iloc[-1] * 100 if len(df) > 1 else 0
                     st.metric(pair, f"{price:.4f}", f"{change:+.2f}%")
+                else:
+                    st.metric(pair, "N/A", "No data")
 
 
 def render_macro_table(macro: Dict):
+    """Render macro data table."""
     rows = []
     for ccy, vals in macro.items():
         rows.append({
-            "Currency":     ccy,
-            "GDP %":        round(vals.get("GDP", 0), 2),
-            "Inflation %":  round(vals.get("Inflation", 0), 2),
-            "Rate %":       round(vals.get("Rates", 0), 2),
+            "Currency": ccy,
+            "GDP %": round(vals.get("GDP", 0), 2),
+            "Inflation %": round(vals.get("Inflation", 0), 2),
+            "Rate %": round(vals.get("Rates", 0), 2),
             "Unemployment": round(vals.get("Unemployment", 0), 2),
         })
+    
+    if not rows:
+        st.warning("No macro data available")
+        return
+        
     df = pd.DataFrame(rows).set_index("Currency")
-    st.dataframe(
-        df.style
-          .background_gradient(subset=["GDP %"],        cmap="RdYlGn")
-          .background_gradient(subset=["Inflation %"],  cmap="RdYlGn_r")
-          .background_gradient(subset=["Rate %"],       cmap="Blues")
-          .background_gradient(subset=["Unemployment"], cmap="RdYlGn_r"),
-        use_container_width=True,
-    )
+    
+    try:
+        styled_df = df.style \
+            .background_gradient(subset=["GDP %"], cmap="RdYlGn") \
+            .background_gradient(subset=["Inflation %"], cmap="RdYlGn_r") \
+            .background_gradient(subset=["Rate %"], cmap="Blues") \
+            .background_gradient(subset=["Unemployment"], cmap="RdYlGn_r")
+        st.dataframe(styled_df, use_container_width=True)
+    except Exception as e:
+        logger.error(f"Error styling dataframe: {e}")
+        st.dataframe(df, use_container_width=True)
 
 
 # ============================================================================
@@ -847,16 +974,34 @@ def render_macro_table(macro: Dict):
 # ============================================================================
 
 def main():
+    """Main application entry point."""
     st.title("💹 Dashboard Pro")
     st.caption("Multi-Timeframe Analysis · FRED Macro Data · 15-Minute Entry Signals")
 
+    # Initialize session state for data persistence
+    if 'data_loaded' not in st.session_state:
+        st.session_state.data_loaded = False
+        st.session_state.data_by_timeframe = {}
+        st.session_state.dxy_by_timeframe = {}
+        st.session_state.macro_data = {}
+
     selected_timeframe, fred_api_key = render_sidebar()
 
-    with st.spinner("Loading market data..."):
-        data_by_timeframe, dxy_by_timeframe = load_all_timeframes()
+    # Load data if not already loaded
+    if not st.session_state.data_loaded:
+        with st.spinner("Loading market data..."):
+            data_by_timeframe, dxy_by_timeframe = load_all_timeframes()
+            st.session_state.data_by_timeframe = data_by_timeframe
+            st.session_state.dxy_by_timeframe = dxy_by_timeframe
+            st.session_state.data_loaded = True
 
-    with st.spinner("Fetching macro fundamentals from FRED..."):
-        macro = get_macro_data(fred_api_key)
+        with st.spinner("Fetching macro fundamentals from FRED..."):
+            macro = get_macro_data(fred_api_key)
+            st.session_state.macro_data = macro
+    else:
+        data_by_timeframe = st.session_state.data_by_timeframe
+        dxy_by_timeframe = st.session_state.dxy_by_timeframe
+        macro = st.session_state.macro_data
 
     daily_data = data_by_timeframe.get('Daily', {})
 
@@ -875,13 +1020,18 @@ def main():
     with tab1:
         st.subheader("Market Overview")
         if daily_data:
-            available = [
-                {"Pair": pair, "Price": df['Close'].iloc[-1], "Data Points": len(df)}
-                for pair, df in daily_data.items()
-                if not df.empty
-            ]
+            available = []
+            for pair, df in daily_data.items():
+                if not df.empty and 'Close' in df.columns:
+                    available.append({
+                        "Pair": pair,
+                        "Price": df['Close'].iloc[-1],
+                        "Data Points": len(df)
+                    })
             if available:
                 st.dataframe(pd.DataFrame(available), use_container_width=True)
+            else:
+                st.warning("No valid data available for any pair")
         else:
             st.warning("No data available. Please check your internet connection.")
 
@@ -893,23 +1043,25 @@ def main():
             st.info("Enter your FRED API key in the sidebar to fetch live data. "
                     "Showing static fallback values below.")
 
-        render_macro_table(macro)
+        if macro:
+            render_macro_table(macro)
+        else:
+            st.warning("No macro data available")
 
         with st.expander("ℹ️ Series sources"):
             rows = []
             for ccy, series_map in FRED_SERIES.items():
                 for metric, sid in series_map.items():
                     rows.append({"Currency": ccy, "Metric": metric, "FRED Series ID": sid})
-            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            if rows:
+                st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
     # ── Technical Chart ───────────────────────────────────────────────────────
     with tab3:
         st.subheader("Technical Analysis Chart")
-        available_pairs = [p for p in daily_data if not daily_data[p].empty]
+        available_pairs = [p for p in daily_data if not daily_data[p].empty and 'Close' in daily_data[p].columns]
 
         if available_pairs:
-            # FIX #7: renamed inner loop variable to `indicator_name` to avoid
-            # shadowing the outer `col1` columns variable.
             col1, col2 = st.columns(2)
             with col1:
                 pair = st.selectbox("Select Pair", available_pairs, key="chart_pair")
@@ -917,42 +1069,57 @@ def main():
                 tf = st.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
 
             df = data_by_timeframe[tf].get(pair, pd.DataFrame())
-            if not df.empty:
+            if not df.empty and 'Close' in df.columns:
                 df = analyzer.add_indicators(df)
+                
                 fig = make_subplots(
                     rows=2, cols=1, shared_xaxes=True,
                     vertical_spacing=0.05, row_heights=[0.7, 0.3],
                     subplot_titles=(f'{pair} – {tf}', 'RSI'),
                 )
+                
+                # Candlestick chart
                 fig.add_trace(go.Candlestick(
                     x=df.index, open=df['Open'], high=df['High'],
                     low=df['Low'], close=df['Close'], name="Price",
                 ), row=1, col=1)
-                # FIX #7: renamed loop variable from `col_name` to `indicator_name`
+                
+                # Moving averages
                 for indicator_name, colour in [('EMA_20', 'orange'), ('EMA_50', 'blue')]:
                     if indicator_name in df.columns:
-                        fig.add_trace(go.Scatter(x=df.index, y=df[indicator_name],
-                                                 name=indicator_name,
-                                                 line=dict(color=colour, width=1)), row=1, col=1)
+                        fig.add_trace(go.Scatter(
+                            x=df.index, y=df[indicator_name],
+                            name=indicator_name,
+                            line=dict(color=colour, width=1)
+                        ), row=1, col=1)
+                
+                # Bollinger Bands
                 for bb_col in ['BB_Upper', 'BB_Lower']:
                     if bb_col in df.columns:
-                        fig.add_trace(go.Scatter(x=df.index, y=df[bb_col], name=bb_col,
-                                                 line=dict(color='gray', dash='dash')), row=1, col=1)
+                        fig.add_trace(go.Scatter(
+                            x=df.index, y=df[bb_col], name=bb_col,
+                            line=dict(color='gray', dash='dash')
+                        ), row=1, col=1)
+                
+                # RSI
                 if 'RSI' in df.columns:
-                    fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI",
-                                             line=dict(color='purple')), row=2, col=1)
-                    fig.add_hline(y=70, line_dash="dash", line_color="red",   row=2, col=1)
+                    fig.add_trace(go.Scatter(
+                        x=df.index, y=df['RSI'], name="RSI",
+                        line=dict(color='purple')
+                    ), row=2, col=1)
+                    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
                     fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
 
                 fig.update_layout(height=600, showlegend=True)
                 st.plotly_chart(fig, use_container_width=True)
 
+                # Display indicators
                 last = df.iloc[-1]
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("RSI",     f"{last.get('RSI',    0):.1f}")
-                c2.metric("ADX",     f"{last.get('ADX',    0):.1f}")
-                c3.metric("ATR",     f"{last.get('ATR',    0):.5f}")
-                c4.metric("Stoch K", f"{last.get('Stoch_K',0):.1f}")
+                c1.metric("RSI", f"{last.get('RSI', 0):.1f}")
+                c2.metric("ADX", f"{last.get('ADX', 0):.1f}")
+                c3.metric("ATR", f"{last.get('ATR', 0):.5f}")
+                c4.metric("Stoch K", f"{last.get('Stoch_K', 0):.1f}")
             else:
                 st.warning(f"No data available for {pair}")
         else:
@@ -966,29 +1133,42 @@ def main():
         if available_pairs:
             pair_entry = st.selectbox("Select Pair", available_pairs, key="entry_pair")
             df_15m = data_by_timeframe.get('15 Minute', {}).get(pair_entry, pd.DataFrame())
-            df_d   = data_by_timeframe.get('Daily',     {}).get(pair_entry, pd.DataFrame())
+            df_d = data_by_timeframe.get('Daily', {}).get(pair_entry, pd.DataFrame())
 
-            if not df_15m.empty and not df_d.empty:
-                daily_ind  = analyzer.add_indicators(df_d).iloc[-1]
-                adx_val    = daily_ind.get('ADX', 0)
-                trend_bias = ('Long' if daily_ind['Close'] > daily_ind.get('EMA_20', daily_ind['Close'])
-                              else 'Short') if adx_val > config.adx_trend_min else 'Neutral'
+            if not df_15m.empty and not df_d.empty and 'Close' in df_d.columns:
+                df_d_ind = analyzer.add_indicators(df_d)
+                if not df_d_ind.empty:
+                    daily_ind = df_d_ind.iloc[-1]
+                    adx_val = daily_ind.get('ADX', 0)
+                    ema_20 = daily_ind.get('EMA_20', daily_ind['Close'])
+                    trend_bias = ('Long' if daily_ind['Close'] > ema_20 else 'Short') \
+                        if adx_val > config.adx_trend_min else 'Neutral'
 
-                st.write(f"**Trend Bias:** {trend_bias}")
-                entry_signal = entry_generator.get_entry_signal(df_15m, trend_bias)
+                    st.write(f"**Trend Bias:** {trend_bias}")
+                    entry_signal = entry_generator.get_entry_signal(df_15m, trend_bias)
 
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    if   entry_signal['signal'] ==  1: st.success("### 🟢 LONG SIGNAL")
-                    elif entry_signal['signal'] == -1: st.error("### 🔴 SHORT SIGNAL")
-                    else:                              st.info("### ⚪ NO SIGNAL")
-                c2.metric("Confidence", f"{entry_signal['confidence']}/5")
-                c3.metric("Price",      f"{entry_signal['price']:.5f}")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        if entry_signal['signal'] == 1:
+                            st.success("### 🟢 LONG SIGNAL")
+                        elif entry_signal['signal'] == -1:
+                            st.error("### 🔴 SHORT SIGNAL")
+                        else:
+                            st.info("### ⚪ NO SIGNAL")
+                    
+                    with c2:
+                        st.metric("Confidence", f"{entry_signal['confidence']}/5")
+                    with c3:
+                        st.metric("Price", f"{entry_signal.get('price', 0):.5f}")
 
-                for reason in entry_signal['reasons']:
-                    st.success(f"✅ {reason}")
+                    for reason in entry_signal.get('reasons', []):
+                        st.success(f"✅ {reason}")
+                else:
+                    st.warning("Could not calculate indicators")
             else:
                 st.warning("Insufficient data for 15-minute analysis")
+        else:
+            st.warning("No data available")
 
     # ── Trading Ideas ─────────────────────────────────────────────────────────
     with tab5:
@@ -997,14 +1177,15 @@ def main():
 
         if st.button("🔄 Generate Trading Ideas", type="primary", key="gen_ideas"):
             with st.spinner("Analysing all pairs across multiple timeframes..."):
-                ideas = generate_trading_ideas(data_by_timeframe, macro, dxy_by_timeframe)
+                ideas = generate_trading_ideas(data_by_timeframe)
 
             if ideas:
                 st.success(f"✅ Generated {len(ideas)} trading ideas")
+                
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Total Ideas",     len(ideas))
-                c2.metric("Long",            sum(1 for i in ideas if i["bias"] == "Long"))
-                c3.metric("Short",           sum(1 for i in ideas if i["bias"] == "Short"))
+                c1.metric("Total Ideas", len(ideas))
+                c2.metric("Long", sum(1 for i in ideas if i["bias"] == "Long"))
+                c3.metric("Short", sum(1 for i in ideas if i["bias"] == "Short"))
                 c4.metric("High Conviction", sum(1 for i in ideas if i["conviction"] == "High"))
 
                 st.divider()
@@ -1024,11 +1205,22 @@ def main():
                     st.markdown("**💰 Price Levels:**")
 
                     p1, p2, p3, p4, p5 = st.columns(5)
-                    p1.metric("Entry",     f"{idea['entry']:.5f}")
-                    p2.metric("TP1",       f"{idea['take_profit_1']:.5f}",
-                              delta=f"R:R 1:{idea['risk_reward_1']:.2f}")
-                    p3.metric("TP2",       f"{idea['take_profit_2']:.5f}",
-                              delta=f"R:R 1:{idea['risk_reward_2']:.2f}")
+                    p1.metric("Entry", f"{idea['entry']:.5f}")
+
+                    tp1_label = "TP1" if idea["tp1_valid"] else "TP1 ⚠️"
+                    p2.metric(
+                        tp1_label,
+                        f"{idea['take_profit_1']:.5f}",
+                        delta=f"R:R 1:{idea['risk_reward_1']:.2f} ({idea['tp1_method']})",
+                    )
+
+                    tp2_label = "TP2" if idea["tp2_valid"] else "TP2 ⚠️"
+                    p3.metric(
+                        tp2_label,
+                        f"{idea['take_profit_2']:.5f}",
+                        delta=f"R:R 1:{idea['risk_reward_2']:.2f} ({idea['tp2_method']})",
+                    )
+
                     p4.metric("Stop Loss", f"{idea['stop_loss']:.5f}")
 
                     risk_pct = (abs(idea['entry'] - idea['stop_loss']) / idea['entry']) * 100
@@ -1037,30 +1229,35 @@ def main():
                     st.caption(f"🛡️ **Stop Method:** {idea['stop_loss_method']} "
                                f"| **Distance:** {idea['stop_loss_pips']} pips")
 
-                    if idea['entry_signal'] and idea['entry_signal']['signal'] != 0:
+                    if idea.get('entry_signal') and idea['entry_signal'].get('signal') != 0:
                         with st.expander("📊 Entry Signal Details"):
                             es = idea['entry_signal']
-                            st.write(f"**Confidence:** {es['confidence']}/5")
-                            st.write(f"**Stochastic K:** {es['stoch_k']:.1f}")
-                            st.write(f"**Stochastic D:** {es['stoch_d']:.1f}")
-                            st.write(f"**RSI:** {es['rsi']:.1f}")
-                            for r in es['reasons']:
+                            st.write(f"**Confidence:** {es.get('confidence', 0)}/5")
+                            st.write(f"**Stochastic K:** {es.get('stoch_k', 0):.1f}")
+                            st.write(f"**Stochastic D:** {es.get('stoch_d', 0):.1f}")
+                            st.write(f"**RSI:** {es.get('rsi', 0):.1f}")
+                            for r in es.get('reasons', []):
                                 st.write(f"  • {r}")
 
                     st.divider()
 
+                # Export functionality
                 export_df = pd.DataFrame([{
-                    "Pair":       i["pair"],
-                    "Bias":       i["bias"],
+                    "Pair": i["pair"],
+                    "Bias": i["bias"],
                     "Conviction": i["conviction"],
-                    "Entry":      i["entry"],
-                    "TP1":        i["take_profit_1"],
-                    "TP2":        i["take_profit_2"],
-                    "Stop Loss":  i["stop_loss"],
-                    "R:R (TP1)":  i["risk_reward_1"],
-                    "R:R (TP2)":  i["risk_reward_2"],
-                    "Stop Pips":  i["stop_loss_pips"],
-                    "Thesis":     i["thesis"],
+                    "Entry": i["entry"],
+                    "TP1": i["take_profit_1"],
+                    "TP1 Method": i["tp1_method"],
+                    "TP1 Valid": i["tp1_valid"],
+                    "TP2": i["take_profit_2"],
+                    "TP2 Method": i["tp2_method"],
+                    "TP2 Valid": i["tp2_valid"],
+                    "Stop Loss": i["stop_loss"],
+                    "R:R (TP1)": i["risk_reward_1"],
+                    "R:R (TP2)": i["risk_reward_2"],
+                    "Stop Pips": i["stop_loss_pips"],
+                    "Thesis": i["thesis"],
                 } for i in ideas])
 
                 st.download_button(

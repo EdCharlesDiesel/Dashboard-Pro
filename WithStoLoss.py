@@ -51,7 +51,6 @@ class AppConfig:
     timeframes: Dict[str, Dict] = field(default_factory=lambda: {
         "Weekly":     {"interval": "1wk", "period": "3mo"},
         "Daily":      {"interval": "1d",  "period": "3mo"},
-        # FIX #3: was "1h" — must be "4h" to actually fetch 4-hour candles
         "4 Hour":     {"interval": "4h",  "period": "1mo"},
         "Hourly":     {"interval": "1h",  "period": "1mo"},
         "15 Minute":  {"interval": "15m", "period": "5d"},
@@ -84,7 +83,8 @@ class AppConfig:
     ny_end:       int = 21
 
     dxy_symbol: str = "DX-Y.NYB"
-    notification_check_interval:  int = 300000
+    notification_check_interval:  int = 300
+    cache_ttl: int = 300
 
 
 # ============================================================================
@@ -132,7 +132,6 @@ FRED_SERIES: Dict[str, Dict[str, str]] = {
         "GDP":          "NZLGDPRQPSMEI",
         "CPI":          "NZLCPIALLMINMEI",
         "Rates":        "IRSTCI01NZM156N",
-        # FIX #1: was "LRHUTTTTНЗМ156S" — Н, З, М were Cyrillic characters
         "Unemployment": "LRHUTTTTNZM156S",
     },
     "CAD": {
@@ -491,42 +490,41 @@ class TakeProfitCalculator:
     ) -> Dict:
         """
         Returns TP1 and TP2 levels using:
-          - TP1: ATR × 1.5  capped/floored at nearest swing structure
-          - TP2: ATR × 3.0  (pure ATR projection — no structure cap)
+          - TP1: ATR x 1.5  capped/floored at nearest swing structure
+          - TP2: ATR x 3.0  (pure ATR projection — no structure cap)
           - Validates both levels against min_rr from config
         """
-        atr_mult = self.config.pair_atr_multipliers.get(pair, self.config.atr_sl_mult)
         stop_dist = abs(current_price - stop_loss)
 
         swing = self.get_swing_target(df, bias, lookback)
 
         if bias == 'Long':
-            tp1_atr  = current_price + atr * 1.5
-            tp2_atr  = current_price + atr * 3.0
+            tp1_atr = current_price + atr * 1.5
+            tp2_atr = current_price + atr * 3.0
             # Use swing resistance if it sits between price and tp1_atr
             if swing is not None and current_price < swing < tp1_atr:
                 tp1 = swing
                 method_tp1 = "Swing High"
             else:
                 tp1 = tp1_atr
-                method_tp1 = "ATR ×1.5"
+                method_tp1 = "ATR x1.5"
             tp2 = tp2_atr
-            method_tp2 = "ATR ×3.0"
+            method_tp2 = "ATR x3.0"
             rr1 = (tp1 - current_price) / stop_dist if stop_dist > 0 else 0.0
             rr2 = (tp2 - current_price) / stop_dist if stop_dist > 0 else 0.0
 
         else:  # Short
-            tp1_atr  = current_price - atr * 1.5
-            tp2_atr  = current_price - atr * 3.0
+            tp1_atr = current_price - atr * 1.5
+            tp2_atr = current_price - atr * 3.0
             # Use swing support if it sits between tp1_atr and price
             if swing is not None and tp1_atr < swing < current_price:
                 tp1 = swing
                 method_tp1 = "Swing Low"
             else:
                 tp1 = tp1_atr
-                method_tp1 = "ATR ×1.5"
+                method_tp1 = "ATR x1.5"
             tp2 = tp2_atr
-            method_tp2 = "ATR ×3.0"
+            method_tp2 = "ATR x3.0"
             rr1 = (current_price - tp1) / stop_dist if stop_dist > 0 else 0.0
             rr2 = (current_price - tp2) / stop_dist if stop_dist > 0 else 0.0
 
@@ -535,14 +533,14 @@ class TakeProfitCalculator:
         tp2_valid = rr2 >= self.config.min_rr
 
         return {
-            "tp1":          tp1,
-            "tp2":          tp2,
-            "method_tp1":   method_tp1,
-            "method_tp2":   method_tp2,
-            "rr1":          round(rr1, 2),
-            "rr2":          round(rr2, 2),
-            "tp1_valid":    tp1_valid,
-            "tp2_valid":    tp2_valid,
+            "tp1":        tp1,
+            "tp2":        tp2,
+            "method_tp1": method_tp1,
+            "method_tp2": method_tp2,
+            "rr1":        round(rr1, 2),
+            "rr2":        round(rr2, 2),
+            "tp1_valid":  tp1_valid,
+            "tp2_valid":  tp2_valid,
         }
 
 
@@ -573,7 +571,6 @@ def generate_trading_ideas(data_by_timeframe, macro, dxy_by_timeframe):
     return ideas
 
 
-# FIX #4: actually use df_4h and df_1h for intermediate trend confirmation
 def analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name):
     df_daily = analyzer.add_indicators(df_daily)
     df_4h    = analyzer.add_indicators(df_4h)
@@ -591,18 +588,18 @@ def analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name):
     daily_adx   = daily.get('ADX', 0)
 
     # ── 4H confirmation ───────────────────────────────────────────────────────
-    h4_ema20    = four_hour.get('EMA_20', four_hour['Close'])
-    h4_ema50    = four_hour.get('EMA_50', four_hour['Close'])
-    h4_trend    = 'Long' if h4_ema20 > h4_ema50 else 'Short'
-    h4_macd     = four_hour.get('MACD', 0)
-    h4_signal   = four_hour.get('MACD_Signal', 0)
+    h4_ema20     = four_hour.get('EMA_20', four_hour['Close'])
+    h4_ema50     = four_hour.get('EMA_50', four_hour['Close'])
+    h4_trend     = 'Long' if h4_ema20 > h4_ema50 else 'Short'
+    h4_macd      = four_hour.get('MACD', 0)
+    h4_signal    = four_hour.get('MACD_Signal', 0)
     h4_macd_bull = (not pd.isna(h4_macd) and not pd.isna(h4_signal) and h4_macd > h4_signal)
 
     # ── 1H refinement ─────────────────────────────────────────────────────────
-    h1_ema20    = one_hour.get('EMA_20', one_hour['Close'])
-    h1_ema50    = one_hour.get('EMA_50', one_hour['Close'])
-    h1_trend    = 'Long' if h1_ema20 > h1_ema50 else 'Short'
-    h1_rsi      = one_hour.get('RSI', 50)
+    h1_ema20 = one_hour.get('EMA_20', one_hour['Close'])
+    h1_ema50 = one_hour.get('EMA_50', one_hour['Close'])
+    h1_trend = 'Long' if h1_ema20 > h1_ema50 else 'Short'
+    h1_rsi   = one_hour.get('RSI', 50)
 
     long_signals = short_signals = 0
     reasons = []
@@ -657,65 +654,56 @@ def analyze_multi_timeframe(df_daily, df_4h, df_1h, df_15m, pair_name):
     entry_signal = entry_generator.get_entry_signal(df_15m, final_bias)
     conviction   = "High" if strength >= 6 else ("Medium" if strength >= 3 else "Low")
 
-    # ── ATR: use 1H ATR for stop sizing (same frame as sl_calculator input)
+    # ATR: use 1H ATR for stop sizing
     atr = one_hour.get('ATR', one_hour['Close'] * 0.005)
     if pd.isna(atr) or atr <= 0:
         atr = one_hour['Close'] * 0.005
 
     current_price = fifteen_min['Close']
 
-    # FIX #6: use 4H support/resistance for TP levels — same timeframe as atr
-    resistance = four_hour.get('Resistance_20', current_price * 1.02)
-    support    = four_hour.get('Support_20',    current_price * 0.98)
-
+    # ── Stop Loss ─────────────────────────────────────────────────────────────
     sl_result = sl_calculator.calculate(df_1h, pair_name, final_bias,
                                         current_price, atr, lookback=20)
     stop_loss = sl_result["stop"]
 
-    if final_bias == 'Long':
-        entry = current_price
-        tp1   = min(current_price + atr * 1.5, resistance) \
-                if resistance > current_price else current_price + atr * 1.5
-        tp2   = current_price + atr * 3.0
-        denom = entry - stop_loss
-        rr1   = (tp1 - entry) / denom if denom > 0 else 0
-        rr2   = (tp2 - entry) / denom if denom > 0 else 0
-    else:
-        entry = current_price
-        tp1   = max(current_price - atr * 1.5, support) \
-                if support < current_price else current_price - atr * 1.5
-        tp2   = current_price - atr * 3.0
-        denom = stop_loss - entry
-        rr1   = (entry - tp1) / denom if denom > 0 else 0
-        rr2   = (entry - tp2) / denom if denom > 0 else 0
+    # ── Take Profit (TakeProfitCalculator on 4H structure) ────────────────────
+    entry     = current_price
+    tp_result = tp_calculator.calculate(df_4h, pair_name, final_bias,
+                                        current_price, atr, stop_loss, lookback=20)
+    tp1 = tp_result["tp1"]
+    tp2 = tp_result["tp2"]
+    rr1 = tp_result["rr1"]
+    rr2 = tp_result["rr2"]
 
     thesis = " | ".join(reasons)
     if entry_signal and entry_signal['signal'] != 0:
         thesis += f" | Entry: {', '.join(entry_signal['reasons'][:2])}"
 
     return {
-        "pair":              pair_name,
-        "bias":              final_bias,
-        "conviction":        conviction,
-        "strength_score":    strength,
-        "thesis":            thesis,
-        "entry":             entry,
-        "take_profit_1":     tp1,
-        "take_profit_2":     tp2,
-        "stop_loss":         stop_loss,
-        "stop_loss_method":  sl_result["method"],
-        "stop_loss_pips":    sl_result["distance_pips"],
-        "risk_reward_1":     rr1,
-        "risk_reward_2":     rr2,
-        "atr":               atr,
-        "entry_signal":      entry_signal,
+        "pair":             pair_name,
+        "bias":             final_bias,
+        "conviction":       conviction,
+        "strength_score":   strength,
+        "thesis":           thesis,
+        "entry":            entry,
+        "take_profit_1":    tp1,
+        "take_profit_2":    tp2,
+        "tp1_method":       tp_result["method_tp1"],
+        "tp2_method":       tp_result["method_tp2"],
+        "tp1_valid":        tp_result["tp1_valid"],
+        "tp2_valid":        tp_result["tp2_valid"],
+        "stop_loss":        stop_loss,
+        "stop_loss_method": sl_result["method"],
+        "stop_loss_pips":   sl_result["distance_pips"],
+        "risk_reward_1":    rr1,
+        "risk_reward_2":    rr2,
+        "atr":              atr,
+        "entry_signal":     entry_signal,
     }
 
 
 # ============================================================================
 # DATA LOADING
-# FIX #2: st.progress() moved outside the cached function so it only runs
-#         during actual fetches and not on cache replays.
 # ============================================================================
 
 @st.cache_data(ttl=config.cache_ttl)
@@ -746,10 +734,9 @@ def _fetch_all_timeframes() -> Tuple[Dict, Dict]:
 
 def load_all_timeframes() -> Tuple[Dict, Dict]:
     """Wrapper that shows progress UI then delegates to the cached fetch."""
-    total   = len(config.assets) * len(config.timeframes)
-    bar     = st.progress(0)
-    bar.progress(10)                         # show activity immediately
-    result  = _fetch_all_timeframes()
+    bar = st.progress(0)
+    bar.progress(10)
+    result = _fetch_all_timeframes()
     bar.progress(100)
     bar.empty()
     return result
@@ -908,8 +895,6 @@ def main():
         available_pairs = [p for p in daily_data if not daily_data[p].empty]
 
         if available_pairs:
-            # FIX #7: renamed inner loop variable to `indicator_name` to avoid
-            # shadowing the outer `col1` columns variable.
             col1, col2 = st.columns(2)
             with col1:
                 pair = st.selectbox("Select Pair", available_pairs, key="chart_pair")
@@ -928,7 +913,6 @@ def main():
                     x=df.index, open=df['Open'], high=df['High'],
                     low=df['Low'], close=df['Close'], name="Price",
                 ), row=1, col=1)
-                # FIX #7: renamed loop variable from `col_name` to `indicator_name`
                 for indicator_name, colour in [('EMA_20', 'orange'), ('EMA_50', 'blue')]:
                     if indicator_name in df.columns:
                         fig.add_trace(go.Scatter(x=df.index, y=df[indicator_name],
@@ -1024,11 +1008,24 @@ def main():
                     st.markdown("**💰 Price Levels:**")
 
                     p1, p2, p3, p4, p5 = st.columns(5)
-                    p1.metric("Entry",     f"{idea['entry']:.5f}")
-                    p2.metric("TP1",       f"{idea['take_profit_1']:.5f}",
-                              delta=f"R:R 1:{idea['risk_reward_1']:.2f}")
-                    p3.metric("TP2",       f"{idea['take_profit_2']:.5f}",
-                              delta=f"R:R 1:{idea['risk_reward_2']:.2f}")
+                    p1.metric("Entry", f"{idea['entry']:.5f}")
+
+                    # TP1 — flag if it doesn't clear min R:R
+                    tp1_label = "TP1" if idea["tp1_valid"] else "TP1 ⚠️"
+                    p2.metric(
+                        tp1_label,
+                        f"{idea['take_profit_1']:.5f}",
+                        delta=f"R:R 1:{idea['risk_reward_1']:.2f} ({idea['tp1_method']})",
+                    )
+
+                    # TP2 — flag if it doesn't clear min R:R
+                    tp2_label = "TP2" if idea["tp2_valid"] else "TP2 ⚠️"
+                    p3.metric(
+                        tp2_label,
+                        f"{idea['take_profit_2']:.5f}",
+                        delta=f"R:R 1:{idea['risk_reward_2']:.2f} ({idea['tp2_method']})",
+                    )
+
                     p4.metric("Stop Loss", f"{idea['stop_loss']:.5f}")
 
                     risk_pct = (abs(idea['entry'] - idea['stop_loss']) / idea['entry']) * 100
@@ -1050,17 +1047,21 @@ def main():
                     st.divider()
 
                 export_df = pd.DataFrame([{
-                    "Pair":       i["pair"],
-                    "Bias":       i["bias"],
-                    "Conviction": i["conviction"],
-                    "Entry":      i["entry"],
-                    "TP1":        i["take_profit_1"],
-                    "TP2":        i["take_profit_2"],
-                    "Stop Loss":  i["stop_loss"],
-                    "R:R (TP1)":  i["risk_reward_1"],
-                    "R:R (TP2)":  i["risk_reward_2"],
-                    "Stop Pips":  i["stop_loss_pips"],
-                    "Thesis":     i["thesis"],
+                    "Pair":         i["pair"],
+                    "Bias":         i["bias"],
+                    "Conviction":   i["conviction"],
+                    "Entry":        i["entry"],
+                    "TP1":          i["take_profit_1"],
+                    "TP1 Method":   i["tp1_method"],
+                    "TP1 Valid":    i["tp1_valid"],
+                    "TP2":          i["take_profit_2"],
+                    "TP2 Method":   i["tp2_method"],
+                    "TP2 Valid":    i["tp2_valid"],
+                    "Stop Loss":    i["stop_loss"],
+                    "R:R (TP1)":    i["risk_reward_1"],
+                    "R:R (TP2)":    i["risk_reward_2"],
+                    "Stop Pips":    i["stop_loss_pips"],
+                    "Thesis":       i["thesis"],
                 } for i in ideas])
 
                 st.download_button(
