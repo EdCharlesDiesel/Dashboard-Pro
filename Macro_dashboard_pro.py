@@ -81,26 +81,26 @@ class AppConfig:
     })
 
     timeframes: Dict[str, Dict] = field(default_factory=lambda: {
-        "Weekly":    {"interval": "1wk", "period": "3mo"},
-        "Daily":     {"interval": "1d",  "period": "3mo"},
-        "4 Hour":    {"interval": "4h",  "period": "1mo"},
-        "Hourly":    {"interval": "1h",  "period": "1mo"},
+        "Weekly": {"interval": "1wk", "period": "3mo"},
+        "Daily": {"interval": "1d", "period": "3mo"},
+        "4 Hour": {"interval": "4h", "period": "1mo"},
+        "Hourly": {"interval": "1h", "period": "1mo"},
         "15 Minute": {"interval": "15m", "period": "5d"},
     })
 
     risk_per_trade: float = 0.02
-    atr_sl_mult:    float = 1.5
+    atr_sl_mult: float = 1.5
 
     # TP1 = 3.0× ATR → R:R ≥ 2.0; TP2 = 5.0× ATR → R:R ≥ 3.33
-    tp1_atr_mult:   float = 3.0
-    tp2_atr_mult:   float = 5.0
+    tp1_atr_mult: float = 3.0
+    tp2_atr_mult: float = 5.0
 
-    min_rr:         float = 2.0
-    adx_trend_min:  float = 20.0
-    rsi_os:         float = 40.0
-    rsi_ob:         float = 60.0
-    stoch_os:       float = 25.0
-    stoch_ob:       float = 75.0
+    min_rr: float = 2.0
+    adx_trend_min: float = 20.0
+    rsi_os: float = 40.0
+    rsi_ob: float = 60.0
+    stoch_os: float = 25.0
+    stoch_ob: float = 75.0
 
     pair_atr_multipliers: Dict[str, float] = field(default_factory=lambda: {
         "EUR/USD": 1.5, "GBP/USD": 1.8, "USD/JPY": 1.5, "USD/ZAR": 2.5,
@@ -109,18 +109,18 @@ class AppConfig:
     })
 
     pair_min_stop: Dict[str, float] = field(default_factory=lambda: {
-        "EUR/USD": 0.0010, "GBP/USD": 0.0015, "USD/JPY": 0.10,  "USD/ZAR": 0.05,
+        "EUR/USD": 0.0010, "GBP/USD": 0.0015, "USD/JPY": 0.10, "USD/ZAR": 0.05,
         "AUD/USD": 0.0010, "NZD/USD": 0.0010, "USD/CAD": 0.0010, "USD/CHF": 0.0010,
-        "XAU/USD": 2.00,   "BTC/USD": 500.0,
+        "XAU/USD": 2.00, "BTC/USD": 500.0,
     })
 
     london_start: int = 8
-    london_end:   int = 16
-    ny_start:     int = 13
-    ny_end:       int = 21
+    london_end: int = 16
+    ny_start: int = 13
+    ny_end: int = 21
 
-    dxy_symbol:            str = "DX-Y.NYB"
-    cache_ttl:             int = 300
+    dxy_symbol: str = "DX-Y.NYB"
+    cache_ttl: int = 300
     auto_refresh_interval: int = 300
 
 
@@ -128,27 +128,34 @@ class AppConfig:
 # FRED SERIES REGISTRY & FALLBACKS
 # ============================================================================
 FRED_SERIES: Dict[str, Dict[str, str]] = {
-    "USD": {"GDP": "A191RL1Q225SBEA",    "CPI": "CPIAUCSL",           "Rates": "FEDFUNDS",        "Unemployment": "UNRATE"},
-    "EUR": {"GDP": "CLVMNACSCAB1GQEA19", "CPI": "CP0000EZ19M086NEST", "Rates": "ECBDFR",          "Unemployment": "LRHUTTTTEZM156S"},
-    "GBP": {"GDP": "CLVMNACSCAB1GQGB",   "CPI": "GBRCPIALLMINMEI",    "Rates": "BOERUKM",         "Unemployment": "LRHUTTTTGBM156S"},
-    "JPY": {"GDP": "JPNRGDPEXP",          "CPI": "JPNCPIALLMINMEI",    "Rates": "IRSTCI01JPM156N", "Unemployment": "LRHUTTTTJPM156S"},
-    "ZAR": {"GDP": "ZAFGDPRQPSMEI",       "CPI": "ZAFCPIALLMINMEI",    "Rates": "IRSTCI01ZAM156N", "Unemployment": "LRHUTTTTZAM156S"},
-    "AUD": {"GDP": "AUSGDPRQPSMEI",       "CPI": "AUSCPIALLMINMEI",    "Rates": "IRSTCI01AUM156N", "Unemployment": "LRHUTTTTAUM156S"},
-    "NZD": {"GDP": "NZLGDPRQPSMEI",       "CPI": "NZLCPIALLMINMEI",    "Rates": "IRSTCI01NZM156N", "Unemployment": "LRHUTTTTNZM156S"},
-    "CAD": {"GDP": "CANGDPRQPSMEI",       "CPI": "CANCPIALLMINMEI",    "Rates": "IRSTCI01CAM156N", "Unemployment": "LRHUTTTTCAM156S"},
-    "CHF": {"GDP": "CHEGDPRQPSMEI",       "CPI": "CHECPIALLMINMEI",    "Rates": "IRSTCI01CHM156N", "Unemployment": "LRHUTTTTCHM156S"},
+    "USD": {"GDP": "A191RL1Q225SBEA", "CPI": "CPIAUCSL", "Rates": "FEDFUNDS", "Unemployment": "UNRATE"},
+    "EUR": {"GDP": "CLVMNACSCAB1GQEA19", "CPI": "CP0000EZ19M086NEST", "Rates": "ECBDFR",
+            "Unemployment": "LRHUTTTTEZM156S"},
+    "GBP": {"GDP": "CLVMNACSCAB1GQGB", "CPI": "GBRCPIALLMINMEI", "Rates": "BOERUKM", "Unemployment": "LRHUTTTTGBM156S"},
+    "JPY": {"GDP": "JPNRGDPEXP", "CPI": "JPNCPIALLMINMEI", "Rates": "IRSTCI01JPM156N",
+            "Unemployment": "LRHUTTTTJPM156S"},
+    "ZAR": {"GDP": "ZAFGDPRQPSMEI", "CPI": "ZAFCPIALLMINMEI", "Rates": "IRSTCI01ZAM156N",
+            "Unemployment": "LRHUTTTTZAM156S"},
+    "AUD": {"GDP": "AUSGDPRQPSMEI", "CPI": "AUSCPIALLMINMEI", "Rates": "IRSTCI01AUM156N",
+            "Unemployment": "LRHUTTTTAUM156S"},
+    "NZD": {"GDP": "NZLGDPRQPSMEI", "CPI": "NZLCPIALLMINMEI", "Rates": "IRSTCI01NZM156N",
+            "Unemployment": "LRHUTTTTNZM156S"},
+    "CAD": {"GDP": "CANGDPRQPSMEI", "CPI": "CANCPIALLMINMEI", "Rates": "IRSTCI01CAM156N",
+            "Unemployment": "LRHUTTTTCAM156S"},
+    "CHF": {"GDP": "CHEGDPRQPSMEI", "CPI": "CHECPIALLMINMEI", "Rates": "IRSTCI01CHM156N",
+            "Unemployment": "LRHUTTTTCHM156S"},
 }
 
 MACRO_FALLBACKS: Dict[str, Dict[str, float]] = {
-    "USD": {"GDP": 2.5,  "Inflation": 3.2,  "Rates": 5.50,  "Unemployment": 3.8},
-    "ZAR": {"GDP": 1.2,  "Inflation": 5.0,  "Rates": 8.25,  "Unemployment": 32.1},
-    "JPY": {"GDP": 1.1,  "Inflation": 2.8,  "Rates": -0.10, "Unemployment": 2.6},
-    "NZD": {"GDP": 2.2,  "Inflation": 3.8,  "Rates": 5.50,  "Unemployment": 3.9},
-    "AUD": {"GDP": 2.0,  "Inflation": 4.1,  "Rates": 4.35,  "Unemployment": 3.9},
-    "CAD": {"GDP": 1.5,  "Inflation": 3.4,  "Rates": 5.00,  "Unemployment": 5.1},
-    "EUR": {"GDP": 0.8,  "Inflation": 2.9,  "Rates": 4.50,  "Unemployment": 6.5},
-    "GBP": {"GDP": 0.6,  "Inflation": 3.4,  "Rates": 5.25,  "Unemployment": 4.2},
-    "CHF": {"GDP": 0.9,  "Inflation": 2.1,  "Rates": 1.75,  "Unemployment": 2.0},
+    "USD": {"GDP": 2.5, "Inflation": 3.2, "Rates": 5.50, "Unemployment": 3.8},
+    "ZAR": {"GDP": 1.2, "Inflation": 5.0, "Rates": 8.25, "Unemployment": 32.1},
+    "JPY": {"GDP": 1.1, "Inflation": 2.8, "Rates": -0.10, "Unemployment": 2.6},
+    "NZD": {"GDP": 2.2, "Inflation": 3.8, "Rates": 5.50, "Unemployment": 3.9},
+    "AUD": {"GDP": 2.0, "Inflation": 4.1, "Rates": 4.35, "Unemployment": 3.9},
+    "CAD": {"GDP": 1.5, "Inflation": 3.4, "Rates": 5.00, "Unemployment": 5.1},
+    "EUR": {"GDP": 0.8, "Inflation": 2.9, "Rates": 4.50, "Unemployment": 6.5},
+    "GBP": {"GDP": 0.6, "Inflation": 3.4, "Rates": 5.25, "Unemployment": 4.2},
+    "CHF": {"GDP": 0.9, "Inflation": 2.1, "Rates": 1.75, "Unemployment": 2.0},
 }
 
 
@@ -225,6 +232,7 @@ def _get_email_config() -> dict[str, str | int]:
     # st.write(safe_cfg)
 
     return cfg
+
 
 def send_email_alert(idea: Dict) -> bool:
     """Send a plain-text email for a high-conviction trading idea.
@@ -311,11 +319,11 @@ def check_and_notify(ideas: List[Dict]) -> List[Dict]:
             icon="🔔",
         )
         st.session_state.notification_log.append({
-            "time":  datetime.now().strftime("%H:%M:%S"),
-            "pair":  idea["pair"],
-            "bias":  idea["bias"],
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "pair": idea["pair"],
+            "bias": idea["bias"],
             "entry": idea["entry"],
-            "rr":    idea["risk_reward_1"],
+            "rr": idea["risk_reward_1"],
         })
 
         if st.session_state.get("email_alerts_enabled", False):
@@ -386,7 +394,7 @@ def get_macro_data(api_key: str) -> Tuple[Dict[str, Dict[str, float]], bool]:
                 else:
                     clean = raw.dropna()
                     val = float((clean.pct_change(1) * 100 * 4).dropna().iloc[-1]) \
-                          if len(clean) >= 5 else None
+                        if len(clean) >= 5 else None
                 entry["GDP"] = val if val is not None else fb.get("GDP", 0.0)
                 any_success = True
             else:
@@ -446,22 +454,22 @@ def fetch_data(symbol: str, interval: str, period: str) -> pd.DataFrame:
 # TECHNICAL ANALYZER
 # ============================================================================
 class TechnicalAnalyzer:
-    RSI_WINDOW        = 14
-    MACD_FAST         = 12
-    MACD_SLOW         = 26
-    MACD_SIGNAL       = 9
-    SMA_SHORT_WINDOW  = 20
-    SMA_LONG_WINDOW   = 50
-    EMA_SHORT_WINDOW  = 20
-    EMA_LONG_WINDOW   = 50
-    BB_WINDOW         = 20
-    BB_STD_DEV        = 2
-    ATR_WINDOW        = 14
-    STOCH_WINDOW      = 14
-    STOCH_SMOOTH      = 3
-    ADX_WINDOW        = 14
-    SR_WINDOW         = 20
-    REQUIRED_COLUMNS  = ("Open", "High", "Low", "Close")
+    RSI_WINDOW = 14
+    MACD_FAST = 12
+    MACD_SLOW = 26
+    MACD_SIGNAL = 9
+    SMA_SHORT_WINDOW = 20
+    SMA_LONG_WINDOW = 50
+    EMA_SHORT_WINDOW = 20
+    EMA_LONG_WINDOW = 50
+    BB_WINDOW = 20
+    BB_STD_DEV = 2
+    ATR_WINDOW = 14
+    STOCH_WINDOW = 14
+    STOCH_SMOOTH = 3
+    ADX_WINDOW = 14
+    SR_WINDOW = 20
+    REQUIRED_COLUMNS = ("Open", "High", "Low", "Close")
 
     @staticmethod
     def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -483,8 +491,8 @@ class TechnicalAnalyzer:
                 window_slow=TechnicalAnalyzer.MACD_SLOW,
                 window_sign=TechnicalAnalyzer.MACD_SIGNAL,
             )
-            df["MACD"]           = macd.macd()
-            df["MACD_Signal"]    = macd.macd_signal()
+            df["MACD"] = macd.macd()
+            df["MACD_Signal"] = macd.macd_signal()
             df["MACD_Histogram"] = macd.macd_diff()
 
             df["SMA_20"] = ta.trend.sma_indicator(close, window=TechnicalAnalyzer.SMA_SHORT_WINDOW)
@@ -497,9 +505,9 @@ class TechnicalAnalyzer:
                 window=TechnicalAnalyzer.BB_WINDOW,
                 window_dev=TechnicalAnalyzer.BB_STD_DEV,
             )
-            df["BB_Upper"]  = bb.bollinger_hband()
+            df["BB_Upper"] = bb.bollinger_hband()
             df["BB_Middle"] = bb.bollinger_mavg()
-            df["BB_Lower"]  = bb.bollinger_lband()
+            df["BB_Lower"] = bb.bollinger_lband()
 
             df["ATR"] = ta.volatility.AverageTrueRange(
                 high, low, close, window=TechnicalAnalyzer.ATR_WINDOW
@@ -514,12 +522,12 @@ class TechnicalAnalyzer:
             df["Stoch_D"] = stoch.stoch_signal()
 
             adx = ta.trend.ADXIndicator(high, low, close, window=TechnicalAnalyzer.ADX_WINDOW)
-            df["ADX"]     = adx.adx()
+            df["ADX"] = adx.adx()
             df["ADX_Pos"] = adx.adx_pos()
             df["ADX_Neg"] = adx.adx_neg()
 
             df["Resistance_20"] = high.rolling(window=TechnicalAnalyzer.SR_WINDOW).max()
-            df["Support_20"]    = low.rolling(window=TechnicalAnalyzer.SR_WINDOW).min()
+            df["Support_20"] = low.rolling(window=TechnicalAnalyzer.SR_WINDOW).min()
 
         except Exception as exc:
             logger.error("Indicator calculation error: %s", exc)
@@ -543,15 +551,15 @@ class EntrySignalGenerator:
         if indicator_data.empty or len(indicator_data) < 2:
             return {"signal": 0, "confidence": 0, "reasons": ["Indicator calculation failed"]}
 
-        latest   = indicator_data.iloc[-1]
+        latest = indicator_data.iloc[-1]
         previous = indicator_data.iloc[-2]
 
-        k      = safe_get(latest,   "Stoch_K", 50.0)
-        d      = safe_get(latest,   "Stoch_D", 50.0)
+        k = safe_get(latest, "Stoch_K", 50.0)
+        d = safe_get(latest, "Stoch_D", 50.0)
         prev_k = safe_get(previous, "Stoch_K", 50.0)
         prev_d = safe_get(previous, "Stoch_D", 50.0)
-        rsi    = safe_get(latest,   "RSI",     50.0)
-        price  = safe_get(latest,   "Close",   0.0)
+        rsi = safe_get(latest, "RSI", 50.0)
+        price = safe_get(latest, "Close", 0.0)
 
         if price <= 0.0:
             return {"signal": 0, "confidence": 0, "reasons": ["Invalid price data"]}
@@ -559,7 +567,7 @@ class EntrySignalGenerator:
         bb_lower = safe_get(latest, "BB_Lower", price * 0.99)
         bb_upper = safe_get(latest, "BB_Upper", price * 1.01)
 
-        signal     = 0
+        signal = 0
         confidence = 0
         reasons: List[str] = []
 
@@ -610,13 +618,13 @@ class EntrySignalGenerator:
             )
 
         return {
-            "signal":     signal,
+            "signal": signal,
             "confidence": min(confidence, 5),
-            "reasons":    reasons,
-            "stoch_k":    k,
-            "stoch_d":    d,
-            "rsi":        rsi,
-            "price":      price,
+            "reasons": reasons,
+            "stoch_k": k,
+            "stoch_d": d,
+            "rsi": rsi,
+            "price": price,
         }
 
 
@@ -644,28 +652,28 @@ class StopLossCalculator:
         if df.empty or len(df) < lookback:
             return None
         recent = df.tail(lookback)
-        if bias == "Long"  and "Low"  in df.columns: return float(recent["Low"].min())
+        if bias == "Long" and "Low" in df.columns: return float(recent["Low"].min())
         if bias == "Short" and "High" in df.columns: return float(recent["High"].max())
         return None
 
     def calculate(
-        self,
-        df: pd.DataFrame,
-        pair: str,
-        bias: str,
-        current_price: float,
-        atr: float,
-        lookback: int = 20,
+            self,
+            df: pd.DataFrame,
+            pair: str,
+            bias: str,
+            current_price: float,
+            atr: float,
+            lookback: int = 20,
     ) -> Dict:
         atr_mult = config.pair_atr_multipliers.get(pair, config.atr_sl_mult)
         min_dist = config.pair_min_stop.get(pair, 0.0010)
-        buffer   = atr * 0.25
+        buffer = atr * 0.25
 
         atr_stop = (current_price - atr * atr_mult) if bias == "Long" \
-                   else (current_price + atr * atr_mult)
+            else (current_price + atr * atr_mult)
 
-        swing  = self.get_swing_stop(df, bias, lookback)
-        stop   = atr_stop
+        swing = self.get_swing_stop(df, bias, lookback)
+        stop = atr_stop
         method = "ATR"
 
         if swing is not None:
@@ -686,13 +694,13 @@ class StopLossCalculator:
 
         raw_dist = abs(current_price - stop)
         if raw_dist < min_dist:
-            stop   = (current_price - min_dist) if bias == "Long" \
-                     else (current_price + min_dist)
+            stop = (current_price - min_dist) if bias == "Long" \
+                else (current_price + min_dist)
             method += " + min-dist enforced"
 
         return {
-            "stop":          stop,
-            "method":        method,
+            "stop": stop,
+            "method": method,
             "distance_pips": self.price_to_pips(pair, abs(current_price - stop)),
         }
 
@@ -709,34 +717,34 @@ class TakeProfitCalculator:
         if df.empty or len(df) < lookback:
             return None
         recent = df.tail(lookback)
-        if bias == "Long"  and "High" in df.columns: return float(recent["High"].max())
-        if bias == "Short" and "Low"  in df.columns: return float(recent["Low"].min())
+        if bias == "Long" and "High" in df.columns: return float(recent["High"].max())
+        if bias == "Short" and "Low" in df.columns: return float(recent["Low"].min())
         return None
 
     def calculate(
-        self,
-        df: pd.DataFrame,
-        pair: str,
-        bias: str,
-        current_price: float,
-        atr: float,
-        stop_loss: float,
-        lookback: int = 20,
+            self,
+            df: pd.DataFrame,
+            pair: str,
+            bias: str,
+            current_price: float,
+            atr: float,
+            stop_loss: float,
+            lookback: int = 20,
     ) -> Dict:
         stop_dist = abs(current_price - stop_loss) or atr
-        swing     = self.get_swing_target(df, bias, lookback)
+        swing = self.get_swing_target(df, bias, lookback)
 
         if bias == "Long":
             tp1_atr = current_price + atr * config.tp1_atr_mult
             tp2_atr = current_price + atr * config.tp2_atr_mult
 
             tp1, m1 = (swing, "Swing High") \
-                      if swing is not None and current_price < swing < tp1_atr \
-                      else (tp1_atr, f"ATR ×{config.tp1_atr_mult}")
+                if swing is not None and current_price < swing < tp1_atr \
+                else (tp1_atr, f"ATR ×{config.tp1_atr_mult}")
 
             tp2, m2 = (swing, "Swing High (ext)") \
-                      if swing is not None and tp1 < swing < tp2_atr \
-                      else (tp2_atr, f"ATR ×{config.tp2_atr_mult}")
+                if swing is not None and tp1 < swing < tp2_atr \
+                else (tp2_atr, f"ATR ×{config.tp2_atr_mult}")
 
             rr1 = (tp1 - current_price) / stop_dist
             rr2 = (tp2 - current_price) / stop_dist
@@ -746,12 +754,12 @@ class TakeProfitCalculator:
             tp2_atr = current_price - atr * config.tp2_atr_mult
 
             tp1, m1 = (swing, "Swing Low") \
-                      if swing is not None and tp1_atr < swing < current_price \
-                      else (tp1_atr, f"ATR ×{config.tp1_atr_mult}")
+                if swing is not None and tp1_atr < swing < current_price \
+                else (tp1_atr, f"ATR ×{config.tp1_atr_mult}")
 
             tp2, m2 = (swing, "Swing Low (ext)") \
-                      if swing is not None and tp2_atr < swing < tp1 \
-                      else (tp2_atr, f"ATR ×{config.tp2_atr_mult}")
+                if swing is not None and tp2_atr < swing < tp1 \
+                else (tp2_atr, f"ATR ×{config.tp2_atr_mult}")
 
             rr1 = (current_price - tp1) / stop_dist
             rr2 = (current_price - tp2) / stop_dist
@@ -772,24 +780,23 @@ tp_calculator = TakeProfitCalculator()
 # MULTI-TIMEFRAME ANALYSIS
 # ============================================================================
 def analyze_multi_timeframe(
-    df_daily: pd.DataFrame,
-    df_4h: pd.DataFrame,
-    df_1h: pd.DataFrame,
-    df_15m: pd.DataFrame,
-    pair_name: str,
+        df_daily: pd.DataFrame,
+        df_4h: pd.DataFrame,
+        df_1h: pd.DataFrame,
+        df_15m: pd.DataFrame,
+        pair_name: str,
 ) -> Optional[Dict]:
-
     df_daily = analyzer.add_indicators(df_daily)
-    df_4h    = analyzer.add_indicators(df_4h)
-    df_1h    = analyzer.add_indicators(df_1h)
-    df_15m   = analyzer.add_indicators(df_15m)
+    df_4h = analyzer.add_indicators(df_4h)
+    df_1h = analyzer.add_indicators(df_1h)
+    df_15m = analyzer.add_indicators(df_15m)
 
     if any(df.empty for df in [df_daily, df_4h, df_1h, df_15m]):
         return None
 
-    daily     = df_daily.iloc[-1]
+    daily = df_daily.iloc[-1]
     four_hour = df_4h.iloc[-1]
-    one_hour  = df_1h.iloc[-1]
+    one_hour = df_1h.iloc[-1]
     fifteen_m = df_15m.iloc[-1]
 
     if "Close" not in daily.index or "Close" not in four_hour.index:
@@ -799,16 +806,16 @@ def analyze_multi_timeframe(
     d_close = safe_get(daily, "Close")
     d_ema20 = safe_get(daily, "EMA_20", d_close)
     d_trend = "Long" if d_close > d_ema20 else "Short"
-    d_rsi   = safe_get(daily, "RSI", 50.0)
-    d_adx   = safe_get(daily, "ADX", 0.0)
+    d_rsi = safe_get(daily, "RSI", 50.0)
+    d_adx = safe_get(daily, "ADX", 0.0)
 
     # 4H signals
-    h4_close     = safe_get(four_hour, "Close")
-    h4_ema20     = safe_get(four_hour, "EMA_20", h4_close)
-    h4_ema50     = safe_get(four_hour, "EMA_50", h4_close)
-    h4_trend     = "Long" if h4_ema20 > h4_ema50 else "Short"
-    h4_macd      = safe_get(four_hour, "MACD", 0.0)
-    h4_sig       = safe_get(four_hour, "MACD_Signal", 0.0)
+    h4_close = safe_get(four_hour, "Close")
+    h4_ema20 = safe_get(four_hour, "EMA_20", h4_close)
+    h4_ema50 = safe_get(four_hour, "EMA_50", h4_close)
+    h4_trend = "Long" if h4_ema20 > h4_ema50 else "Short"
+    h4_macd = safe_get(four_hour, "MACD", 0.0)
+    h4_sig = safe_get(four_hour, "MACD_Signal", 0.0)
     h4_macd_bull = h4_macd > h4_sig
 
     # 1H signals
@@ -816,54 +823,68 @@ def analyze_multi_timeframe(
     h1_ema20 = safe_get(one_hour, "EMA_20", h1_close)
     h1_ema50 = safe_get(one_hour, "EMA_50", h1_close)
     h1_trend = "Long" if h1_ema20 > h1_ema50 else "Short"
-    h1_rsi   = safe_get(one_hour, "RSI", 50.0)
+    h1_rsi = safe_get(one_hour, "RSI", 50.0)
 
     long_s = short_s = 0
     reasons: List[str] = []
 
     # Daily scoring
     if d_trend == "Long":
-        long_s += 2;  reasons.append("Daily: Bullish EMA alignment")
+        long_s += 2;
+        reasons.append("Daily: Bullish EMA alignment")
     else:
-        short_s += 2; reasons.append("Daily: Bearish EMA alignment")
+        short_s += 2;
+        reasons.append("Daily: Bearish EMA alignment")
 
     if d_rsi < 40:
-        long_s += 1;  reasons.append(f"Daily RSI oversold ({d_rsi:.1f})")
+        long_s += 1;
+        reasons.append(f"Daily RSI oversold ({d_rsi:.1f})")
     elif d_rsi > 60:
-        short_s += 1; reasons.append(f"Daily RSI overbought ({d_rsi:.1f})")
+        short_s += 1;
+        reasons.append(f"Daily RSI overbought ({d_rsi:.1f})")
 
     if d_adx > config.adx_trend_min:
-        if d_trend == "Long": long_s += 1
-        else:                 short_s += 1
+        if d_trend == "Long":
+            long_s += 1
+        else:
+            short_s += 1
         reasons.append(f"Strong trend (ADX={d_adx:.1f})")
 
     # 4H scoring
     if h4_trend == "Long":
-        long_s += 1;  reasons.append("4H: EMA20 > EMA50")
+        long_s += 1;
+        reasons.append("4H: EMA20 > EMA50")
     else:
-        short_s += 1; reasons.append("4H: EMA20 < EMA50")
+        short_s += 1;
+        reasons.append("4H: EMA20 < EMA50")
 
     if h4_macd_bull:
-        long_s += 1;  reasons.append("4H: MACD bullish")
+        long_s += 1;
+        reasons.append("4H: MACD bullish")
     else:
-        short_s += 1; reasons.append("4H: MACD bearish")
+        short_s += 1;
+        reasons.append("4H: MACD bearish")
 
     # 1H scoring
     if h1_trend == "Long":
-        long_s += 1;  reasons.append("1H: Bullish EMA alignment")
+        long_s += 1;
+        reasons.append("1H: Bullish EMA alignment")
     else:
-        short_s += 1; reasons.append("1H: Bearish EMA alignment")
+        short_s += 1;
+        reasons.append("1H: Bearish EMA alignment")
 
     if h1_rsi < 45:
-        long_s += 1;  reasons.append(f"1H RSI supportive ({h1_rsi:.1f})")
+        long_s += 1;
+        reasons.append(f"1H RSI supportive ({h1_rsi:.1f})")
     elif h1_rsi > 55:
-        short_s += 1; reasons.append(f"1H RSI resistive ({h1_rsi:.1f})")
+        short_s += 1;
+        reasons.append(f"1H RSI resistive ({h1_rsi:.1f})")
 
     if long_s == short_s:
         return None  # Tied → no clear bias
 
     final_bias = "Long" if long_s > short_s else "Short"
-    strength   = long_s if final_bias == "Long" else short_s
+    strength = long_s if final_bias == "Long" else short_s
     conviction = "High" if strength >= 6 else ("Medium" if strength >= 3 else "Low")
 
     entry_signal = entry_generator.get_entry_signal(df_15m, final_bias)
@@ -886,34 +907,34 @@ def analyze_multi_timeframe(
         thesis += f" | Entry: {', '.join(entry_signal['reasons'][:2])}"
 
     return {
-        "pair":             pair_name,
-        "bias":             final_bias,
-        "conviction":       conviction,
-        "strength_score":   strength,
-        "thesis":           thesis,
-        "entry":            current_price,
-        "take_profit_1":    tp_result["tp1"],
-        "take_profit_2":    tp_result["tp2"],
-        "tp1_method":       tp_result["method_tp1"],
-        "tp2_method":       tp_result["method_tp2"],
-        "tp1_valid":        tp_result["tp1_valid"],
-        "tp2_valid":        tp_result["tp2_valid"],
-        "stop_loss":        sl_result["stop"],
+        "pair": pair_name,
+        "bias": final_bias,
+        "conviction": conviction,
+        "strength_score": strength,
+        "thesis": thesis,
+        "entry": current_price,
+        "take_profit_1": tp_result["tp1"],
+        "take_profit_2": tp_result["tp2"],
+        "tp1_method": tp_result["method_tp1"],
+        "tp2_method": tp_result["method_tp2"],
+        "tp1_valid": tp_result["tp1_valid"],
+        "tp2_valid": tp_result["tp2_valid"],
+        "stop_loss": sl_result["stop"],
         "stop_loss_method": sl_result["method"],
-        "stop_loss_pips":   sl_result["distance_pips"],
-        "risk_reward_1":    tp_result["rr1"],
-        "risk_reward_2":    tp_result["rr2"],
-        "atr":              atr,
-        "entry_signal":     entry_signal,
+        "stop_loss_pips": sl_result["distance_pips"],
+        "risk_reward_1": tp_result["rr1"],
+        "risk_reward_2": tp_result["rr2"],
+        "atr": atr,
+        "entry_signal": entry_signal,
     }
 
 
 def generate_trading_ideas(
-    data_by_timeframe: Dict,
+        data_by_timeframe: Dict,
 ) -> Tuple[List[Dict], List[str]]:
     """Returns (ideas, skipped_reasons)."""
-    ideas:   List[Dict] = []
-    skipped: List[str]  = []
+    ideas: List[Dict] = []
+    skipped: List[str] = []
 
     for pair_name in config.assets:
         frames = {
@@ -970,7 +991,7 @@ def clear_data_cache() -> None:
     """Bust cached data and force a fresh fetch on the next render."""
     _fetch_all_timeframes.clear()
     fetch_data.clear()
-    st.session_state.data_loaded  = False
+    st.session_state.data_loaded = False
     st.session_state.last_refresh = datetime.now()
 
 
@@ -1019,9 +1040,9 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
 
         # Auto-monitor — persisted via query params so JS reload restores it
         qp = st.query_params
-        default_am   = qp.get("am", "false") == "true"
+        default_am = qp.get("am", "false") == "true"
         auto_monitor = st.toggle("🔔 Auto-Monitor (5 min)", value=default_am)
-        qp["am"]     = "true" if auto_monitor else "false"
+        qp["am"] = "true" if auto_monitor else "false"
 
         if auto_monitor:
             st.info(
@@ -1033,7 +1054,7 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
 
         # Email alerts
         st.subheader("📧 Email Alerts")
-        email_cfg        = _get_email_config()
+        email_cfg = _get_email_config()
         email_configured = bool(email_cfg["smtp_user"] and email_cfg["recipient"])
 
         if email_configured:
@@ -1080,7 +1101,7 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
                 )
             if st.button("🗑️ Clear Alerts"):
                 st.session_state.notification_log = []
-                st.session_state.notified_keys    = set()
+                st.session_state.notified_keys = set()
                 save_notified_keys(set())
                 st.rerun()
         else:
@@ -1106,14 +1127,14 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
 # ============================================================================
 def render_kpis(daily_data: Dict) -> None:
     kpi_pairs = ["USD/ZAR", "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "XAU/USD", "BTC/USD"]
-    cols      = st.columns(len(kpi_pairs))
+    cols = st.columns(len(kpi_pairs))
     for i, pair in enumerate(kpi_pairs):
         df = daily_data.get(pair)
         with cols[i]:
             if df is not None and not df.empty and "Close" in df.columns:
-                price  = df["Close"].iloc[-1]
+                price = df["Close"].iloc[-1]
                 change = df["Close"].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
-                fmt    = f"{price:,.2f}" if pair in ("BTC/USD", "XAU/USD") else f"{price:.4f}"
+                fmt = f"{price:,.2f}" if pair in ("BTC/USD", "XAU/USD") else f"{price:.4f}"
                 st.metric(pair, fmt, f"{change:+.2f}%")
             else:
                 st.metric(pair, "N/A", "—")
@@ -1137,10 +1158,10 @@ def render_macro_table(macro_data: Dict, is_live: bool) -> None:
 
     rows = [
         {
-            "Currency":     ccy,
-            "GDP %":        round(vals.get("GDP",          0), 2),
-            "Inflation %":  round(vals.get("Inflation",    0), 2),
-            "Rate %":       round(vals.get("Rates",        0), 2),
+            "Currency": ccy,
+            "GDP %": round(vals.get("GDP", 0), 2),
+            "Inflation %": round(vals.get("Inflation", 0), 2),
+            "Rate %": round(vals.get("Rates", 0), 2),
             "Unemployment": round(vals.get("Unemployment", 0), 2),
         }
         for ccy, vals in macro_data.items()
@@ -1148,9 +1169,9 @@ def render_macro_table(macro_data: Dict, is_live: bool) -> None:
 
     df_macro = pd.DataFrame(rows).set_index("Currency")
     gradient_specs = [
-        ("GDP %",        "RdYlGn"),
-        ("Inflation %",  "RdYlGn_r"),
-        ("Rate %",       "Blues"),
+        ("GDP %", "RdYlGn"),
+        ("Inflation %", "RdYlGn_r"),
+        ("Rate %", "Blues"),
         ("Unemployment", "RdYlGn_r"),
     ]
 
@@ -1161,6 +1182,328 @@ def render_macro_table(macro_data: Dict, is_live: bool) -> None:
         st.dataframe(styled, use_container_width=True)
     except Exception:
         st.dataframe(df_macro, use_container_width=True)
+
+
+# ============================================================================
+# NEW: WEEKLY SWING TRADING ANALYSIS
+# ============================================================================
+def analyze_weekly_swing(
+        df_weekly: pd.DataFrame,
+        df_daily: pd.DataFrame,
+        pair_name: str,
+) -> Optional[Dict]:
+    """Generate swing trading ideas based on Weekly and Daily timeframes."""
+
+    df_weekly = analyzer.add_indicators(df_weekly)
+    df_daily = analyzer.add_indicators(df_daily)
+
+    if df_weekly.empty or df_daily.empty:
+        return None
+
+    weekly = df_weekly.iloc[-1]
+    daily = df_daily.iloc[-1]
+
+    if "Close" not in weekly.index or "Close" not in daily.index:
+        return None
+
+    # Weekly signals
+    w_close = safe_get(weekly, "Close")
+    w_ema20 = safe_get(weekly, "EMA_20", w_close)
+    w_ema50 = safe_get(weekly, "EMA_50", w_close)
+    w_trend = "Bullish" if w_ema20 > w_ema50 else "Bearish"
+    w_rsi = safe_get(weekly, "RSI", 50.0)
+    w_adx = safe_get(weekly, "ADX", 0.0)
+    w_macd = safe_get(weekly, "MACD", 0.0)
+    w_signal = safe_get(weekly, "MACD_Signal", 0.0)
+    w_macd_bull = w_macd > w_signal
+
+    # Daily signals
+    d_close = safe_get(daily, "Close")
+    d_ema20 = safe_get(daily, "EMA_20", d_close)
+    d_trend = "Bullish" if d_close > d_ema20 else "Bearish"
+    d_rsi = safe_get(daily, "RSI", 50.0)
+    d_stoch_k = safe_get(daily, "Stoch_K", 50.0)
+    d_stoch_d = safe_get(daily, "Stoch_D", 50.0)
+
+    # Swing scoring
+    long_score = short_score = 0
+    reasons: List[str] = []
+
+    # Weekly scoring (higher weight)
+    if w_trend == "Bullish":
+        long_score += 3
+        reasons.append("Weekly: EMA20 > EMA50 (bullish structure)")
+    else:
+        short_score += 3
+        reasons.append("Weekly: EMA20 < EMA50 (bearish structure)")
+
+    if w_rsi < 40:
+        long_score += 2
+        reasons.append(f"Weekly RSI oversold ({w_rsi:.1f})")
+    elif w_rsi > 60:
+        short_score += 2
+        reasons.append(f"Weekly RSI overbought ({w_rsi:.1f})")
+
+    if w_adx > config.adx_trend_min:
+        if w_trend == "Bullish":
+            long_score += 2
+        else:
+            short_score += 2
+        reasons.append(f"Weekly trend strength ADX={w_adx:.1f}")
+
+    if w_macd_bull:
+        long_score += 1
+        reasons.append("Weekly MACD bullish")
+    else:
+        short_score += 1
+        reasons.append("Weekly MACD bearish")
+
+    # Daily scoring
+    if d_trend == "Bullish":
+        long_score += 1
+        reasons.append("Daily: Price > EMA20")
+    else:
+        short_score += 1
+        reasons.append("Daily: Price < EMA20")
+
+    if d_rsi < 35:
+        long_score += 1
+        reasons.append(f"Daily RSI deeply oversold ({d_rsi:.1f})")
+    elif d_rsi > 65:
+        short_score += 1
+        reasons.append(f"Daily RSI deeply overbought ({d_rsi:.1f})")
+
+    # Stochastic for timing
+    if d_stoch_k < 20 and d_stoch_d < 20:
+        long_score += 1
+        reasons.append(f"Daily Stoch oversold (K={d_stoch_k:.1f})")
+    elif d_stoch_k > 80 and d_stoch_d > 80:
+        short_score += 1
+        reasons.append(f"Daily Stoch overbought (K={d_stoch_k:.1f})")
+
+    if long_score == short_score:
+        return None
+
+    bias = "Long" if long_score > short_score else "Short"
+    strength = max(long_score, short_score)
+    conviction = "High" if strength >= 8 else ("Medium" if strength >= 5 else "Low")
+
+    # Calculate swing levels
+    atr = safe_get(weekly, "ATR", w_close * 0.02)
+    current_price = safe_get(daily, "Close", 0.0)
+
+    if current_price <= 0:
+        return None
+
+    # Swing stop loss (wider for swing trading)
+    swing_lookback = 50  # Longer lookback for swing trades
+    if bias == "Long":
+        swing_low = df_daily["Low"].tail(swing_lookback).min()
+        stop_loss = swing_low - atr * 0.5
+        target_1 = current_price + atr * 3.0  # 3x ATR target
+        target_2 = current_price + atr * 5.0  # 5x ATR target
+        invalidation = "Below swing low"
+    else:
+        swing_high = df_daily["High"].tail(swing_lookback).max()
+        stop_loss = swing_high + atr * 0.5
+        target_1 = current_price - atr * 3.0
+        target_2 = current_price - atr * 5.0
+        invalidation = "Above swing high"
+
+    rr_1 = abs(target_1 - current_price) / abs(current_price - stop_loss)
+    rr_2 = abs(target_2 - current_price) / abs(current_price - stop_loss)
+
+    return {
+        "pair": pair_name,
+        "bias": bias,
+        "conviction": conviction,
+        "strength_score": strength,
+        "thesis": " | ".join(reasons),
+        "entry": current_price,
+        "stop_loss": stop_loss,
+        "target_1": target_1,
+        "target_2": target_2,
+        "risk_reward_1": round(rr_1, 2),
+        "risk_reward_2": round(rr_2, 2),
+        "invalidation": invalidation,
+        "atr": atr,
+        "weekly_trend": w_trend,
+        "daily_trend": d_trend,
+    }
+
+
+def generate_weekly_swing_ideas(data_by_timeframe: Dict) -> List[Dict]:
+    """Generate swing trading ideas based on Weekly and Daily analysis."""
+    ideas: List[Dict] = []
+
+    for pair_name in config.assets:
+        df_weekly = data_by_timeframe.get("Weekly", {}).get(pair_name, pd.DataFrame())
+        df_daily = data_by_timeframe.get("Daily", {}).get(pair_name, pd.DataFrame())
+
+        if df_weekly.empty or df_daily.empty:
+            continue
+
+        if len(df_weekly) < 20 or len(df_daily) < 20:
+            continue
+
+        idea = analyze_weekly_swing(df_weekly, df_daily, pair_name)
+        if idea:
+            ideas.append(idea)
+
+    ideas.sort(
+        key=lambda x: (x["conviction"] == "High", x["strength_score"]),
+        reverse=True,
+    )
+    return ideas
+
+
+# ============================================================================
+# NEW: MULTI-TIMEFRAME BIAS DASHBOARD
+# ============================================================================
+def analyze_bias_for_pair(
+        df_weekly: pd.DataFrame,
+        df_daily: pd.DataFrame,
+        df_4h: pd.DataFrame,
+        df_1h: pd.DataFrame,
+        df_15m: pd.DataFrame,
+        pair_name: str,
+) -> Dict:
+    """Analyze bias across multiple timeframes."""
+
+    frames = {
+        "Weekly": df_weekly,
+        "Daily": df_daily,
+        "4H": df_4h,
+        "1H": df_1h,
+        "15m": df_15m,
+    }
+
+    bias_data = {}
+
+    for tf_name, df in frames.items():
+        if df.empty or len(df) < 20:
+            bias_data[tf_name] = {
+                "bias": "Insufficient Data",
+                "strength": 0,
+                "price": 0,
+                "trend": "N/A",
+                "rsi": 0,
+                "adx": 0,
+            }
+            continue
+
+        df = analyzer.add_indicators(df)
+        latest = df.iloc[-1]
+
+        close = safe_get(latest, "Close", 0)
+        ema20 = safe_get(latest, "EMA_20", close)
+        ema50 = safe_get(latest, "EMA_50", close)
+        sma20 = safe_get(latest, "SMA_20", close)
+        sma50 = safe_get(latest, "SMA_50", close)
+        rsi = safe_get(latest, "RSI", 50)
+        adx = safe_get(latest, "ADX", 0)
+        macd = safe_get(latest, "MACD", 0)
+        macd_sig = safe_get(latest, "MACD_Signal", 0)
+
+        # Determine bias
+        bullish_signals = 0
+        bearish_signals = 0
+
+        if close > ema20:
+            bullish_signals += 1
+        else:
+            bearish_signals += 1
+
+        if ema20 > ema50:
+            bullish_signals += 1
+        else:
+            bearish_signals += 1
+
+        if close > sma20:
+            bullish_signals += 1
+        else:
+            bearish_signals += 1
+
+        if macd > macd_sig:
+            bullish_signals += 1
+        else:
+            bearish_signals += 1
+
+        if rsi > 50:
+            bullish_signals += 1
+        else:
+            bearish_signals += 1
+
+        # Determine final bias
+        if bullish_signals > bearish_signals:
+            bias = "Bullish"
+            strength = bullish_signals
+        elif bearish_signals > bullish_signals:
+            bias = "Bearish"
+            strength = bearish_signals
+        else:
+            bias = "Neutral"
+            strength = 0
+
+        # Determine trend strength
+        if adx > 25:
+            trend = "Strong"
+        elif adx > 20:
+            trend = "Moderate"
+        else:
+            trend = "Weak/Ranging"
+
+        bias_data[tf_name] = {
+            "bias": bias,
+            "strength": strength,
+            "price": close,
+            "trend": trend,
+            "rsi": rsi,
+            "adx": adx,
+        }
+
+    # Calculate overall bias
+    overall_bullish = sum(1 for tf in bias_data.values() if tf["bias"] == "Bullish")
+    overall_bearish = sum(1 for tf in bias_data.values() if tf["bias"] == "Bearish")
+
+    if overall_bullish > overall_bearish:
+        overall_bias = "Bullish"
+        confidence = (overall_bullish / 5) * 100
+    elif overall_bearish > overall_bullish:
+        overall_bias = "Bearish"
+        confidence = (overall_bearish / 5) * 100
+    else:
+        overall_bias = "Mixed/Neutral"
+        confidence = 0
+
+    return {
+        "pair": pair_name,
+        "overall_bias": overall_bias,
+        "confidence": confidence,
+        "timeframes": bias_data,
+    }
+
+
+def generate_bias_dashboard(data_by_timeframe: Dict) -> List[Dict]:
+    """Generate bias analysis for all pairs."""
+    bias_results = []
+
+    for pair_name in config.assets:
+        df_weekly = data_by_timeframe.get("Weekly", {}).get(pair_name, pd.DataFrame())
+        df_daily = data_by_timeframe.get("Daily", {}).get(pair_name, pd.DataFrame())
+        df_4h = data_by_timeframe.get("4 Hour", {}).get(pair_name, pd.DataFrame())
+        df_1h = data_by_timeframe.get("Hourly", {}).get(pair_name, pd.DataFrame())
+        df_15m = data_by_timeframe.get("15 Minute", {}).get(pair_name, pd.DataFrame())
+
+        if any(df.empty for df in [df_daily, df_4h, df_1h, df_15m]):
+            continue
+
+        bias_result = analyze_bias_for_pair(
+            df_weekly, df_daily, df_4h, df_1h, df_15m, pair_name
+        )
+        bias_results.append(bias_result)
+
+    return bias_results
 
 
 # ============================================================================
@@ -1201,8 +1544,8 @@ def main() -> None:
         with st.spinner("Loading market data…"):
             data_by_timeframe = load_all_timeframes()
             st.session_state.data_by_timeframe = data_by_timeframe
-            st.session_state.data_loaded       = True
-            st.session_state.last_refresh      = datetime.now()
+            st.session_state.data_loaded = True
+            st.session_state.last_refresh = datetime.now()
 
         with st.spinner("Fetching macro fundamentals from FRED…"):
             macro, is_live = get_macro_data(fred_api_key)
@@ -1216,20 +1559,22 @@ def main() -> None:
 
     else:
         data_by_timeframe = st.session_state.data_by_timeframe
-        macro             = st.session_state.macro_data
-        is_live           = st.session_state.get("macro_live", False)
+        macro = st.session_state.macro_data
+        is_live = st.session_state.get("macro_live", False)
 
     daily_data = data_by_timeframe.get("Daily", {})
 
     if daily_data:
         render_kpis(daily_data)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📊 Overview",
         "🌍 Macro Fundamentals",
         "📈 Technical Chart",
         "⏱️ 15-Min Entry",
         "🎯 Trading Ideas",
+        "📅 Weekly Swing",
+        "🎯 MTF Bias",
     ])
 
     # Tab 1: Overview
@@ -1239,14 +1584,14 @@ def main() -> None:
             rows = []
             for pair, df in daily_data.items():
                 if not df.empty and "Close" in df.columns:
-                    price  = df["Close"].iloc[-1]
+                    price = df["Close"].iloc[-1]
                     change = df["Close"].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
-                    dp     = 2 if pair in ("BTC/USD", "XAU/USD") else 5
+                    dp = 2 if pair in ("BTC/USD", "XAU/USD") else 5
                     rows.append({
-                        "Pair":     pair,
-                        "Price":    round(price, dp),
+                        "Pair": pair,
+                        "Price": round(price, dp),
                         "Change %": round(change, 3),
-                        "Bars":     len(df),
+                        "Bars": len(df),
                     })
             if rows:
                 st.dataframe(pd.DataFrame(rows), use_container_width=True)
@@ -1278,8 +1623,8 @@ def main() -> None:
 
         if avail:
             col1, col2 = st.columns(2)
-            pair = col1.selectbox("Pair",      avail,                          key="chart_pair")
-            tf   = col2.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
+            pair = col1.selectbox("Pair", avail, key="chart_pair")
+            tf = col2.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
 
             df_c = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
             if not df_c.empty and "Close" in df_c.columns:
@@ -1314,7 +1659,7 @@ def main() -> None:
                         x=df_c.index, y=df_c["RSI"],
                         name="RSI", line=dict(color="purple"),
                     ), row=2, col=1)
-                    fig.add_hline(y=70, line_dash="dash", line_color="red",   row=2, col=1)
+                    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
                     fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
 
                 fig.update_layout(height=600, showlegend=True)
@@ -1322,9 +1667,9 @@ def main() -> None:
 
                 last = df_c.iloc[-1]
                 m1, m2, m3, m4 = st.columns(4)
-                m1.metric("RSI",     f"{safe_get(last, 'RSI',     0):.1f}")
-                m2.metric("ADX",     f"{safe_get(last, 'ADX',     0):.1f}")
-                m3.metric("ATR",     f"{safe_get(last, 'ATR',     0):.5f}")
+                m1.metric("RSI", f"{safe_get(last, 'RSI', 0):.1f}")
+                m2.metric("ADX", f"{safe_get(last, 'ADX', 0):.1f}")
+                m3.metric("ATR", f"{safe_get(last, 'ATR', 0):.5f}")
                 m4.metric("Stoch K", f"{safe_get(last, 'Stoch_K', 0):.1f}")
             else:
                 st.warning(f"No data available for {pair} on {tf}")
@@ -1339,29 +1684,32 @@ def main() -> None:
         if avail:
             pair_e = st.selectbox("Pair", avail, key="entry_pair")
             df_15m = data_by_timeframe.get("15 Minute", {}).get(pair_e, pd.DataFrame())
-            df_d   = data_by_timeframe.get("Daily",     {}).get(pair_e, pd.DataFrame())
+            df_d = data_by_timeframe.get("Daily", {}).get(pair_e, pd.DataFrame())
 
             if not df_15m.empty and not df_d.empty and "Close" in df_d.columns:
                 df_d_ind = analyzer.add_indicators(df_d)
                 if not df_d_ind.empty:
-                    di      = df_d_ind.iloc[-1]
-                    adx_v   = safe_get(di, "ADX",   0.0)
-                    close_v = safe_get(di, "Close",  0.0)
+                    di = df_d_ind.iloc[-1]
+                    adx_v = safe_get(di, "ADX", 0.0)
+                    close_v = safe_get(di, "Close", 0.0)
                     ema20_v = safe_get(di, "EMA_20", close_v)
 
                     bias_v = ("Long" if close_v > ema20_v else "Short") \
-                             if adx_v > config.adx_trend_min else "Neutral"
+                        if adx_v > config.adx_trend_min else "Neutral"
 
                     st.write(f"**Daily Trend Bias:** `{bias_v}` | ADX = {adx_v:.1f}")
                     sig = entry_generator.get_entry_signal(df_15m, bias_v)
 
                     c1, c2, c3 = st.columns(3)
                     with c1:
-                        if   sig["signal"] ==  1: st.success("### 🟢 LONG")
-                        elif sig["signal"] == -1: st.error("### 🔴 SHORT")
-                        else:                     st.info("### ⚪ NO SIGNAL")
+                        if sig["signal"] == 1:
+                            st.success("### 🟢 LONG")
+                        elif sig["signal"] == -1:
+                            st.error("### 🔴 SHORT")
+                        else:
+                            st.info("### ⚪ NO SIGNAL")
                     c2.metric("Confidence", f"{sig['confidence']}/5")
-                    c3.metric("Price",      f"{sig.get('price', 0):.5f}")
+                    c3.metric("Price", f"{sig.get('price', 0):.5f}")
 
                     for r in sig.get("reasons", []):
                         st.info(f"ℹ️ {r}")
@@ -1398,16 +1746,16 @@ def main() -> None:
                 st.success(f"✅ {len(ideas)} idea(s) generated")
 
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Total",           len(ideas))
-                c2.metric("Long",            sum(1 for i in ideas if i["bias"] == "Long"))
-                c3.metric("Short",           sum(1 for i in ideas if i["bias"] == "Short"))
+                c1.metric("Total", len(ideas))
+                c2.metric("Long", sum(1 for i in ideas if i["bias"] == "Long"))
+                c3.metric("Short", sum(1 for i in ideas if i["bias"] == "Short"))
                 c4.metric("High Conviction", sum(1 for i in ideas if i["conviction"] == "High"))
 
                 st.divider()
 
                 for idx, idea in enumerate(ideas):
                     direction = "📈" if idea["bias"] == "Long" else "📉"
-                    header    = f"### {idx+1}. {idea['pair']} — {idea['bias'].upper()} {direction}"
+                    header = f"### {idx + 1}. {idea['pair']} — {idea['bias'].upper()} {direction}"
 
                     if idea["conviction"] == "High":
                         st.success(header + " 🔔 HIGH CONVICTION")
@@ -1443,7 +1791,7 @@ def main() -> None:
 
                     p4.metric("Stop Loss", f"{idea['stop_loss']:.5f}")
                     risk_pct = (abs(idea["entry"] - idea["stop_loss"]) / idea["entry"]) * 100
-                    p5.metric("Risk %",    f"{risk_pct:.2f}%")
+                    p5.metric("Risk %", f"{risk_pct:.2f}%")
 
                     st.caption(
                         f"🛡️ Stop method: **{idea['stop_loss_method']}** | "
@@ -1465,23 +1813,23 @@ def main() -> None:
                     st.divider()
 
                 export_df = pd.DataFrame([{
-                    "Pair":        i["pair"],
-                    "Bias":        i["bias"],
-                    "Conviction":  i["conviction"],
-                    "Strength":    i["strength_score"],
-                    "Entry":       i["entry"],
-                    "TP1":         i["take_profit_1"],
-                    "TP1 Method":  i["tp1_method"],
-                    "TP1 Valid":   i["tp1_valid"],
-                    "TP2":         i["take_profit_2"],
-                    "TP2 Method":  i["tp2_method"],
-                    "TP2 Valid":   i["tp2_valid"],
-                    "Stop Loss":   i["stop_loss"],
+                    "Pair": i["pair"],
+                    "Bias": i["bias"],
+                    "Conviction": i["conviction"],
+                    "Strength": i["strength_score"],
+                    "Entry": i["entry"],
+                    "TP1": i["take_profit_1"],
+                    "TP1 Method": i["tp1_method"],
+                    "TP1 Valid": i["tp1_valid"],
+                    "TP2": i["take_profit_2"],
+                    "TP2 Method": i["tp2_method"],
+                    "TP2 Valid": i["tp2_valid"],
+                    "Stop Loss": i["stop_loss"],
                     "Stop Method": i["stop_loss_method"],
-                    "R:R TP1":     i["risk_reward_1"],
-                    "R:R TP2":     i["risk_reward_2"],
-                    "Stop Pips":   i["stop_loss_pips"],
-                    "Thesis":      i["thesis"],
+                    "R:R TP1": i["risk_reward_1"],
+                    "R:R TP2": i["risk_reward_2"],
+                    "Stop Pips": i["stop_loss_pips"],
+                    "Thesis": i["thesis"],
                 } for i in ideas])
 
                 st.download_button(
@@ -1500,6 +1848,223 @@ def main() -> None:
                     "- Some pairs had insufficient intraday bars\n\n"
                     "Try clicking **↺ Refresh Now** in the sidebar then re-running."
                 )
+
+    # Tab 6: Weekly Swing Trading
+    with tab6:
+        st.subheader("📅 Weekly Swing Trading Ideas")
+        st.caption("Higher timeframe analysis · Weekly & Daily confluence · Wider stops & targets")
+
+        if st.button("🔄 Generate Swing Ideas", type="primary", key="swing_button"):
+            with st.spinner("Analyzing weekly and daily charts for swing setups…"):
+                swing_ideas = generate_weekly_swing_ideas(data_by_timeframe)
+                st.session_state.swing_ideas = swing_ideas
+
+            if swing_ideas:
+                st.success(f"✅ {len(swing_ideas)} swing idea(s) generated")
+
+                for idx, idea in enumerate(swing_ideas):
+                    direction = "📈" if idea["bias"] == "Long" else "📉"
+                    header = f"### {idx + 1}. {idea['pair']} — {idea['bias'].upper()} SWING {direction}"
+
+                    if idea["conviction"] == "High":
+                        st.success(header + " 🔔 HIGH CONVICTION")
+                    elif idea["conviction"] == "Medium":
+                        st.warning(header)
+                    else:
+                        st.info(header)
+
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Entry", f"{idea['entry']:.5f}")
+                    col2.metric("Stop Loss", f"{idea['stop_loss']:.5f}",
+                                delta=f"{idea['invalidation']}")
+                    col3.metric("Weekly ATR", f"{idea['atr']:.5f}")
+
+                    st.markdown(f"**📝 Thesis:** {idea['thesis']}")
+
+                    t1, t2, t3 = st.columns(3)
+                    t1.metric("Target 1", f"{idea['target_1']:.5f}",
+                              delta=f"R:R 1:{idea['risk_reward_1']:.2f}")
+                    t2.metric("Target 2", f"{idea['target_2']:.5f}",
+                              delta=f"R:R 1:{idea['risk_reward_2']:.2f}")
+
+                    risk_pct = (abs(idea['entry'] - idea['stop_loss']) / idea['entry']) * 100
+                    t3.metric("Risk %", f"{risk_pct:.2f}%")
+
+                    st.caption(f"Weekly: {idea['weekly_trend']} | Daily: {idea['daily_trend']}")
+                    st.divider()
+
+                # Export swing ideas
+                swing_df = pd.DataFrame([{
+                    "Pair": i["pair"],
+                    "Bias": i["bias"],
+                    "Conviction": i["conviction"],
+                    "Entry": i["entry"],
+                    "Stop": i["stop_loss"],
+                    "Target 1": i["target_1"],
+                    "Target 2": i["target_2"],
+                    "R:R 1": i["risk_reward_1"],
+                    "R:R 2": i["risk_reward_2"],
+                    "Thesis": i["thesis"],
+                } for i in swing_ideas])
+
+                st.download_button(
+                    "📥 Download Swing Ideas (CSV)",
+                    data=swing_df.to_csv(index=False),
+                    file_name=f"swing_ideas_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    key="swing_download"
+                )
+            else:
+                st.warning("⚠️ No swing trading ideas generated.")
+                st.info(
+                    "Swing setups require strong weekly/daily confluence. Try again later or check different pairs.")
+        else:
+            if "swing_ideas" in st.session_state:
+                swing_ideas = st.session_state.swing_ideas
+                if swing_ideas:
+                    st.info(f"📊 Showing {len(swing_ideas)} previously generated swing ideas")
+                    for idx, idea in enumerate(swing_ideas):
+                        direction = "📈" if idea["bias"] == "Long" else "📉"
+                        header = f"### {idx + 1}. {idea['pair']} — {idea['bias'].upper()} SWING {direction}"
+
+                        if idea["conviction"] == "High":
+                            st.success(header)
+                        elif idea["conviction"] == "Medium":
+                            st.warning(header)
+                        else:
+                            st.info(header)
+
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Entry", f"{idea['entry']:.5f}")
+                        col2.metric("Stop Loss", f"{idea['stop_loss']:.5f}")
+                        col3.metric("Target 1", f"{idea['target_1']:.5f}",
+                                    delta=f"R:R 1:{idea['risk_reward_1']:.2f}")
+                        st.divider()
+            else:
+                st.info("👆 Click 'Generate Swing Ideas' to analyze weekly/daily swing setups")
+
+    # Tab 7: Multi-Timeframe Bias Dashboard
+    with tab7:
+        st.subheader("🎯 Multi-Timeframe Bias Dashboard")
+        st.caption("Weekly · Daily · 4H · 1H · 15m bias analysis")
+
+        if st.button("🔄 Analyze MTF Bias", type="primary", key="bias_button"):
+            with st.spinner("Analyzing bias across all timeframes…"):
+                bias_results = generate_bias_dashboard(data_by_timeframe)
+                st.session_state.bias_results = bias_results
+
+            if bias_results:
+                # Summary table
+                summary_data = []
+                for result in bias_results:
+                    summary_data.append({
+                        "Pair": result["pair"],
+                        "Overall Bias": result["overall_bias"],
+                        "Confidence": f"{result['confidence']:.0f}%",
+                        "Weekly": result["timeframes"]["Weekly"]["bias"],
+                        "Daily": result["timeframes"]["Daily"]["bias"],
+                        "4H": result["timeframes"]["4H"]["bias"],
+                        "1H": result["timeframes"]["1H"]["bias"],
+                        "15m": result["timeframes"]["15m"]["bias"],
+                    })
+
+                df_summary = pd.DataFrame(summary_data)
+
+                # Color coding
+                def color_bias(val):
+                    if val == "Bullish":
+                        return "background-color: #00AC00"
+                    elif val == "Bearish":
+                        return "background-color: #EE5100"
+                    elif val == "Neutral":
+                        return "background-color: #F0E68C"
+                    return ""
+
+                styled_df = df_summary.style.map(color_bias,
+                                                      subset=["Overall Bias", "Weekly", "Daily", "4H", "1H", "15m"])
+                st.dataframe(styled_df, use_container_width=True)
+
+                st.divider()
+                st.subheader("Detailed Analysis")
+
+                # Detailed view for each pair
+                for result in bias_results:
+                    with st.expander(
+                            f"📊 {result['pair']} - {result['overall_bias']} ({result['confidence']:.0f}% confidence)"):
+                        tf_data = result["timeframes"]
+
+                        cols = st.columns(5)
+                        for idx, (tf_name, data) in enumerate(tf_data.items()):
+                            with cols[idx]:
+                                if data["bias"] == "Bullish":
+                                    st.success(f"**{tf_name}**")
+                                elif data["bias"] == "Bearish":
+                                    st.error(f"**{tf_name}**")
+                                else:
+                                    st.warning(f"**{tf_name}**")
+
+                                st.metric("Bias", data["bias"])
+                                if data["price"] > 0:
+                                    st.metric("Price", f"{data['price']:.5f}")
+                                st.metric("RSI", f"{data['rsi']:.1f}")
+                                st.metric("ADX", f"{data['adx']:.1f}")
+                                st.caption(f"Trend: {data['trend']}")
+
+                # Export bias analysis
+                bias_export = []
+                for result in bias_results:
+                    row = {"Pair": result["pair"], "Overall Bias": result["overall_bias"],
+                           "Confidence": result["confidence"]}
+                    for tf, data in result["timeframes"].items():
+                        row[f"{tf}_Bias"] = data["bias"]
+                        row[f"{tf}_RSI"] = data["rsi"]
+                        row[f"{tf}_ADX"] = data["adx"]
+                    bias_export.append(row)
+
+                bias_df = pd.DataFrame(bias_export)
+                st.download_button(
+                    "📥 Download Bias Analysis (CSV)",
+                    data=bias_df.to_csv(index=False),
+                    file_name=f"mtf_bias_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    key="bias_download"
+                )
+            else:
+                st.warning("⚠️ No bias analysis available. Check data loading.")
+        else:
+            if "bias_results" in st.session_state:
+                bias_results = st.session_state.bias_results
+                st.info(f"📊 Showing previously analyzed MTF bias for {len(bias_results)} pairs")
+
+                summary_data = []
+                for result in bias_results:
+                    summary_data.append({
+                        "Pair": result["pair"],
+                        "Overall Bias": result["overall_bias"],
+                        "Confidence": f"{result['confidence']:.0f}%",
+                        "Weekly": result["timeframes"]["Weekly"]["bias"],
+                        "Daily": result["timeframes"]["Daily"]["bias"],
+                        "4H": result["timeframes"]["4H"]["bias"],
+                        "1H": result["timeframes"]["1H"]["bias"],
+                        "15m": result["timeframes"]["15m"]["bias"],
+                    })
+
+                df_summary = pd.DataFrame(summary_data)
+
+                def color_bias(val):
+                    if val == "Bullish":
+                        return "background-color: #00AC00"
+                    elif val == "Bearish":
+                        return "background-color: #FFB6C1"
+                    elif val == "Neutral":
+                        return "background-color: #F0E68C"
+                    return ""
+
+                styled_df = df_summary.style.map(color_bias,
+                                                      subset=["Overall Bias", "Weekly", "Daily", "4H", "1H", "15m"])
+                st.dataframe(styled_df, use_container_width=True)
+            else:
+                st.info("👆 Click 'Analyze MTF Bias' to generate bias analysis across all timeframes")
 
 
 # ============================================================================
