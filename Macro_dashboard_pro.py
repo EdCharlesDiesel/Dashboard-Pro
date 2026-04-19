@@ -198,7 +198,7 @@ def safe_get(row: Any, key: str, default: float = 0.0) -> float:
 # ============================================================================
 # EMAIL HELPERS
 # ============================================================================
-def _get_email_config() -> Dict[str, str]:
+def _get_email_config() -> dict[str, str | int]:
     """Read email settings from Streamlit secrets or environment variables."""
 
     try:
@@ -214,7 +214,7 @@ def _get_email_config() -> Dict[str, str]:
         "smtp_port": int(_s("smtp_port", "587", "587")),
         "smtp_user": _s("smtp_user", "ckhotso@gmail.com", "ckhotso@gmail.com"),
         "smtp_pass": _s("smtp_pass", "pctqrrrnvwpixxwg", "pctqrrrnvwpixxwg"),
-        "recipient": _s("recipient", "mokhetkc@hotmail.com;zanydeep@gmail.com", "mokhetkc@hotmail.com;zanydeep@gmail.com"),
+        "recipient": _s("recipient", "mokhetkc@hotmail.com", "mokhetkc@hotmail.com"),
     }
 
     if not cfg["smtp_user"] or not cfg["smtp_pass"]:
