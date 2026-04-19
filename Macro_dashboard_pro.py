@@ -214,7 +214,7 @@ def _get_email_config() -> Dict[str, str]:
         "smtp_port": int(_s("smtp_port", "587", "587")),
         "smtp_user": _s("smtp_user", "ckhotso@gmail.com", "ckhotso@gmail.com"),
         "smtp_pass": _s("smtp_pass", "pctqrrrnvwpixxwg", "pctqrrrnvwpixxwg"),
-        "recipient": _s("recipient", "mokhetkc@hotmail.com", "mokhetkc@hotmail.com"),
+        "recipient": _s("recipient", "mokhetkc@hotmail.com;zanydeep@gmail.com", "mokhetkc@hotmail.com;zanydeep@gmail.com"),
     }
 
     if not cfg["smtp_user"] or not cfg["smtp_pass"]:
@@ -222,7 +222,7 @@ def _get_email_config() -> Dict[str, str]:
 
     # Optional safe debug (only once)
     # safe_cfg = {k: ("***" if "pass" in k else v) for k, v in cfg.items()}
-    st.write(safe_cfg)
+    # st.write(safe_cfg)
 
     return cfg
 
