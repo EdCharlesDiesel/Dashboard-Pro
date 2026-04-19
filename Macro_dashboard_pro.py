@@ -197,34 +197,34 @@ def safe_get(row: Any, key: str, default: float = 0.0) -> float:
 
 # ============================================================================
 # EMAIL HELPERS
-# FIX: _get_email_config and send_email_alert were called in render_sidebar
-#      but never implemented anywhere — NameError on every sidebar render.
-# Configuration via .streamlit/secrets.toml [email] section or EMAIL_* env vars.
 # ============================================================================
 def _get_email_config() -> Dict[str, str]:
     """Read email settings from Streamlit secrets or environment variables."""
+
+    try:
+        email_secrets = st.secrets.get("email", {})
+    except Exception:
+        email_secrets = {}
+
     def _s(key: str, env: str, fallback: str = "") -> str:
-        try:
-            return st.secrets.get("email", {}).get(key, os.environ.get(env, fallback))
-        except Exception:
-            return os.environ.get(env, fallback)
+        return email_secrets.get(key) or os.environ.get(env, fallback)
 
-    # return {
-    #     "smtp_host": _s("smtp_host", "EMAIL_SMTP_HOST", "smtp.gmail.com"),
-    #     "smtp_port": _s("smtp_port", "EMAIL_SMTP_PORT", "587"),
-    #     "smtp_user": _s("smtp_user", "EMAIL_SMTP_USER", ""),
-    #     "smtp_pass": _s("smtp_pass", "EMAIL_SMTP_PASS", ""),
-    #     "recipient": _s("recipient", "EMAIL_RECIPIENT", ""),
-    # }
-
-    return {
+    cfg = {
         "smtp_host": _s("smtp_host", "smtp.gmail.com", "smtp.gmail.com"),
-        "smtp_port": _s("smtp_port", "EMAIL_SMTP_PORT", "587"),
-        "smtp_user": _s("smtp_user", "ckhotso@gmail.com", ""),
-        "smtp_pass": _s("smtp_pass", "pctqrrrnvwpixxwg", ""),
-        "recipient": _s("recipient", "mokhetkc@hotmail.com", ""),
+        "smtp_port": int(_s("smtp_port", "587", "587")),
+        "smtp_user": _s("smtp_user", "ckhotso@gmail.com", "ckhotso@gmail.com"),
+        "smtp_pass": _s("smtp_pass", "pctqrrrnvwpixxwg", "pctqrrrnvwpixxwg"),
+        "recipient": _s("recipient", "mokhetkc@hotmail.com", "mokhetkc@hotmail.com"),
     }
 
+    if not cfg["smtp_user"] or not cfg["smtp_pass"]:
+        raise ValueError("Email credentials are missing")
+
+    # Optional safe debug (only once)
+    # safe_cfg = {k: ("***" if "pass" in k else v) for k, v in cfg.items()}
+    st.write(safe_cfg)
+
+    return cfg
 
 def send_email_alert(idea: Dict) -> bool:
     """Send a plain-text email for a high-conviction trading idea.
