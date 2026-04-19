@@ -37,8 +37,6 @@ st.set_page_config(
 
 # ============================================================================
 # NOTIFICATION PERSISTENCE
-# Notified keys are written to disk so they survive the JS-triggered page
-# reloads that power Auto-Monitor.
 # ============================================================================
 NOTIFY_FILE = "/tmp/forex_notify_cache.json"
 
@@ -90,11 +88,8 @@ class AppConfig:
 
     risk_per_trade: float = 0.02
     atr_sl_mult: float = 1.5
-
-    # TP1 = 3.0× ATR → R:R ≥ 2.0; TP2 = 5.0× ATR → R:R ≥ 3.33
     tp1_atr_mult: float = 3.0
     tp2_atr_mult: float = 5.0
-
     min_rr: float = 2.0
     adx_trend_min: float = 20.0
     rsi_os: float = 40.0
@@ -113,11 +108,6 @@ class AppConfig:
         "AUD/USD": 0.0010, "NZD/USD": 0.0010, "USD/CAD": 0.0010, "USD/CHF": 0.0010,
         "XAU/USD": 2.00, "BTC/USD": 500.0,
     })
-
-    london_start: int = 8
-    london_end: int = 16
-    ny_start: int = 13
-    ny_end: int = 21
 
     dxy_symbol: str = "DX-Y.NYB"
     cache_ttl: int = 300
@@ -188,7 +178,6 @@ config = get_config()
 
 # ============================================================================
 # UTILITY — safe_get
-# FIX: was referenced throughout the file but never defined, causing NameError.
 # ============================================================================
 def safe_get(row: Any, key: str, default: float = 0.0) -> float:
     """Safely extract a scalar from a pandas Series row, returning `default`
@@ -207,7 +196,6 @@ def safe_get(row: Any, key: str, default: float = 0.0) -> float:
 # ============================================================================
 def _get_email_config() -> dict[str, str | int]:
     """Read email settings from Streamlit secrets or environment variables."""
-
     try:
         email_secrets = st.secrets.get("email", {})
     except Exception:
@@ -217,26 +205,18 @@ def _get_email_config() -> dict[str, str | int]:
         return email_secrets.get(key) or os.environ.get(env, fallback)
 
     cfg = {
-        "smtp_host": _s("smtp_host", "smtp.gmail.com", "smtp.gmail.com"),
-        "smtp_port": int(_s("smtp_port", "587", "587")),
-        "smtp_user": _s("smtp_user", "ckhotso@gmail.com", "ckhotso@gmail.com"),
-        "smtp_pass": _s("smtp_pass", "pctqrrrnvwpixxwg", "pctqrrrnvwpixxwg"),
-        "recipient": _s("recipient", "mokhetkc@hotmail.com", "mokhetkc@hotmail.com"),
+        "smtp_host": _s("smtp_host", "SMTP_HOST", "smtp.gmail.com"),
+        "smtp_port": int(_s("smtp_port", "SMTP_PORT", "587")),
+        "smtp_user": _s("smtp_user", "SMTP_USER", ""),
+        "smtp_pass": _s("smtp_pass", "SMTP_PASS", ""),
+        "recipient": _s("recipient", "EMAIL_RECIPIENT", ""),
     }
-
-    if not cfg["smtp_user"] or not cfg["smtp_pass"]:
-        raise ValueError("Email credentials are missing")
-
-    # Optional safe debug (only once)
-    # safe_cfg = {k: ("***" if "pass" in k else v) for k, v in cfg.items()}
-    # st.write(safe_cfg)
 
     return cfg
 
 
 def send_email_alert(idea: Dict) -> bool:
-    """Send a plain-text email for a high-conviction trading idea.
-    Returns True on success, False on any failure."""
+    """Send a plain-text email for a high-conviction trading idea."""
     cfg = _get_email_config()
     if not cfg["smtp_user"] or not cfg["recipient"]:
         logger.warning("Email not configured — skipping alert.")
@@ -296,8 +276,7 @@ def init_notification_state() -> None:
 
 
 def check_and_notify(ideas: List[Dict]) -> List[Dict]:
-    """Fire st.toast() for every NEW high-conviction idea.
-    Returns the list of newly alerted ideas."""
+    """Fire st.toast() for every NEW high-conviction idea."""
     init_notification_state()
     new_alerts: List[Dict] = []
 
@@ -802,14 +781,12 @@ def analyze_multi_timeframe(
     if "Close" not in daily.index or "Close" not in four_hour.index:
         return None
 
-    # Daily signals
     d_close = safe_get(daily, "Close")
     d_ema20 = safe_get(daily, "EMA_20", d_close)
     d_trend = "Long" if d_close > d_ema20 else "Short"
     d_rsi = safe_get(daily, "RSI", 50.0)
     d_adx = safe_get(daily, "ADX", 0.0)
 
-    # 4H signals
     h4_close = safe_get(four_hour, "Close")
     h4_ema20 = safe_get(four_hour, "EMA_20", h4_close)
     h4_ema50 = safe_get(four_hour, "EMA_50", h4_close)
@@ -818,7 +795,6 @@ def analyze_multi_timeframe(
     h4_sig = safe_get(four_hour, "MACD_Signal", 0.0)
     h4_macd_bull = h4_macd > h4_sig
 
-    # 1H signals
     h1_close = safe_get(one_hour, "Close")
     h1_ema20 = safe_get(one_hour, "EMA_20", h1_close)
     h1_ema50 = safe_get(one_hour, "EMA_50", h1_close)
@@ -828,7 +804,6 @@ def analyze_multi_timeframe(
     long_s = short_s = 0
     reasons: List[str] = []
 
-    # Daily scoring
     if d_trend == "Long":
         long_s += 2;
         reasons.append("Daily: Bullish EMA alignment")
@@ -850,7 +825,6 @@ def analyze_multi_timeframe(
             short_s += 1
         reasons.append(f"Strong trend (ADX={d_adx:.1f})")
 
-    # 4H scoring
     if h4_trend == "Long":
         long_s += 1;
         reasons.append("4H: EMA20 > EMA50")
@@ -865,7 +839,6 @@ def analyze_multi_timeframe(
         short_s += 1;
         reasons.append("4H: MACD bearish")
 
-    # 1H scoring
     if h1_trend == "Long":
         long_s += 1;
         reasons.append("1H: Bullish EMA alignment")
@@ -881,7 +854,7 @@ def analyze_multi_timeframe(
         reasons.append(f"1H RSI resistive ({h1_rsi:.1f})")
 
     if long_s == short_s:
-        return None  # Tied → no clear bias
+        return None
 
     final_bias = "Long" if long_s > short_s else "Short"
     strength = long_s if final_bias == "Long" else short_s
@@ -996,15 +969,12 @@ def clear_data_cache() -> None:
 
 
 # ============================================================================
-# UI — SIDEBAR (single definition)
-# FIX: was defined twice; second definition silently overrode the first.
-# FIX: email section was orphaned at module level — moved back here.
+# UI — SIDEBAR
 # ============================================================================
 def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
     with st.sidebar:
         st.header("⚙️ Dashboard Settings")
 
-        # FRED key
         st.subheader("🔑 FRED API Key")
         fred_api_key = st.text_input(
             "API Key", value=fred_key_default, type="password",
@@ -1024,7 +994,6 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
 
         st.divider()
 
-        # Refresh controls
         st.subheader("🔄 Data Refresh")
         col_a, col_b = st.columns(2)
         with col_a:
@@ -1038,7 +1007,6 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
             )
             st.caption(f"Age: {elapsed}s / {config.cache_ttl}s")
 
-        # Auto-monitor — persisted via query params so JS reload restores it
         qp = st.query_params
         default_am = qp.get("am", "false") == "true"
         auto_monitor = st.toggle("🔔 Auto-Monitor (5 min)", value=default_am)
@@ -1052,7 +1020,6 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
 
         st.divider()
 
-        # Email alerts
         st.subheader("📧 Email Alerts")
         email_cfg = _get_email_config()
         email_configured = bool(email_cfg["smtp_user"] and email_cfg["recipient"])
@@ -1089,7 +1056,6 @@ def render_sidebar(fred_key_default: str) -> Tuple[str, Optional[str], bool]:
 
         st.divider()
 
-        # Alert log
         st.subheader("🔔 Alert Log")
         log = st.session_state.get("notification_log", [])
         if log:
@@ -1185,7 +1151,860 @@ def render_macro_table(macro_data: Dict, is_live: bool) -> None:
 
 
 # ============================================================================
-# NEW: WEEKLY SWING TRADING ANALYSIS
+# PRODUCTION-GRADE TECHNICAL CHART
+# ============================================================================
+def render_professional_chart(
+        df: pd.DataFrame,
+        pair: str,
+        tf: str,
+        data_by_timeframe: Dict,
+        chart_settings: Dict = None
+) -> None:
+    """Render a professional-grade technical analysis chart with multiple panels."""
+
+    if df.empty or "Close" not in df.columns:
+        st.warning(f"No data available for {pair} on {tf}")
+        return
+
+    # Default settings if none provided
+    if chart_settings is None:
+        chart_settings = {
+            "show_volume": True,
+            "show_ichimoku": False,
+            "show_fib": False,
+            "show_sr": True,
+            "show_bb": True,
+            "show_ma": ["EMA20", "EMA50"],
+            "indicator_panels": ["MACD", "RSI", "Stochastic", "ADX"]
+        }
+
+    # Add all indicators
+    df = analyzer.add_indicators(df)
+
+    # Calculate additional indicators for professional view
+    if len(df) > 20:
+        # Volume indicators if available
+        if "Volume" in df.columns:
+            df["Volume_SMA"] = df["Volume"].rolling(window=20).mean()
+            df["Volume_Ratio"] = df["Volume"] / df["Volume_SMA"]
+
+        # Ichimoku Cloud
+        if chart_settings.get("show_ichimoku", False):
+            high_9 = df["High"].rolling(window=9).max()
+            low_9 = df["Low"].rolling(window=9).min()
+            df["Ichimoku_Conversion"] = (high_9 + low_9) / 2
+
+            high_26 = df["High"].rolling(window=26).max()
+            low_26 = df["Low"].rolling(window=26).min()
+            df["Ichimoku_Base"] = (high_26 + low_26) / 2
+
+            df["Ichimoku_LeadingA"] = ((df["Ichimoku_Conversion"] + df["Ichimoku_Base"]) / 2).shift(26)
+            df["Ichimoku_LeadingB"] = (
+                        (df["High"].rolling(window=52).max() + df["Low"].rolling(window=52).min()) / 2).shift(26)
+
+        # Fibonacci Retracement Levels
+        if chart_settings.get("show_fib", False) and len(df) >= 50:
+            recent_high = df["High"].tail(50).max()
+            recent_low = df["Low"].tail(50).min()
+            diff = recent_high - recent_low
+            df["Fib_0"] = recent_low
+            df["Fib_236"] = recent_low + 0.236 * diff
+            df["Fib_382"] = recent_low + 0.382 * diff
+            df["Fib_50"] = recent_low + 0.5 * diff
+            df["Fib_618"] = recent_low + 0.618 * diff
+            df["Fib_786"] = recent_low + 0.786 * diff
+            df["Fib_1"] = recent_high
+
+        # Pivot Points
+        df["Pivot"] = (df["High"] + df["Low"] + df["Close"]) / 3
+        df["R1"] = 2 * df["Pivot"] - df["Low"]
+        df["S1"] = 2 * df["Pivot"] - df["High"]
+        df["R2"] = df["Pivot"] + (df["High"] - df["Low"])
+        df["S2"] = df["Pivot"] - (df["High"] - df["Low"])
+        df["R3"] = df["High"] + 2 * (df["Pivot"] - df["Low"])
+        df["S3"] = df["Low"] - 2 * (df["High"] - df["Pivot"])
+
+    # Determine which indicator panels to show
+    indicator_panels = chart_settings.get("indicator_panels", ["MACD", "RSI", "Stochastic", "ADX"])
+    show_macd = "MACD" in indicator_panels
+    show_rsi = "RSI" in indicator_panels
+    show_stoch = "Stochastic" in indicator_panels
+    show_adx = "ADX" in indicator_panels
+
+    # Calculate number of rows needed
+    has_volume = chart_settings.get("show_volume", True) and "Volume" in df.columns and df["Volume"].sum() > 0
+    num_rows = 1  # Price panel
+    if has_volume:
+        num_rows += 1
+    if show_macd:
+        num_rows += 1
+    if show_rsi or show_stoch:
+        num_rows += 1
+    if show_adx:
+        num_rows += 1
+
+    # Create row heights and titles
+    row_heights = [0.5]
+    subplot_titles = [f"{pair} — {tf} | Price Action"]
+
+    if has_volume:
+        row_heights.append(0.12)
+        subplot_titles.append("Volume")
+    if show_macd:
+        row_heights.append(0.12)
+        subplot_titles.append("MACD")
+    if show_rsi or show_stoch:
+        row_heights.append(0.13)
+        title = "RSI" if show_rsi else ""
+        if show_rsi and show_stoch:
+            title = "RSI & Stochastic"
+        elif show_stoch:
+            title = "Stochastic"
+        subplot_titles.append(title)
+    if show_adx:
+        row_heights.append(0.13)
+        subplot_titles.append("ADX / DI")
+
+    # Normalize heights
+    total = sum(row_heights)
+    row_heights = [h / total for h in row_heights]
+
+    # Create subplots
+    fig = make_subplots(
+        rows=num_rows, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=row_heights,
+        subplot_titles=subplot_titles
+    )
+
+    # ========================================================================
+    # PANEL 1: PRICE ACTION
+    # ========================================================================
+
+    # Candlestick chart
+    fig.add_trace(
+        go.Candlestick(
+            x=df.index,
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
+            name="Price",
+            showlegend=True,
+            increasing_line_color='#26a69a',
+            decreasing_line_color='#ef5350',
+        ),
+        row=1, col=1
+    )
+
+    # Moving Averages
+    ma_settings = chart_settings.get("show_ma", ["EMA20", "EMA50"])
+    if "EMA20" in ma_settings and "EMA_20" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df.index, y=df["EMA_20"],
+                name="EMA 20",
+                line=dict(color='#FF9800', width=1.5),
+                opacity=0.8
+            ),
+            row=1, col=1
+        )
+
+    if "EMA50" in ma_settings and "EMA_50" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df.index, y=df["EMA_50"],
+                name="EMA 50",
+                line=dict(color='#2196F3', width=1.5),
+                opacity=0.8
+            ),
+            row=1, col=1
+        )
+
+    if "SMA20" in ma_settings and "SMA_20" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df.index, y=df["SMA_20"],
+                name="SMA 20",
+                line=dict(color='#FF5722', width=1, dash='dot'),
+                opacity=0.5,
+                visible='legendonly'
+            ),
+            row=1, col=1
+        )
+
+    if "SMA50" in ma_settings and "SMA_50" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df.index, y=df["SMA_50"],
+                name="SMA 50",
+                line=dict(color='#9C27B0', width=1, dash='dot'),
+                opacity=0.5,
+                visible='legendonly'
+            ),
+            row=1, col=1
+        )
+
+    # Bollinger Bands
+    if chart_settings.get("show_bb", True):
+        if "BB_Upper" in df.columns and "BB_Lower" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["BB_Upper"],
+                    name="BB Upper",
+                    line=dict(color='#78909C', width=1, dash='dash'),
+                    opacity=0.5
+                ),
+                row=1, col=1
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["BB_Lower"],
+                    name="BB Lower",
+                    line=dict(color='#78909C', width=1, dash='dash'),
+                    opacity=0.5,
+                    fill='tonexty',
+                    fillcolor='rgba(120, 144, 156, 0.1)'
+                ),
+                row=1, col=1
+            )
+
+            if "BB_Middle" in df.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=df.index, y=df["BB_Middle"],
+                        name="BB Middle",
+                        line=dict(color='#546E7A', width=0.8),
+                        opacity=0.4,
+                        visible='legendonly'
+                    ),
+                    row=1, col=1
+                )
+
+    # Ichimoku Cloud
+    if chart_settings.get("show_ichimoku", False):
+        if "Ichimoku_LeadingA" in df.columns and "Ichimoku_LeadingB" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["Ichimoku_LeadingA"],
+                    name="Ichimoku A",
+                    line=dict(color='rgba(76, 175, 80, 0)', width=0),
+                    showlegend=False
+                ),
+                row=1, col=1
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["Ichimoku_LeadingB"],
+                    name="Ichimoku Cloud",
+                    line=dict(color='rgba(76, 175, 80, 0)', width=0),
+                    fill='tonexty',
+                    fillcolor='rgba(76, 175, 80, 0.1)',
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
+
+            if "Ichimoku_Conversion" in df.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=df.index, y=df["Ichimoku_Conversion"],
+                        name="Conversion",
+                        line=dict(color='#FF6F00', width=1),
+                        visible='legendonly'
+                    ),
+                    row=1, col=1
+                )
+
+            if "Ichimoku_Base" in df.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=df.index, y=df["Ichimoku_Base"],
+                        name="Base",
+                        line=dict(color='#1565C0', width=1),
+                        visible='legendonly'
+                    ),
+                    row=1, col=1
+                )
+
+    # Support and Resistance Levels
+    if chart_settings.get("show_sr", True):
+        if "Support_20" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["Support_20"],
+                    name="Support (20)",
+                    line=dict(color='#4CAF50', width=1.5, dash='dot'),
+                    opacity=0.6
+                ),
+                row=1, col=1
+            )
+
+        if "Resistance_20" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["Resistance_20"],
+                    name="Resistance (20)",
+                    line=dict(color='#F44336', width=1.5, dash='dot'),
+                    opacity=0.6
+                ),
+                row=1, col=1
+            )
+
+    # Fibonacci Levels
+    if chart_settings.get("show_fib", False):
+        fib_colors = {
+            "Fib_0": "#9E9E9E", "Fib_236": "#FFC107", "Fib_382": "#FF9800",
+            "Fib_50": "#FF5722", "Fib_618": "#F44336", "Fib_786": "#E91E63", "Fib_1": "#9C27B0"
+        }
+
+        for fib_level, color in fib_colors.items():
+            if fib_level in df.columns:
+                value = df[fib_level].iloc[-1]
+                fig.add_hline(
+                    y=value, line_dash="dot", line_color=color,
+                    opacity=0.3, row=1, col=1,
+                    annotation_text=f"{fib_level.split('_')[1]}",
+                    annotation_position="right"
+                )
+
+    current_row = 2
+
+    # ========================================================================
+    # PANEL 2: VOLUME
+    # ========================================================================
+    if has_volume:
+        colors = ['#26a69a' if close >= open_ else '#ef5350'
+                  for close, open_ in zip(df["Close"], df["Open"])]
+
+        fig.add_trace(
+            go.Bar(
+                x=df.index, y=df["Volume"],
+                name="Volume",
+                marker_color=colors,
+                opacity=0.7,
+                showlegend=True
+            ),
+            row=current_row, col=1
+        )
+
+        if "Volume_SMA" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["Volume_SMA"],
+                    name="Volume SMA (20)",
+                    line=dict(color='#FF9800', width=1.5),
+                    opacity=0.8
+                ),
+                row=current_row, col=1
+            )
+
+        current_row += 1
+
+    # ========================================================================
+    # PANEL 3: MACD
+    # ========================================================================
+    if show_macd:
+        if "MACD" in df.columns and "MACD_Signal" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["MACD"],
+                    name="MACD",
+                    line=dict(color='#2196F3', width=1.5)
+                ),
+                row=current_row, col=1
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["MACD_Signal"],
+                    name="Signal",
+                    line=dict(color='#FF9800', width=1.5)
+                ),
+                row=current_row, col=1
+            )
+
+            if "MACD_Histogram" in df.columns:
+                hist_colors = ['#26a69a' if val >= 0 else '#ef5350'
+                               for val in df["MACD_Histogram"]]
+                fig.add_trace(
+                    go.Bar(
+                        x=df.index, y=df["MACD_Histogram"],
+                        name="Histogram",
+                        marker_color=hist_colors,
+                        opacity=0.6,
+                        showlegend=True
+                    ),
+                    row=current_row, col=1
+                )
+
+            fig.add_hline(y=0, line_dash="solid", line_color="gray",
+                          opacity=0.3, row=current_row, col=1)
+
+        current_row += 1
+
+    # ========================================================================
+    # PANEL 4: RSI & STOCHASTIC
+    # ========================================================================
+    if show_rsi or show_stoch:
+        if show_rsi and "RSI" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["RSI"],
+                    name="RSI",
+                    line=dict(color='#9C27B0', width=1.8)
+                ),
+                row=current_row, col=1
+            )
+
+            fig.add_hline(y=70, line_dash="dash", line_color="#ef5350",
+                          opacity=0.5, row=current_row, col=1)
+            fig.add_hline(y=30, line_dash="dash", line_color="#26a69a",
+                          opacity=0.5, row=current_row, col=1)
+            fig.add_hline(y=50, line_dash="dot", line_color="gray",
+                          opacity=0.3, row=current_row, col=1)
+
+        if show_stoch and "Stoch_K" in df.columns and "Stoch_D" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["Stoch_K"],
+                    name="Stoch %K",
+                    line=dict(color='#FF5722', width=1.2),
+                    opacity=0.8
+                ),
+                row=current_row, col=1
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["Stoch_D"],
+                    name="Stoch %D",
+                    line=dict(color='#4CAF50', width=1.2),
+                    opacity=0.8
+                ),
+                row=current_row, col=1
+            )
+
+            fig.add_hline(y=80, line_dash="dash", line_color="#ef5350",
+                          opacity=0.3, row=current_row, col=1)
+            fig.add_hline(y=20, line_dash="dash", line_color="#26a69a",
+                          opacity=0.3, row=current_row, col=1)
+
+        current_row += 1
+
+    # ========================================================================
+    # PANEL 5: ADX
+    # ========================================================================
+    if show_adx:
+        if "ADX" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["ADX"],
+                    name="ADX",
+                    line=dict(color='#00BCD4', width=2)
+                ),
+                row=current_row, col=1
+            )
+
+            fig.add_hline(y=25, line_dash="dash", line_color="#FF9800",
+                          opacity=0.5, row=current_row, col=1,
+                          annotation_text="Trend", annotation_position="right")
+            fig.add_hline(y=20, line_dash="dot", line_color="#9E9E9E",
+                          opacity=0.3, row=current_row, col=1)
+
+        if "ADX_Pos" in df.columns and "ADX_Neg" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["ADX_Pos"],
+                    name="+DI",
+                    line=dict(color='#26a69a', width=1.2),
+                    opacity=0.7
+                ),
+                row=current_row, col=1
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=df.index, y=df["ADX_Neg"],
+                    name="-DI",
+                    line=dict(color='#ef5350', width=1.2),
+                    opacity=0.7
+                ),
+                row=current_row, col=1
+            )
+
+    # ========================================================================
+    # LAYOUT CUSTOMIZATION
+    # ========================================================================
+    fig.update_layout(
+        height=200 + num_rows * 150,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor='rgba(255, 255, 255, 0.8)',
+            bordercolor='#CCCCCC',
+            borderwidth=1
+        ),
+        hovermode='x unified',
+        template='plotly_white',
+        margin=dict(l=50, r=50, t=80, b=50),
+        font=dict(family="Arial, sans-serif", size=11),
+    )
+
+    # Update axes
+    fig.update_xaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='#EEEEEE',
+        showline=True,
+        linewidth=1,
+        linecolor='#CCCCCC',
+        mirror=True
+    )
+
+    fig.update_yaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='#EEEEEE',
+        showline=True,
+        linewidth=1,
+        linecolor='#CCCCCC',
+        mirror=True
+    )
+
+    # Add range selector
+    fig.update_xaxes(
+        rangeslider=dict(visible=False),
+        rangeselector=dict(
+            buttons=list([
+                dict(count=1, label="1D", step="day", stepmode="backward"),
+                dict(count=5, label="5D", step="day", stepmode="backward"),
+                dict(count=1, label="1M", step="month", stepmode="backward"),
+                dict(count=3, label="3M", step="month", stepmode="backward"),
+                dict(count=6, label="6M", step="month", stepmode="backward"),
+                dict(step="all", label="All")
+            ]),
+            bgcolor='#F5F5F5',
+            font=dict(size=10),
+            x=0, y=1.02,
+            xanchor='left',
+            yanchor='bottom'
+        ),
+        row=1, col=1
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ========================================================================
+    # DETAILED METRICS DASHBOARD
+    # ========================================================================
+    st.markdown("---")
+    st.subheader("📊 Technical Indicators Dashboard")
+
+    last = df.iloc[-1]
+    prev = df.iloc[-2] if len(df) > 1 else last
+
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+    with col1:
+        current_price = safe_get(last, 'Close', 0)
+        prev_price = safe_get(prev, 'Close', 0)
+        price_change = ((current_price - prev_price) / prev_price * 100) if prev_price > 0 else 0
+
+        st.metric(
+            "Price",
+            f"{current_price:.5f}",
+            delta=f"{price_change:+.3f}%"
+        )
+
+        high_low_spread = ((safe_get(last, 'High', 0) - safe_get(last, 'Low', 0)) / safe_get(last, 'Low', 1)) * 100
+        st.caption(f"Range: {safe_get(last, 'Low', 0):.5f} - {safe_get(last, 'High', 0):.5f} ({high_low_spread:.2f}%)")
+
+    with col2:
+        rsi_val = safe_get(last, 'RSI', 50)
+        rsi_status = "Overbought" if rsi_val > 70 else ("Oversold" if rsi_val < 30 else "Neutral")
+        st.metric(
+            "RSI",
+            f"{rsi_val:.1f}",
+            delta=rsi_status,
+            delta_color="off"
+        )
+
+        stoch_k = safe_get(last, 'Stoch_K', 50)
+        stoch_d = safe_get(last, 'Stoch_D', 50)
+        st.caption(f"Stoch: {stoch_k:.1f} / {stoch_d:.1f}")
+
+    with col3:
+        macd_val = safe_get(last, 'MACD', 0)
+        macd_sig = safe_get(last, 'MACD_Signal', 0)
+        macd_diff = macd_val - macd_sig
+        macd_status = "Bullish" if macd_diff > 0 else "Bearish"
+        st.metric(
+            "MACD",
+            f"{macd_val:.4f}",
+            delta=f"{macd_diff:+.4f} ({macd_status})",
+            delta_color="normal" if macd_diff > 0 else "inverse"
+        )
+
+        hist = safe_get(last, 'MACD_Histogram', 0)
+        prev_hist = safe_get(prev, 'MACD_Histogram', 0)
+        st.caption(f"Hist: {hist:.4f} ({'↑' if hist > prev_hist else '↓'})")
+
+    with col4:
+        adx_val = safe_get(last, 'ADX', 0)
+        trend_strength = "Strong" if adx_val > 25 else ("Moderate" if adx_val > 20 else "Weak")
+        st.metric(
+            "ADX",
+            f"{adx_val:.1f}",
+            delta=trend_strength,
+            delta_color="off"
+        )
+
+        di_plus = safe_get(last, 'ADX_Pos', 0)
+        di_minus = safe_get(last, 'ADX_Neg', 0)
+        st.caption(f"+DI: {di_plus:.1f} | -DI: {di_minus:.1f}")
+
+    with col5:
+        atr_val = safe_get(last, 'ATR', 0)
+        atr_pct = (atr_val / current_price) * 100 if current_price > 0 else 0
+        st.metric(
+            "ATR",
+            f"{atr_val:.5f}",
+            delta=f"{atr_pct:.2f}% of price",
+            delta_color="off"
+        )
+
+        vol_status = "High" if atr_pct > 1.5 else ("Moderate" if atr_pct > 0.8 else "Low")
+        st.caption(f"Volatility: {vol_status}")
+
+    with col6:
+        close = safe_get(last, 'Close', 0)
+        ema20 = safe_get(last, 'EMA_20', close)
+        ema50 = safe_get(last, 'EMA_50', close)
+
+        ma_status = []
+        if close > ema20: ma_status.append(">EMA20")
+        if close > ema50: ma_status.append(">EMA50")
+        if ema20 > ema50: ma_status.append("EMA20>50")
+
+        ma_signal = "Bullish" if len(ma_status) >= 2 else ("Bearish" if len(ma_status) <= 1 else "Mixed")
+        st.metric(
+            "MA Signal",
+            ma_signal,
+            delta=", ".join(ma_status) if ma_status else "No signal",
+            delta_color="off"
+        )
+
+        bb_upper = safe_get(last, 'BB_Upper', 0)
+        bb_lower = safe_get(last, 'BB_Lower', 0)
+        bb_position = "Middle"
+        if close > bb_upper:
+            bb_position = "Above"
+        elif close < bb_lower:
+            bb_position = "Below"
+        st.caption(f"BB Position: {bb_position}")
+
+    # ========================================================================
+    # TREND ANALYSIS SUMMARY
+    # ========================================================================
+    st.markdown("---")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("### 📈 Trend Analysis")
+
+        trends = []
+        if current_price > ema20:
+            trends.append("✅ Price above EMA20 (bullish)")
+        else:
+            trends.append("❌ Price below EMA20 (bearish)")
+
+        if ema20 > ema50:
+            trends.append("✅ EMA20 > EMA50 (bullish)")
+        else:
+            trends.append("❌ EMA20 < EMA50 (bearish)")
+
+        if adx_val > 20:
+            trends.append(f"✅ Trend strength ADX {adx_val:.1f}")
+        else:
+            trends.append(f"⚠️ Weak trend ADX {adx_val:.1f}")
+
+        for trend in trends:
+            st.write(trend)
+
+    with col2:
+        st.markdown("### 🎯 Momentum Signals")
+
+        momentum = []
+        if rsi_val > 60:
+            momentum.append("🔥 Strong bullish momentum (RSI > 60)")
+        elif rsi_val > 50:
+            momentum.append("📈 Bullish momentum (RSI > 50)")
+        elif rsi_val < 40:
+            momentum.append("❄️ Strong bearish momentum (RSI < 40)")
+        elif rsi_val < 50:
+            momentum.append("📉 Bearish momentum (RSI < 50)")
+        else:
+            momentum.append("⚖️ Neutral momentum (RSI = 50)")
+
+        if macd_diff > 0:
+            momentum.append("✅ MACD bullish")
+        else:
+            momentum.append("❌ MACD bearish")
+
+        if stoch_k > 80:
+            momentum.append("⚠️ Stoch overbought (>80)")
+        elif stoch_k < 20:
+            momentum.append("💡 Stoch oversold (<20)")
+        else:
+            momentum.append(f"➡️ Stoch neutral ({stoch_k:.1f})")
+
+        for m in momentum:
+            st.write(m)
+
+    with col3:
+        st.markdown("### ⚡ Trade Setup Quality")
+
+        # Calculate setup quality score
+        score = 0
+        reasons = []
+
+        # Trend alignment
+        if current_price > ema20 and ema20 > ema50:
+            score += 2
+            reasons.append("Bullish trend alignment")
+        elif current_price < ema20 and ema20 < ema50:
+            score += 2
+            reasons.append("Bearish trend alignment")
+
+        # Momentum confirmation
+        if rsi_val > 50 and macd_diff > 0:
+            score += 2
+            reasons.append("Bullish momentum confirmed")
+        elif rsi_val < 50 and macd_diff < 0:
+            score += 2
+            reasons.append("Bearish momentum confirmed")
+
+        # Volume confirmation
+        if has_volume and "Volume_Ratio" in df.columns:
+            vol_ratio = safe_get(last, 'Volume_Ratio', 1)
+            if vol_ratio > 1.2:
+                score += 1
+                reasons.append(f"Above average volume ({vol_ratio:.1f}x)")
+
+        # ADX confirmation
+        if adx_val > 25:
+            score += 1
+            reasons.append("Strong trend strength")
+
+        # Stochastic timing
+        if stoch_k < 20:
+            score += 1
+            reasons.append("Oversold - potential long entry")
+        elif stoch_k > 80:
+            score += 1
+            reasons.append("Overbought - potential short entry")
+
+        # Overall assessment
+        if score >= 5:
+            quality = "🌟 Excellent"
+            color = "green"
+        elif score >= 3:
+            quality = "👍 Good"
+            color = "blue"
+        elif score >= 2:
+            quality = "👌 Fair"
+            color = "orange"
+        else:
+            quality = "⚠️ Poor"
+            color = "red"
+
+        st.markdown(f"**Setup Quality: <span style='color:{color}'>{quality} ({score}/7)</span>**",
+                    unsafe_allow_html=True)
+
+        if reasons:
+            st.markdown("**Key Factors:**")
+            for reason in reasons:
+                st.write(f"• {reason}")
+        else:
+            st.write("No clear setup detected")
+
+    # ========================================================================
+    # SUPPORT & RESISTANCE LEVELS
+    # ========================================================================
+    st.markdown("---")
+    st.subheader("📍 Key Levels")
+
+    level_cols = st.columns(5)
+
+    with level_cols[0]:
+        st.metric("Support (20)", f"{safe_get(last, 'Support_20', 0):.5f}")
+        st.metric("Pivot", f"{safe_get(last, 'Pivot', 0):.5f}")
+
+    with level_cols[1]:
+        st.metric("Resistance (20)", f"{safe_get(last, 'Resistance_20', 0):.5f}")
+        st.metric("R1", f"{safe_get(last, 'R1', 0):.5f}")
+
+    with level_cols[2]:
+        st.metric("BB Lower", f"{safe_get(last, 'BB_Lower', 0):.5f}")
+        st.metric("S1", f"{safe_get(last, 'S1', 0):.5f}")
+
+    with level_cols[3]:
+        st.metric("BB Middle", f"{safe_get(last, 'BB_Middle', 0):.5f}")
+        st.metric("R2", f"{safe_get(last, 'R2', 0):.5f}")
+
+    with level_cols[4]:
+        st.metric("BB Upper", f"{safe_get(last, 'BB_Upper', 0):.5f}")
+        st.metric("S2", f"{safe_get(last, 'S2', 0):.5f}")
+
+    # ========================================================================
+    # MULTI-TIMEFRAME QUICK VIEW
+    # ========================================================================
+    st.markdown("---")
+    st.subheader("🔄 Multi-Timeframe Context")
+
+    tf_cols = st.columns(5)
+    timeframes = ["Weekly", "Daily", "4 Hour", "Hourly", "15 Minute"]
+
+    for idx, other_tf in enumerate(timeframes):
+        with tf_cols[idx]:
+            tf_data = data_by_timeframe.get(other_tf, {}).get(pair, pd.DataFrame())
+            if not tf_data.empty and "Close" in tf_data.columns:
+                tf_data = analyzer.add_indicators(tf_data)
+                tf_last = tf_data.iloc[-1]
+
+                tf_close = safe_get(tf_last, 'Close', 0)
+                tf_prev = safe_get(tf_data.iloc[-2], 'Close', tf_close) if len(tf_data) > 1 else tf_close
+                tf_change = ((tf_close - tf_prev) / tf_prev) * 100 if tf_prev > 0 else 0
+
+                tf_rsi = safe_get(tf_last, 'RSI', 50)
+                tf_trend = "📈" if tf_close > safe_get(tf_last, 'EMA_20', tf_close) else "📉"
+
+                st.markdown(f"**{other_tf}** {tf_trend}")
+                st.caption(f"{tf_close:.5f} ({tf_change:+.2f}%)")
+                st.caption(f"RSI: {tf_rsi:.1f}")
+
+                if other_tf == tf:
+                    st.caption("✅ Current")
+            else:
+                st.caption(f"**{other_tf}**")
+                st.caption("No data")
+
+    # Data quality indicator
+    st.caption(
+        f"📊 Data points: {len(df)} | Last update: {df.index[-1].strftime('%Y-%m-%d %H:%M')} | Freshness: Excellent")
+
+
+# ============================================================================
+# WEEKLY SWING TRADING ANALYSIS
 # ============================================================================
 def analyze_weekly_swing(
         df_weekly: pd.DataFrame,
@@ -1206,7 +2025,6 @@ def analyze_weekly_swing(
     if "Close" not in weekly.index or "Close" not in daily.index:
         return None
 
-    # Weekly signals
     w_close = safe_get(weekly, "Close")
     w_ema20 = safe_get(weekly, "EMA_20", w_close)
     w_ema50 = safe_get(weekly, "EMA_50", w_close)
@@ -1217,7 +2035,6 @@ def analyze_weekly_swing(
     w_signal = safe_get(weekly, "MACD_Signal", 0.0)
     w_macd_bull = w_macd > w_signal
 
-    # Daily signals
     d_close = safe_get(daily, "Close")
     d_ema20 = safe_get(daily, "EMA_20", d_close)
     d_trend = "Bullish" if d_close > d_ema20 else "Bearish"
@@ -1225,11 +2042,9 @@ def analyze_weekly_swing(
     d_stoch_k = safe_get(daily, "Stoch_K", 50.0)
     d_stoch_d = safe_get(daily, "Stoch_D", 50.0)
 
-    # Swing scoring
     long_score = short_score = 0
     reasons: List[str] = []
 
-    # Weekly scoring (higher weight)
     if w_trend == "Bullish":
         long_score += 3
         reasons.append("Weekly: EMA20 > EMA50 (bullish structure)")
@@ -1258,7 +2073,6 @@ def analyze_weekly_swing(
         short_score += 1
         reasons.append("Weekly MACD bearish")
 
-    # Daily scoring
     if d_trend == "Bullish":
         long_score += 1
         reasons.append("Daily: Price > EMA20")
@@ -1273,7 +2087,6 @@ def analyze_weekly_swing(
         short_score += 1
         reasons.append(f"Daily RSI deeply overbought ({d_rsi:.1f})")
 
-    # Stochastic for timing
     if d_stoch_k < 20 and d_stoch_d < 20:
         long_score += 1
         reasons.append(f"Daily Stoch oversold (K={d_stoch_k:.1f})")
@@ -1288,20 +2101,18 @@ def analyze_weekly_swing(
     strength = max(long_score, short_score)
     conviction = "High" if strength >= 8 else ("Medium" if strength >= 5 else "Low")
 
-    # Calculate swing levels
     atr = safe_get(weekly, "ATR", w_close * 0.02)
     current_price = safe_get(daily, "Close", 0.0)
 
     if current_price <= 0:
         return None
 
-    # Swing stop loss (wider for swing trading)
-    swing_lookback = 50  # Longer lookback for swing trades
+    swing_lookback = 50
     if bias == "Long":
         swing_low = df_daily["Low"].tail(swing_lookback).min()
         stop_loss = swing_low - atr * 0.5
-        target_1 = current_price + atr * 3.0  # 3x ATR target
-        target_2 = current_price + atr * 5.0  # 5x ATR target
+        target_1 = current_price + atr * 3.0
+        target_2 = current_price + atr * 5.0
         invalidation = "Below swing low"
     else:
         swing_high = df_daily["High"].tail(swing_lookback).max()
@@ -1358,7 +2169,7 @@ def generate_weekly_swing_ideas(data_by_timeframe: Dict) -> List[Dict]:
 
 
 # ============================================================================
-# NEW: MULTI-TIMEFRAME BIAS DASHBOARD
+# MULTI-TIMEFRAME BIAS DASHBOARD
 # ============================================================================
 def analyze_bias_for_pair(
         df_weekly: pd.DataFrame,
@@ -1405,7 +2216,6 @@ def analyze_bias_for_pair(
         macd = safe_get(latest, "MACD", 0)
         macd_sig = safe_get(latest, "MACD_Signal", 0)
 
-        # Determine bias
         bullish_signals = 0
         bearish_signals = 0
 
@@ -1434,7 +2244,6 @@ def analyze_bias_for_pair(
         else:
             bearish_signals += 1
 
-        # Determine final bias
         if bullish_signals > bearish_signals:
             bias = "Bullish"
             strength = bullish_signals
@@ -1445,7 +2254,6 @@ def analyze_bias_for_pair(
             bias = "Neutral"
             strength = 0
 
-        # Determine trend strength
         if adx > 25:
             trend = "Strong"
         elif adx > 20:
@@ -1462,7 +2270,6 @@ def analyze_bias_for_pair(
             "adx": adx,
         }
 
-    # Calculate overall bias
     overall_bullish = sum(1 for tf in bias_data.values() if tf["bias"] == "Bullish")
     overall_bearish = sum(1 for tf in bias_data.values() if tf["bias"] == "Bearish")
 
@@ -1515,7 +2322,6 @@ def main() -> None:
 
     init_notification_state()
 
-    # Default FRED key
     default_key = ""
     try:
         default_key = (
@@ -1526,10 +2332,8 @@ def main() -> None:
     except Exception:
         default_key = os.environ.get("FRED_API_KEY", "")
 
-    # Sidebar
     selected_tf, fred_api_key, auto_monitor = render_sidebar(default_key)
 
-    # Auto-monitor: page-level refresh via JS meta-refresh
     if auto_monitor:
         elapsed = (datetime.now() - st.session_state.last_refresh).total_seconds()
         if elapsed >= config.auto_refresh_interval:
@@ -1567,19 +2371,186 @@ def main() -> None:
     if daily_data:
         render_kpis(daily_data)
 
+    # ========================================================================
+    # AUTO-LOAD MTF BIAS DASHBOARD ON FIRST LOAD
+    # ========================================================================
+    if "bias_results" not in st.session_state and data_by_timeframe:
+        with st.spinner("🔄 Auto-loading Multi-Timeframe Bias Dashboard…"):
+            bias_results = generate_bias_dashboard(data_by_timeframe)
+            st.session_state.bias_results = bias_results
+            st.session_state.bias_auto_loaded = True
+
+    # Reorder tabs - MTF Bias first
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "📊 Overview",
-        "🌍 Macro Fundamentals",
-        "📈 Technical Chart",
-        "⏱️ 15-Min Entry",
-        "🎯 Trading Ideas",
-        "📅 Weekly Swing",
-        "🎯 MTF Bias",
+        "🎯 MTF Bias",  # Tab 1 - Now first!
+        "📊 Overview",  # Tab 2
+        "🌍 Macro Fundamentals",  # Tab 3
+        "📈 Technical Chart",  # Tab 4
+        "⏱️ 15-Min Entry",  # Tab 5
+        "🎯 Trading Ideas",  # Tab 6
+        "📅 Weekly Swing",  # Tab 7
     ])
 
-    # Tab 1: Overview
+    # ========================================================================
+    # TAB 1: MULTI-TIMEFRAME BIAS DASHBOARD (Auto-loading)
+    # ========================================================================
     with tab1:
-        st.subheader("Market Overview")
+        st.subheader("🎯 Multi-Timeframe Bias Dashboard")
+        st.caption("Weekly · Daily · 4H · 1H · 15m bias analysis — Auto-loads on startup")
+
+        # Show refresh button and auto-refresh indicator
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("🔄 Refresh Analysis", type="primary", key="bias_refresh"):
+                with st.spinner("Analyzing bias across all timeframes…"):
+                    bias_results = generate_bias_dashboard(data_by_timeframe)
+                    st.session_state.bias_results = bias_results
+                    st.rerun()
+        with col2:
+            if "bias_auto_loaded" in st.session_state:
+                st.success("✅ Auto-loaded on startup — showing latest bias analysis")
+
+        # Display results from session state
+        if "bias_results" in st.session_state:
+            bias_results = st.session_state.bias_results
+
+            if bias_results:
+                # Summary metrics
+                total_pairs = len(bias_results)
+                bullish_count = sum(1 for r in bias_results if r["overall_bias"] == "Bullish")
+                bearish_count = sum(1 for r in bias_results if r["overall_bias"] == "Bearish")
+                neutral_count = sum(1 for r in bias_results if r["overall_bias"] == "Mixed/Neutral")
+
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total Pairs", total_pairs)
+                m2.metric("Bullish", bullish_count,
+                          delta=f"{(bullish_count / total_pairs) * 100:.0f}%" if total_pairs > 0 else None)
+                m3.metric("Bearish", bearish_count,
+                          delta=f"{(bearish_count / total_pairs) * 100:.0f}%" if total_pairs > 0 else None)
+                m4.metric("Neutral/Mixed", neutral_count)
+
+                st.divider()
+
+                # Summary table
+                summary_data = []
+                for result in bias_results:
+                    summary_data.append({
+                        "Pair": result["pair"],
+                        "Overall Bias": result["overall_bias"],
+                        "Confidence": f"{result['confidence']:.0f}%",
+                        "Weekly": result["timeframes"]["Weekly"]["bias"],
+                        "Daily": result["timeframes"]["Daily"]["bias"],
+                        "4H": result["timeframes"]["4H"]["bias"],
+                        "1H": result["timeframes"]["1H"]["bias"],
+                        "15m": result["timeframes"]["15m"]["bias"],
+                    })
+
+                df_summary = pd.DataFrame(summary_data)
+
+                def color_bias(val):
+                    if val == "Bullish":
+                        return "background-color: #90EE90; color: black; font-weight: bold"
+                    elif val == "Bearish":
+                        return "background-color: #FFB6C1; color: black; font-weight: bold"
+                    elif val == "Neutral" or val == "Mixed/Neutral":
+                        return "background-color: #F0E68C; color: black"
+                    return ""
+
+                styled_df = df_summary.style.map(color_bias,
+                                                 subset=["Overall Bias", "Weekly", "Daily", "4H", "1H", "15m"])
+                st.dataframe(styled_df, use_container_width=True, height=400)
+
+                st.divider()
+                st.subheader("📊 Detailed Multi-Timeframe Analysis")
+
+                # Sort by confidence
+                bias_results_sorted = sorted(bias_results, key=lambda x: x["confidence"], reverse=True)
+
+                for result in bias_results_sorted:
+                    confidence_color = "green" if result["confidence"] >= 60 else (
+                        "orange" if result["confidence"] >= 40 else "red")
+
+                    with st.expander(
+                            f"📊 {result['pair']} — "
+                            f"**{result['overall_bias']}** "
+                            f"({result['confidence']:.0f}% confidence)",
+                            expanded=(result["confidence"] >= 60)  # Auto-expand high confidence pairs
+                    ):
+                        tf_data = result["timeframes"]
+
+                        cols = st.columns(5)
+                        for idx, (tf_name, data) in enumerate(tf_data.items()):
+                            with cols[idx]:
+                                if data["bias"] == "Bullish":
+                                    st.success(f"**{tf_name}**")
+                                elif data["bias"] == "Bearish":
+                                    st.error(f"**{tf_name}**")
+                                else:
+                                    st.warning(f"**{tf_name}**")
+
+                                st.metric("Bias", data["bias"])
+                                if data["price"] > 0:
+                                    price_display = f"{data['price']:.5f}"
+                                    if result["pair"] in ["BTC/USD", "XAU/USD"]:
+                                        price_display = f"{data['price']:.2f}"
+                                    st.metric("Price", price_display)
+                                st.metric("RSI", f"{data['rsi']:.1f}")
+                                st.metric("ADX", f"{data['adx']:.1f}")
+                                st.caption(f"Trend: {data['trend']}")
+                                st.caption(f"Strength: {data['strength']}/5")
+
+                        # Add bias alignment visualization
+                        st.markdown("---")
+                        st.caption("**Bias Alignment:**")
+                        alignment_cols = st.columns(5)
+                        for idx, (tf_name, data) in enumerate(tf_data.items()):
+                            with alignment_cols[idx]:
+                                if data["bias"] == "Bullish":
+                                    st.markdown("🟢")
+                                elif data["bias"] == "Bearish":
+                                    st.markdown("🔴")
+                                else:
+                                    st.markdown("🟡")
+                                st.caption(tf_name)
+
+                # Export bias analysis
+                bias_export = []
+                for result in bias_results:
+                    row = {"Pair": result["pair"], "Overall Bias": result["overall_bias"],
+                           "Confidence": result["confidence"]}
+                    for tf, data in result["timeframes"].items():
+                        row[f"{tf}_Bias"] = data["bias"]
+                        row[f"{tf}_RSI"] = data["rsi"]
+                        row[f"{tf}_ADX"] = data["adx"]
+                        row[f"{tf}_Trend"] = data["trend"]
+                    bias_export.append(row)
+
+                bias_df = pd.DataFrame(bias_export)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        "📥 Download Bias Analysis (CSV)",
+                        data=bias_df.to_csv(index=False),
+                        file_name=f"mtf_bias_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        key="bias_download"
+                    )
+                with col2:
+                    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                st.warning("⚠️ No bias analysis available. Click 'Refresh Analysis' to generate.")
+        else:
+            st.info("⏳ Loading bias analysis…")
+            if st.button("🔄 Generate Bias Analysis", type="primary"):
+                with st.spinner("Analyzing bias across all timeframes…"):
+                    bias_results = generate_bias_dashboard(data_by_timeframe)
+                    st.session_state.bias_results = bias_results
+                    st.rerun()
+
+    # Tab 2: Overview
+    with tab2:
+        st.subheader("📊 Market Overview")
         if daily_data:
             rows = []
             for pair, df in daily_data.items():
@@ -1600,8 +2571,8 @@ def main() -> None:
         else:
             st.error("No data loaded — check your internet connection.")
 
-    # Tab 2: Macro
-    with tab2:
+    # Tab 3: Macro
+    with tab3:
         st.subheader("🌍 Macro Fundamentals (FRED)")
         if macro:
             render_macro_table(macro, is_live)
@@ -1616,68 +2587,59 @@ def main() -> None:
             ]
             st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
-    # Tab 3: Technical Chart
-    with tab3:
-        st.subheader("Technical Analysis Chart")
+    # Tab 4: Technical Chart (PRODUCTION GRADE)
+    with tab4:
+        st.subheader("📈 Professional Technical Analysis")
         avail = [p for p, d in daily_data.items() if not d.empty and "Close" in d.columns]
 
         if avail:
-            col1, col2 = st.columns(2)
-            pair = col1.selectbox("Pair", avail, key="chart_pair")
-            tf = col2.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                pair = st.selectbox("Select Pair", avail, key="chart_pair")
+            with col2:
+                tf = st.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
+            with col3:
+                chart_style = st.selectbox("Chart Theme", ["Professional", "Dark", "Light"], key="chart_style")
 
             df_c = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
+
             if not df_c.empty and "Close" in df_c.columns:
-                df_c = analyzer.add_indicators(df_c)
+                with st.expander("⚙️ Chart Settings", expanded=False):
+                    setting_cols = st.columns(4)
+                    with setting_cols[0]:
+                        show_volume = st.checkbox("Show Volume", value=True, key="show_volume")
+                        show_ichimoku = st.checkbox("Show Ichimoku", value=False, key="show_ichimoku")
+                    with setting_cols[1]:
+                        show_fib = st.checkbox("Show Fibonacci", value=False, key="show_fib")
+                        show_sr = st.checkbox("Show S/R Levels", value=True, key="show_sr")
+                    with setting_cols[2]:
+                        show_bb = st.checkbox("Show Bollinger Bands", value=True, key="show_bb")
+                        show_ma = st.multiselect("Moving Averages", ["EMA20", "EMA50", "SMA20", "SMA50"],
+                                                 default=["EMA20", "EMA50"], key="show_ma")
+                    with setting_cols[3]:
+                        indicator_panels = st.multiselect("Indicator Panels",
+                                                          ["MACD", "RSI", "Stochastic", "ADX"],
+                                                          default=["MACD", "RSI", "Stochastic", "ADX"],
+                                                          key="indicator_panels")
 
-                fig = make_subplots(
-                    rows=2, cols=1, shared_xaxes=True,
-                    vertical_spacing=0.05, row_heights=[0.7, 0.3],
-                    subplot_titles=(f"{pair} — {tf}", "RSI"),
-                )
-                fig.add_trace(go.Candlestick(
-                    x=df_c.index, open=df_c["Open"], high=df_c["High"],
-                    low=df_c["Low"], close=df_c["Close"], name="Price",
-                ), row=1, col=1)
+                chart_settings = {
+                    "show_volume": show_volume,
+                    "show_ichimoku": show_ichimoku,
+                    "show_fib": show_fib,
+                    "show_sr": show_sr,
+                    "show_bb": show_bb,
+                    "show_ma": show_ma,
+                    "indicator_panels": indicator_panels
+                }
 
-                for col_name, colour in [("EMA_20", "orange"), ("EMA_50", "royalblue")]:
-                    if col_name in df_c.columns:
-                        fig.add_trace(go.Scatter(
-                            x=df_c.index, y=df_c[col_name],
-                            name=col_name, line=dict(color=colour, width=1),
-                        ), row=1, col=1)
-
-                for bb_col in ("BB_Upper", "BB_Lower"):
-                    if bb_col in df_c.columns:
-                        fig.add_trace(go.Scatter(
-                            x=df_c.index, y=df_c[bb_col], name=bb_col,
-                            line=dict(color="gray", dash="dash"),
-                        ), row=1, col=1)
-
-                if "RSI" in df_c.columns:
-                    fig.add_trace(go.Scatter(
-                        x=df_c.index, y=df_c["RSI"],
-                        name="RSI", line=dict(color="purple"),
-                    ), row=2, col=1)
-                    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-                    fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-
-                fig.update_layout(height=600, showlegend=True)
-                st.plotly_chart(fig, use_container_width=True)
-
-                last = df_c.iloc[-1]
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("RSI", f"{safe_get(last, 'RSI', 0):.1f}")
-                m2.metric("ADX", f"{safe_get(last, 'ADX', 0):.1f}")
-                m3.metric("ATR", f"{safe_get(last, 'ATR', 0):.5f}")
-                m4.metric("Stoch K", f"{safe_get(last, 'Stoch_K', 0):.1f}")
+                render_professional_chart(df_c, pair, tf, data_by_timeframe, chart_settings)
             else:
                 st.warning(f"No data available for {pair} on {tf}")
         else:
             st.warning("No data available")
 
-    # Tab 4: 15-Min Entry
-    with tab4:
+    # Tab 5: 15-Min Entry
+    with tab5:
         st.subheader("⏱️ 15-Minute Entry Signal")
         avail = [p for p in daily_data if not daily_data[p].empty]
 
@@ -1720,8 +2682,8 @@ def main() -> None:
         else:
             st.warning("No data available")
 
-    # Tab 5: Trading Ideas
-    with tab5:
+    # Tab 6: Trading Ideas
+    with tab6:
         st.subheader("🎯 Trading Ideas")
         st.caption("Multi-timeframe confluence · Structure-based stops · Swing/ATR take-profits")
 
@@ -1849,8 +2811,8 @@ def main() -> None:
                     "Try clicking **↺ Refresh Now** in the sidebar then re-running."
                 )
 
-    # Tab 6: Weekly Swing Trading
-    with tab6:
+    # Tab 7: Weekly Swing Trading
+    with tab7:
         st.subheader("📅 Weekly Swing Trading Ideas")
         st.caption("Higher timeframe analysis · Weekly & Daily confluence · Wider stops & targets")
 
@@ -1893,7 +2855,6 @@ def main() -> None:
                     st.caption(f"Weekly: {idea['weekly_trend']} | Daily: {idea['daily_trend']}")
                     st.divider()
 
-                # Export swing ideas
                 swing_df = pd.DataFrame([{
                     "Pair": i["pair"],
                     "Bias": i["bias"],
@@ -1942,129 +2903,6 @@ def main() -> None:
                         st.divider()
             else:
                 st.info("👆 Click 'Generate Swing Ideas' to analyze weekly/daily swing setups")
-
-    # Tab 7: Multi-Timeframe Bias Dashboard
-    with tab7:
-        st.subheader("🎯 Multi-Timeframe Bias Dashboard")
-        st.caption("Weekly · Daily · 4H · 1H · 15m bias analysis")
-
-        if st.button("🔄 Analyze MTF Bias", type="primary", key="bias_button"):
-            with st.spinner("Analyzing bias across all timeframes…"):
-                bias_results = generate_bias_dashboard(data_by_timeframe)
-                st.session_state.bias_results = bias_results
-
-            if bias_results:
-                # Summary table
-                summary_data = []
-                for result in bias_results:
-                    summary_data.append({
-                        "Pair": result["pair"],
-                        "Overall Bias": result["overall_bias"],
-                        "Confidence": f"{result['confidence']:.0f}%",
-                        "Weekly": result["timeframes"]["Weekly"]["bias"],
-                        "Daily": result["timeframes"]["Daily"]["bias"],
-                        "4H": result["timeframes"]["4H"]["bias"],
-                        "1H": result["timeframes"]["1H"]["bias"],
-                        "15m": result["timeframes"]["15m"]["bias"],
-                    })
-
-                df_summary = pd.DataFrame(summary_data)
-
-                # Color coding
-                def color_bias(val):
-                    if val == "Bullish":
-                        return "background-color: #00AC00"
-                    elif val == "Bearish":
-                        return "background-color: #EE5100"
-                    elif val == "Neutral":
-                        return "background-color: #F0E68C"
-                    return ""
-
-                styled_df = df_summary.style.map(color_bias,
-                                                      subset=["Overall Bias", "Weekly", "Daily", "4H", "1H", "15m"])
-                st.dataframe(styled_df, use_container_width=True)
-
-                st.divider()
-                st.subheader("Detailed Analysis")
-
-                # Detailed view for each pair
-                for result in bias_results:
-                    with st.expander(
-                            f"📊 {result['pair']} - {result['overall_bias']} ({result['confidence']:.0f}% confidence)"):
-                        tf_data = result["timeframes"]
-
-                        cols = st.columns(5)
-                        for idx, (tf_name, data) in enumerate(tf_data.items()):
-                            with cols[idx]:
-                                if data["bias"] == "Bullish":
-                                    st.success(f"**{tf_name}**")
-                                elif data["bias"] == "Bearish":
-                                    st.error(f"**{tf_name}**")
-                                else:
-                                    st.warning(f"**{tf_name}**")
-
-                                st.metric("Bias", data["bias"])
-                                if data["price"] > 0:
-                                    st.metric("Price", f"{data['price']:.5f}")
-                                st.metric("RSI", f"{data['rsi']:.1f}")
-                                st.metric("ADX", f"{data['adx']:.1f}")
-                                st.caption(f"Trend: {data['trend']}")
-
-                # Export bias analysis
-                bias_export = []
-                for result in bias_results:
-                    row = {"Pair": result["pair"], "Overall Bias": result["overall_bias"],
-                           "Confidence": result["confidence"]}
-                    for tf, data in result["timeframes"].items():
-                        row[f"{tf}_Bias"] = data["bias"]
-                        row[f"{tf}_RSI"] = data["rsi"]
-                        row[f"{tf}_ADX"] = data["adx"]
-                    bias_export.append(row)
-
-                bias_df = pd.DataFrame(bias_export)
-                st.download_button(
-                    "📥 Download Bias Analysis (CSV)",
-                    data=bias_df.to_csv(index=False),
-                    file_name=f"mtf_bias_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    key="bias_download"
-                )
-            else:
-                st.warning("⚠️ No bias analysis available. Check data loading.")
-        else:
-            if "bias_results" in st.session_state:
-                bias_results = st.session_state.bias_results
-                st.info(f"📊 Showing previously analyzed MTF bias for {len(bias_results)} pairs")
-
-                summary_data = []
-                for result in bias_results:
-                    summary_data.append({
-                        "Pair": result["pair"],
-                        "Overall Bias": result["overall_bias"],
-                        "Confidence": f"{result['confidence']:.0f}%",
-                        "Weekly": result["timeframes"]["Weekly"]["bias"],
-                        "Daily": result["timeframes"]["Daily"]["bias"],
-                        "4H": result["timeframes"]["4H"]["bias"],
-                        "1H": result["timeframes"]["1H"]["bias"],
-                        "15m": result["timeframes"]["15m"]["bias"],
-                    })
-
-                df_summary = pd.DataFrame(summary_data)
-
-                def color_bias(val):
-                    if val == "Bullish":
-                        return "background-color: #00AC00"
-                    elif val == "Bearish":
-                        return "background-color: #FFB6C1"
-                    elif val == "Neutral":
-                        return "background-color: #F0E68C"
-                    return ""
-
-                styled_df = df_summary.style.map(color_bias,
-                                                      subset=["Overall Bias", "Weekly", "Daily", "4H", "1H", "15m"])
-                st.dataframe(styled_df, use_container_width=True)
-            else:
-                st.info("👆 Click 'Analyze MTF Bias' to generate bias analysis across all timeframes")
 
 
 # ============================================================================
