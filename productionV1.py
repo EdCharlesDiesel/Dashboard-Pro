@@ -3,14 +3,13 @@ import logging
 import os
 import smtplib
 import traceback
+import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional, Tuple
-import warnings
-
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -36,18 +35,36 @@ st.set_page_config(
 )
 
 # ============================================================================
+# LOGGING
+# ============================================================================
+def _setup_logging() -> logging.Logger:
+    log = logging.getLogger("ForexDashboard")
+    log.setLevel(logging.INFO)
+    if not log.handlers:
+        h = logging.StreamHandler()
+        h.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+        log.addHandler(h)
+    return log
+
+
+logger = _setup_logging()
+
+
+# ============================================================================
 # NOTIFICATION PERSISTENCE
 # ============================================================================
-NOTIFY_FILE = "/tmp/forex_notify_cache.json"
+NOTIFY_FILE = os.path.join(os.getcwd(), "forex_notify_cache.json")
 
 
 def load_notified_keys() -> set:
     try:
-        with open(NOTIFY_FILE) as fh:
-            data = json.load(fh)
-        return set(data.get("keys", []))
-    except (FileNotFoundError, json.JSONDecodeError, TypeError):
-        return set()
+        if os.path.exists(NOTIFY_FILE):
+            with open(NOTIFY_FILE) as fh:
+                data = json.load(fh)
+            return set(data.get("keys", []))
+    except (json.JSONDecodeError, TypeError, OSError) as exc:
+        logger.warning("Failed to load notified keys: %s", exc)
+    return set()
 
 
 def save_notified_keys(keys: set) -> None:
@@ -64,7 +81,9 @@ def save_notified_keys(keys: set) -> None:
 @dataclass
 class AppConfig:
     """Application configuration — all tuneable parameters in one place."""
-
+    version: str = "1.2.0-PRO"
+    last_updated: str = "2024-04-20"
+    
     assets: Dict[str, str] = field(default_factory=lambda: {
         "EUR/USD": "EURUSD=X",
         "GBP/USD": "GBPUSD=X",
@@ -150,22 +169,6 @@ MACRO_FALLBACKS: Dict[str, Dict[str, float]] = {
 
 
 # ============================================================================
-# LOGGING
-# ============================================================================
-def _setup_logging() -> logging.Logger:
-    log = logging.getLogger("ForexDashboard")
-    log.setLevel(logging.INFO)
-    if not log.handlers:
-        h = logging.StreamHandler()
-        h.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-        log.addHandler(h)
-    return log
-
-
-logger = _setup_logging()
-
-
-# ============================================================================
 # CONFIG SINGLETON
 # ============================================================================
 @st.cache_resource
@@ -180,7 +183,7 @@ config = get_config()
 # UTILITY — safe_get
 # ============================================================================
 def safe_get(row: Any, key: str, default: float = 0.0) -> float:
-    """Safely extract a scalar from a pandas Series row, returning `default`
+    """Safely extract a scalar from a panda Series row, returning `default`
     if the key is missing or the value is NaN/None."""
     try:
         val = row[key]
@@ -194,25 +197,32 @@ def safe_get(row: Any, key: str, default: float = 0.0) -> float:
 # ============================================================================
 # EMAIL HELPERS
 # ============================================================================
-def _get_email_config() -> dict[str, str | int]:
+def _get_email_config() -> dict[str, Any]:
     """Read email settings from Streamlit secrets or environment variables."""
+    email_secrets = {}
     try:
-        email_secrets = st.secrets.get("email", {})
+        if hasattr(st, "secrets"):
+            email_secrets = st.secrets.get("email", {})
     except Exception:
-        email_secrets = {}
+        pass
 
     def _s(key: str, env: str, fallback: str = "") -> str:
-        return email_secrets.get(key) or os.environ.get(env, fallback)
+        val = email_secrets.get(key) or os.environ.get(env, fallback)
+        return str(val) if val is not None else fallback
 
-    cfg = {
+    port_val = _s("smtp_port", "SMTP_PORT", "587")
+    try:
+        smtp_port = int(port_val)
+    except (ValueError, TypeError):
+        smtp_port = 587
+
+    return {
         "smtp_host": _s("smtp_host", "SMTP_HOST", "smtp.gmail.com"),
-        "smtp_port": int(_s("smtp_port", "SMTP_PORT", "587")),
+        "smtp_port": smtp_port,
         "smtp_user": _s("smtp_user", "SMTP_USER", ""),
         "smtp_pass": _s("smtp_pass", "SMTP_PASS", ""),
         "recipient": _s("recipient", "EMAIL_RECIPIENT", ""),
     }
-
-    return cfg
 
 
 def send_email_alert(idea: Dict) -> bool:
@@ -456,6 +466,10 @@ class TechnicalAnalyzer:
             return df
         if not all(c in df.columns for c in TechnicalAnalyzer.REQUIRED_COLUMNS):
             logger.warning("Missing required OHLC columns for indicator calculation")
+            return df
+        
+        # Avoid redundant calculation if indicators are already present
+        if "RSI" in df.columns and "MACD" in df.columns:
             return df
 
         df = df.copy()
@@ -765,10 +779,11 @@ def analyze_multi_timeframe(
         df_15m: pd.DataFrame,
         pair_name: str,
 ) -> Optional[Dict]:
-    df_daily = analyzer.add_indicators(df_daily)
-    df_4h = analyzer.add_indicators(df_4h)
-    df_1h = analyzer.add_indicators(df_1h)
-    df_15m = analyzer.add_indicators(df_15m)
+    # Indicators already added at load time
+    # df_daily = analyzer.add_indicators(df_daily)
+    # df_4h = analyzer.add_indicators(df_4h)
+    # df_1h = analyzer.add_indicators(df_1h)
+    # df_15m = analyzer.add_indicators(df_15m)
 
     if any(df.empty for df in [df_daily, df_4h, df_1h, df_15m]):
         return None
@@ -940,14 +955,30 @@ def generate_trading_ideas(
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_all_timeframes() -> Dict:
     data: Dict[str, Dict] = {tf: {} for tf in config.timeframes}
+    
+    def fetch_task(tf_name, tf_cfg, pair_name, symbol):
+        try:
+            df = fetch_data(symbol, tf_cfg["interval"], tf_cfg["period"])
+            if not df.empty:
+                # Pre-calculate indicators once at load time
+                df = analyzer.add_indicators(df)
+                return tf_name, pair_name, df
+        except Exception as exc:
+            logger.warning("Failed %s (%s): %s", pair_name, tf_name, exc)
+        return None
+
+    tasks = []
     for tf_name, tf_cfg in config.timeframes.items():
         for pair_name, symbol in config.assets.items():
-            try:
-                df = fetch_data(symbol, tf_cfg["interval"], tf_cfg["period"])
-                if not df.empty:
-                    data[tf_name][pair_name] = df
-            except Exception as exc:
-                logger.warning("Failed %s (%s): %s", pair_name, tf_name, exc)
+            tasks.append((tf_name, tf_cfg, pair_name, symbol))
+
+    with ThreadPoolExecutor(max_workers=min(len(tasks), 10)) as executor:
+        futures = [executor.submit(fetch_task, *t) for t in tasks]
+        for future in as_completed(futures):
+            res = future.result()
+            if res:
+                tf_n, p_n, d_val = res
+                data[tf_n][p_n] = d_val
     return data
 
 
@@ -961,11 +992,11 @@ def load_all_timeframes() -> Dict:
 
 
 def clear_data_cache() -> None:
-    """Bust cached data and force a fresh fetch on the next render."""
     _fetch_all_timeframes.clear()
     fetch_data.clear()
     st.session_state.data_loaded = False
-    st.session_state.last_refresh = datetime.now()
+    st.session_state.data_loaded = True
+    st.session_state.last_refresh = datetime.now()  # already here — correct
 
 
 # ============================================================================
@@ -2004,47 +2035,75 @@ def render_professional_chart(
 
 
 # ============================================================================
-# WEEKLY SWING TRADING ANALYSIS
+# WEEKLY SWING TRADING ANALYSIS (FIXED)
 # ============================================================================
 def analyze_weekly_swing(
         df_weekly: pd.DataFrame,
         df_daily: pd.DataFrame,
+        df_4h: pd.DataFrame,        # ← added for entry confirmation
         pair_name: str,
 ) -> Optional[Dict]:
-    """Generate swing trading ideas based on Weekly and Daily timeframes."""
-
-    df_weekly = analyzer.add_indicators(df_weekly)
-    df_daily = analyzer.add_indicators(df_daily)
+    """Generate swing trading ideas based on Weekly + Daily + 4H confirmation."""
 
     if df_weekly.empty or df_daily.empty:
         return None
 
+    if len(df_weekly) < 20 or len(df_daily) < 50 or len(df_4h) < 20:
+        return None
+
     weekly = df_weekly.iloc[-1]
-    daily = df_daily.iloc[-1]
+    daily  = df_daily.iloc[-1]
+    h4     = df_4h.iloc[-1]
 
     if "Close" not in weekly.index or "Close" not in daily.index:
         return None
 
-    w_close = safe_get(weekly, "Close")
-    w_ema20 = safe_get(weekly, "EMA_20", w_close)
-    w_ema50 = safe_get(weekly, "EMA_50", w_close)
-    w_trend = "Bullish" if w_ema20 > w_ema50 else "Bearish"
-    w_rsi = safe_get(weekly, "RSI", 50.0)
-    w_adx = safe_get(weekly, "ADX", 0.0)
-    w_macd = safe_get(weekly, "MACD", 0.0)
-    w_signal = safe_get(weekly, "MACD_Signal", 0.0)
-    w_macd_bull = w_macd > w_signal
+    # ------------------------------------------------------------------ #
+    # Weekly context
+    # ------------------------------------------------------------------ #
+    w_close  = safe_get(weekly, "Close")
+    w_ema20  = safe_get(weekly, "EMA_20", w_close)
+    w_ema50  = safe_get(weekly, "EMA_50", w_close)
+    w_trend  = "Bullish" if w_ema20 > w_ema50 else "Bearish"
+    w_rsi    = safe_get(weekly, "RSI", 50.0)
+    w_adx    = safe_get(weekly, "ADX", 0.0)
+    w_macd   = safe_get(weekly, "MACD", 0.0)
+    w_sig    = safe_get(weekly, "MACD_Signal", 0.0)
+    w_macd_b = w_macd > w_sig
 
-    d_close = safe_get(daily, "Close")
-    d_ema20 = safe_get(daily, "EMA_20", d_close)
-    d_trend = "Bullish" if d_close > d_ema20 else "Bearish"
-    d_rsi = safe_get(daily, "RSI", 50.0)
+    # ------------------------------------------------------------------ #
+    # Daily context
+    # ------------------------------------------------------------------ #
+    d_close   = safe_get(daily, "Close")
+    d_ema20   = safe_get(daily, "EMA_20", d_close)
+    d_ema50   = safe_get(daily, "EMA_50", d_close)
+    d_rsi     = safe_get(daily, "RSI", 50.0)
     d_stoch_k = safe_get(daily, "Stoch_K", 50.0)
     d_stoch_d = safe_get(daily, "Stoch_D", 50.0)
+    d_macd    = safe_get(daily, "MACD", 0.0)
+    d_sig     = safe_get(daily, "MACD_Signal", 0.0)
 
+    # FIX 1: Use DAILY ATR, not weekly ATR — weekly is 5× too large
+    d_atr = safe_get(daily, "ATR", d_close * 0.008)
+    if d_atr <= 0:
+        d_atr = d_close * 0.008
+
+    # ------------------------------------------------------------------ #
+    # 4H entry confirmation
+    # ------------------------------------------------------------------ #
+    h4_close = safe_get(h4, "Close", d_close)
+    h4_ema20 = safe_get(h4, "EMA_20", h4_close)
+    h4_macd  = safe_get(h4, "MACD", 0.0)
+    h4_sig   = safe_get(h4, "MACD_Signal", 0.0)
+    h4_bull  = h4_close > h4_ema20 and h4_macd > h4_sig
+
+    # ------------------------------------------------------------------ #
+    # Scoring
+    # ------------------------------------------------------------------ #
     long_score = short_score = 0
     reasons: List[str] = []
 
+    # Weekly structure (highest weight)
     if w_trend == "Bullish":
         long_score += 3
         reasons.append("Weekly: EMA20 > EMA50 (bullish structure)")
@@ -2052,12 +2111,13 @@ def analyze_weekly_swing(
         short_score += 3
         reasons.append("Weekly: EMA20 < EMA50 (bearish structure)")
 
-    if w_rsi < 40:
+    # FIX 4: Relaxed RSI thresholds — weekly RSI rarely hits 40/60
+    if w_rsi < 45:
         long_score += 2
-        reasons.append(f"Weekly RSI oversold ({w_rsi:.1f})")
-    elif w_rsi > 60:
+        reasons.append(f"Weekly RSI supportive ({w_rsi:.1f} < 45)")
+    elif w_rsi > 55:
         short_score += 2
-        reasons.append(f"Weekly RSI overbought ({w_rsi:.1f})")
+        reasons.append(f"Weekly RSI resistive ({w_rsi:.1f} > 55)")
 
     if w_adx > config.adx_trend_min:
         if w_trend == "Bullish":
@@ -2066,98 +2126,138 @@ def analyze_weekly_swing(
             short_score += 2
         reasons.append(f"Weekly trend strength ADX={w_adx:.1f}")
 
-    if w_macd_bull:
+    # FIX 4: Weekly MACD gets weight 2, not 1
+    if w_macd_b:
+        long_score += 2
+        reasons.append("Weekly MACD bullish crossover")
+    else:
+        short_score += 2
+        reasons.append("Weekly MACD bearish crossover")
+
+    # Daily EMA alignment
+    if d_close > d_ema20 and d_ema20 > d_ema50:
+        long_score += 2
+        reasons.append("Daily: Price > EMA20 > EMA50 (bullish)")
+    elif d_close < d_ema20 and d_ema20 < d_ema50:
+        short_score += 2
+        reasons.append("Daily: Price < EMA20 < EMA50 (bearish)")
+    elif d_close > d_ema20:
         long_score += 1
-        reasons.append("Weekly MACD bullish")
+        reasons.append("Daily: Price above EMA20")
     else:
         short_score += 1
-        reasons.append("Weekly MACD bearish")
+        reasons.append("Daily: Price below EMA20")
 
-    if d_trend == "Bullish":
+    # Daily RSI
+    if d_rsi < 40:
         long_score += 1
-        reasons.append("Daily: Price > EMA20")
-    else:
+        reasons.append(f"Daily RSI oversold ({d_rsi:.1f})")
+    elif d_rsi > 60:
         short_score += 1
-        reasons.append("Daily: Price < EMA20")
+        reasons.append(f"Daily RSI overbought ({d_rsi:.1f})")
 
-    if d_rsi < 35:
-        long_score += 1
-        reasons.append(f"Daily RSI deeply oversold ({d_rsi:.1f})")
-    elif d_rsi > 65:
-        short_score += 1
-        reasons.append(f"Daily RSI deeply overbought ({d_rsi:.1f})")
-
-    if d_stoch_k < 20 and d_stoch_d < 20:
+    # Daily Stochastic
+    if d_stoch_k < 25 and d_stoch_d < 25:
         long_score += 1
         reasons.append(f"Daily Stoch oversold (K={d_stoch_k:.1f})")
-    elif d_stoch_k > 80 and d_stoch_d > 80:
+    elif d_stoch_k > 75 and d_stoch_d > 75:
         short_score += 1
         reasons.append(f"Daily Stoch overbought (K={d_stoch_k:.1f})")
+
+    # Daily MACD
+    if d_macd > d_sig:
+        long_score += 1
+        reasons.append("Daily MACD bullish")
+    else:
+        short_score += 1
+        reasons.append("Daily MACD bearish")
+
+    # FIX 5: 4H entry confirmation
+    if h4_bull:
+        long_score += 1
+        reasons.append("4H: Price > EMA20 & MACD bullish (entry confirmation)")
+    else:
+        short_score += 1
+        reasons.append("4H: Price < EMA20 or MACD bearish")
 
     if long_score == short_score:
         return None
 
-    bias = "Long" if long_score > short_score else "Short"
+    bias     = "Long" if long_score > short_score else "Short"
     strength = max(long_score, short_score)
-    conviction = "High" if strength >= 8 else ("Medium" if strength >= 5 else "Low")
 
-    atr = safe_get(weekly, "ATR", w_close * 0.02)
-    current_price = safe_get(daily, "Close", 0.0)
+    # FIX 4: Rebalanced thresholds — max score is now 15
+    conviction = "High" if strength >= 11 else ("Medium" if strength >= 7 else "Low")
 
+    current_price = d_close
     if current_price <= 0:
         return None
 
-    swing_lookback = 50
-    if bias == "Long":
-        swing_low = df_daily["Low"].tail(swing_lookback).min()
-        stop_loss = swing_low - atr * 0.5
-        target_1 = current_price + atr * 3.0
-        target_2 = current_price + atr * 5.0
-        invalidation = "Below swing low"
-    else:
-        swing_high = df_daily["High"].tail(swing_lookback).max()
-        stop_loss = swing_high + atr * 0.5
-        target_1 = current_price - atr * 3.0
-        target_2 = current_price - atr * 5.0
-        invalidation = "Above swing high"
+    # ------------------------------------------------------------------ #
+    # FIX 2: Use existing StopLossCalculator with daily ATR
+    # ------------------------------------------------------------------ #
+    sl_result = sl_calculator.calculate(
+        df_daily, pair_name, bias, current_price, d_atr, lookback=50
+    )
+    stop_loss = sl_result["stop"]
 
-    rr_1 = abs(target_1 - current_price) / abs(current_price - stop_loss)
-    rr_2 = abs(target_2 - current_price) / abs(current_price - stop_loss)
+    # ------------------------------------------------------------------ #
+    # FIX 2: Use existing TakeProfitCalculator
+    # ------------------------------------------------------------------ #
+    tp_result = tp_calculator.calculate(
+        df_daily, pair_name, bias, current_price, d_atr, stop_loss, lookback=50
+    )
+
+    # FIX 3: Enforce minimum R:R — skip ideas that don't qualify
+    if not tp_result["tp1_valid"]:
+        return None
+
+    invalidation = (
+        f"Daily close below {stop_loss:.5f}"
+        if bias == "Long"
+        else f"Daily close above {stop_loss:.5f}"
+    )
 
     return {
-        "pair": pair_name,
-        "bias": bias,
-        "conviction": conviction,
+        "pair":           pair_name,
+        "bias":           bias,
+        "conviction":     conviction,
         "strength_score": strength,
-        "thesis": " | ".join(reasons),
-        "entry": current_price,
-        "stop_loss": stop_loss,
-        "target_1": target_1,
-        "target_2": target_2,
-        "risk_reward_1": round(rr_1, 2),
-        "risk_reward_2": round(rr_2, 2),
-        "invalidation": invalidation,
-        "atr": atr,
-        "weekly_trend": w_trend,
-        "daily_trend": d_trend,
+        "thesis":         " | ".join(reasons),
+        "entry":          current_price,
+        "stop_loss":      stop_loss,
+        "stop_loss_method": sl_result["method"],
+        "stop_loss_pips": sl_result["distance_pips"],
+        "target_1":       tp_result["tp1"],
+        "target_2":       tp_result["tp2"],
+        "tp1_method":     tp_result["method_tp1"],
+        "tp2_method":     tp_result["method_tp2"],
+        "tp1_valid":      tp_result["tp1_valid"],
+        "tp2_valid":      tp_result["tp2_valid"],
+        "risk_reward_1":  tp_result["rr1"],
+        "risk_reward_2":  tp_result["rr2"],
+        "invalidation":   invalidation,
+        "atr":            d_atr,
+        "weekly_trend":   w_trend,
+        "daily_trend":    "Bullish" if d_close > d_ema20 else "Bearish",
+        "4h_confirmation": h4_bull,
     }
 
 
 def generate_weekly_swing_ideas(data_by_timeframe: Dict) -> List[Dict]:
-    """Generate swing trading ideas based on Weekly and Daily analysis."""
     ideas: List[Dict] = []
 
     for pair_name in config.assets:
         df_weekly = data_by_timeframe.get("Weekly", {}).get(pair_name, pd.DataFrame())
-        df_daily = data_by_timeframe.get("Daily", {}).get(pair_name, pd.DataFrame())
+        df_daily  = data_by_timeframe.get("Daily",  {}).get(pair_name, pd.DataFrame())
+        df_4h     = data_by_timeframe.get("4 Hour", {}).get(pair_name, pd.DataFrame())  # ← added
 
-        if df_weekly.empty or df_daily.empty:
+        if df_weekly.empty or df_daily.empty or df_4h.empty:
+            continue
+        if len(df_weekly) < 20 or len(df_daily) < 50:
             continue
 
-        if len(df_weekly) < 20 or len(df_daily) < 20:
-            continue
-
-        idea = analyze_weekly_swing(df_weekly, df_daily, pair_name)
+        idea = analyze_weekly_swing(df_weekly, df_daily, df_4h, pair_name)
         if idea:
             ideas.append(idea)
 
@@ -2203,7 +2303,19 @@ def analyze_bias_for_pair(
             }
             continue
 
-        df = analyzer.add_indicators(df)
+        # Use already-calculated indicators
+        # df = analyzer.add_indicators(df) # Removed redundant call
+        if df.empty:
+            bias_data[tf_name] = {
+                "bias": "Insufficient Data",
+                "strength": 0,
+                "price": 0,
+                "trend": "N/A",
+                "rsi": 0,
+                "adx": 0,
+            }
+            continue
+
         latest = df.iloc[-1]
 
         close = safe_get(latest, "Close", 0)
@@ -2317,8 +2429,8 @@ def generate_bias_dashboard(data_by_timeframe: Dict) -> List[Dict]:
 # MAIN APPLICATION
 # ============================================================================
 def main() -> None:
-    st.title("💹 Macro Dashboard Pro")
-    st.caption("Multi-Timeframe · FRED Fundamentals · 15-Min Entry Signals · High-Conviction Alerts")
+    st.title(f"💹 Macro Dashboard Pro v{config.version}")
+    st.caption(f"Multi-Timeframe · FRED Fundamentals · 15-Min Entry Signals · High-Conviction Alerts | Last Updated: {config.last_updated}")
 
     init_notification_state()
 
@@ -2340,7 +2452,7 @@ def main() -> None:
             clear_data_cache()
             st.rerun()
         components.html(
-            f'<meta http-equiv="refresh" content="{config.auto_refresh_interval}">',
+            f'<script>setTimeout(() => window.parent.location.reload(), {config.auto_refresh_interval * 1000});</script>',
             height=0,
         )
 
@@ -2360,6 +2472,7 @@ def main() -> None:
             ideas, _ = generate_trading_ideas(data_by_timeframe)
             st.session_state.latest_ideas = ideas
             check_and_notify(ideas)
+
 
     else:
         data_by_timeframe = st.session_state.data_by_timeframe
@@ -2649,9 +2762,9 @@ def main() -> None:
             df_d = data_by_timeframe.get("Daily", {}).get(pair_e, pd.DataFrame())
 
             if not df_15m.empty and not df_d.empty and "Close" in df_d.columns:
-                df_d_ind = analyzer.add_indicators(df_d)
-                if not df_d_ind.empty:
-                    di = df_d_ind.iloc[-1]
+                # Indicators already added at load time
+                if not df_d.empty:
+                    di = df_d.iloc[-1]
                     adx_v = safe_get(di, "ADX", 0.0)
                     close_v = safe_get(di, "Close", 0.0)
                     ema20_v = safe_get(di, "EMA_20", close_v)
@@ -2814,95 +2927,119 @@ def main() -> None:
     # Tab 7: Weekly Swing Trading
     with tab7:
         st.subheader("📅 Weekly Swing Trading Ideas")
-        st.caption("Higher timeframe analysis · Weekly & Daily confluence · Wider stops & targets")
+        st.caption(
+            "Weekly structure + Daily alignment + 4H entry confirmation · "
+            "Structure/ATR stops · Min R:R enforced"
+        )
+
+        def _render_swing_idea(idx: int, idea: Dict) -> None:
+            direction = "📈" if idea["bias"] == "Long" else "📉"
+            conf_icon = "🔔 HIGH CONVICTION" if idea["conviction"] == "High" else ""
+            header = f"### {idx + 1}. {idea['pair']} — {idea['bias'].upper()} SWING {direction} {conf_icon}"
+
+            if idea["conviction"] == "High":
+                st.success(header)
+            elif idea["conviction"] == "Medium":
+                st.warning(header)
+            else:
+                st.info(header)
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Conviction", idea["conviction"])
+            m2.metric("Strength", f"{idea['strength_score']}/15")
+            m3.metric("Weekly", idea["weekly_trend"])
+            conf_label = "✅ Confirmed" if idea.get("4h_confirmation") else "⚠️ Not confirmed"
+            m4.metric("4H Entry", conf_label)
+
+            st.markdown(f"**📝 Thesis:** {idea['thesis']}")
+            st.markdown("**💰 Price Levels:**")
+
+            p1, p2, p3, p4, p5 = st.columns(5)
+            p1.metric("Entry", f"{idea['entry']:.5f}")
+
+            tp1_lbl = "Target 1" if idea.get("tp1_valid", True) else "Target 1 ⚠️"
+            p2.metric(
+                tp1_lbl,
+                f"{idea['target_1']:.5f}",
+                delta=f"R:R 1:{idea['risk_reward_1']:.2f} ({idea.get('tp1_method', 'ATR')})",
+            )
+
+            tp2_lbl = "Target 2" if idea.get("tp2_valid", True) else "Target 2 ⚠️"
+            p3.metric(
+                tp2_lbl,
+                f"{idea['target_2']:.5f}",
+                delta=f"R:R 1:{idea['risk_reward_2']:.2f} ({idea.get('tp2_method', 'ATR')})",
+            )
+
+            p4.metric("Stop Loss", f"{idea['stop_loss']:.5f}")
+            risk_pct = (abs(idea["entry"] - idea["stop_loss"]) / idea["entry"]) * 100
+            p5.metric("Risk %", f"{risk_pct:.2f}%")
+
+            st.caption(
+                f"🛡️ Stop method: **{idea.get('stop_loss_method', 'N/A')}** | "
+                f"Distance: **{idea.get('stop_loss_pips', 0)} pips** | "
+                f"Invalidation: {idea['invalidation']} | "
+                f"Daily ATR: {idea['atr']:.5f}"
+            )
+            st.divider()
 
         if st.button("🔄 Generate Swing Ideas", type="primary", key="swing_button"):
-            with st.spinner("Analyzing weekly and daily charts for swing setups…"):
+            with st.spinner("Analyzing weekly/daily/4H swing setups…"):
                 swing_ideas = generate_weekly_swing_ideas(data_by_timeframe)
                 st.session_state.swing_ideas = swing_ideas
 
             if swing_ideas:
                 st.success(f"✅ {len(swing_ideas)} swing idea(s) generated")
 
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Total", len(swing_ideas))
+                c2.metric("Long", sum(1 for i in swing_ideas if i["bias"] == "Long"))
+                c3.metric("Short", sum(1 for i in swing_ideas if i["bias"] == "Short"))
+                c4.metric("High Conviction", sum(1 for i in swing_ideas if i["conviction"] == "High"))
+                st.divider()
+
                 for idx, idea in enumerate(swing_ideas):
-                    direction = "📈" if idea["bias"] == "Long" else "📉"
-                    header = f"### {idx + 1}. {idea['pair']} — {idea['bias'].upper()} SWING {direction}"
-
-                    if idea["conviction"] == "High":
-                        st.success(header + " 🔔 HIGH CONVICTION")
-                    elif idea["conviction"] == "Medium":
-                        st.warning(header)
-                    else:
-                        st.info(header)
-
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Entry", f"{idea['entry']:.5f}")
-                    col2.metric("Stop Loss", f"{idea['stop_loss']:.5f}",
-                                delta=f"{idea['invalidation']}")
-                    col3.metric("Weekly ATR", f"{idea['atr']:.5f}")
-
-                    st.markdown(f"**📝 Thesis:** {idea['thesis']}")
-
-                    t1, t2, t3 = st.columns(3)
-                    t1.metric("Target 1", f"{idea['target_1']:.5f}",
-                              delta=f"R:R 1:{idea['risk_reward_1']:.2f}")
-                    t2.metric("Target 2", f"{idea['target_2']:.5f}",
-                              delta=f"R:R 1:{idea['risk_reward_2']:.2f}")
-
-                    risk_pct = (abs(idea['entry'] - idea['stop_loss']) / idea['entry']) * 100
-                    t3.metric("Risk %", f"{risk_pct:.2f}%")
-
-                    st.caption(f"Weekly: {idea['weekly_trend']} | Daily: {idea['daily_trend']}")
-                    st.divider()
+                    _render_swing_idea(idx, idea)
 
                 swing_df = pd.DataFrame([{
                     "Pair": i["pair"],
                     "Bias": i["bias"],
                     "Conviction": i["conviction"],
+                    "Strength": i["strength_score"],
                     "Entry": i["entry"],
                     "Stop": i["stop_loss"],
+                    "Stop Method": i["stop_loss_method"],
                     "Target 1": i["target_1"],
+                    "TP1 Method": i["tp1_method"],
                     "Target 2": i["target_2"],
+                    "TP2 Method": i["tp2_method"],
                     "R:R 1": i["risk_reward_1"],
                     "R:R 2": i["risk_reward_2"],
+                    "4H Confirm": i.get("4h_confirmation", False),
                     "Thesis": i["thesis"],
                 } for i in swing_ideas])
 
                 st.download_button(
                     "📥 Download Swing Ideas (CSV)",
                     data=swing_df.to_csv(index=False),
-                    file_name=f"swing_ideas_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    file_name=f"swing_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                     mime="text/csv",
-                    key="swing_download"
+                    key="swing_download",
                 )
             else:
-                st.warning("⚠️ No swing trading ideas generated.")
-                st.info(
-                    "Swing setups require strong weekly/daily confluence. Try again later or check different pairs.")
-        else:
-            if "swing_ideas" in st.session_state:
-                swing_ideas = st.session_state.swing_ideas
-                if swing_ideas:
-                    st.info(f"📊 Showing {len(swing_ideas)} previously generated swing ideas")
-                    for idx, idea in enumerate(swing_ideas):
-                        direction = "📈" if idea["bias"] == "Long" else "📉"
-                        header = f"### {idx + 1}. {idea['pair']} — {idea['bias'].upper()} SWING {direction}"
+                st.warning("⚠️ No swing ideas generated — no setups met the minimum R:R threshold.")
 
-                        if idea["conviction"] == "High":
-                            st.success(header)
-                        elif idea["conviction"] == "Medium":
-                            st.warning(header)
-                        else:
-                            st.info(header)
-
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Entry", f"{idea['entry']:.5f}")
-                        col2.metric("Stop Loss", f"{idea['stop_loss']:.5f}")
-                        col3.metric("Target 1", f"{idea['target_1']:.5f}",
-                                    delta=f"R:R 1:{idea['risk_reward_1']:.2f}")
-                        st.divider()
+        # FIX 7: Cached display now renders ALL fields via shared helper
+        elif "swing_ideas" in st.session_state:
+            cached = st.session_state.swing_ideas
+            if cached:
+                st.info(f"📊 Showing {len(cached)} previously generated swing ideas")
+                for idx, idea in enumerate(cached):
+                    _render_swing_idea(idx, idea)  # ← was missing target2, thesis, stop method
             else:
                 st.info("👆 Click 'Generate Swing Ideas' to analyze weekly/daily swing setups")
+        else:
+            st.info("👆 Click 'Generate Swing Ideas' to analyze weekly/daily swing setups")
 
 
 # ============================================================================
