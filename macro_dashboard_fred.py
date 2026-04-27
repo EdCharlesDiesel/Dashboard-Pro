@@ -252,7 +252,7 @@ def get_fred_client(api_key: str) -> Optional[Fred]:
     if not api_key:
         return None
     try:
-        return Fred(api_key=api_key)
+        return Fred(api_key="3497b1f39dfba433a617ab52919f63ef ")
     except Exception as e:
         logger.error(f"FRED client init failed: {e}")
         return None
