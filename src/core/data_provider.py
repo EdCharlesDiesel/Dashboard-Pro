@@ -179,3 +179,21 @@ def get_macro_data(api_key: str) -> Tuple[Dict[str, Dict[str, float]], bool]:
         result[currency] = entry
 
     return (result if result else MACRO_FALLBACKS.copy()), any_success
+
+@st.cache_data(ttl=3600)
+def fetch_fred_series(series_id, fred_key, limit=36):
+    """Specific fetch for professional macro grids."""
+    if not fred_key:
+        return None
+    url = (f"https://api.stlouisfed.org/fred/series/observations"
+           f"?series_id={series_id}&api_key={fred_key}&file_type=json&sort_order=desc&limit={limit}")
+    try:
+        r = requests.get(url, timeout=8)
+        data = r.json()
+        obs = data.get("observations", [])
+        df = pd.DataFrame(obs)[["date","value"]]
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df["date"] = pd.to_datetime(df["date"])
+        return df.dropna().sort_values("date")
+    except Exception:
+        return None

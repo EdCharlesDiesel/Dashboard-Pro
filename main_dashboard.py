@@ -11,7 +11,7 @@ from typing import Dict, Tuple, List, Optional
 
 from src.core.config import default_config as config
 from src.core.analyzer import TechnicalAnalyzer as analyzer
-from src.core.data_provider import fetch_data, get_macro_data
+from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
 from src.core.signals import generate_trading_ideas, safe_get, entry_generator
 
 # ============================================================================
@@ -25,6 +25,17 @@ st.set_page_config(
 )
 
 logger = logging.getLogger("ForexDashboard")
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;800&display=swap');
+html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace; }
+h1, h2, h3 { font-family: 'Syne', sans-serif !important; }
+.stTabs [data-baseweb="tab"] { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.sig-buy  { background:#0d3b2a; border:1px solid #1a7a55; color:#4af0c4; padding:4px 12px; border-radius:3px; font-size:11px; font-family:'JetBrains Mono',monospace; display:inline-block; }
+.sig-sell { background:#3b0d16; border:1px solid #7a1a2a; color:#f04a6a; padding:4px 12px; border-radius:3px; font-size:11px; font-family:'JetBrains Mono',monospace; display:inline-block; }
+</style>
+""", unsafe_allow_html=True)
 
 # ============================================================================
 # NOTIFICATION PERSISTENCE
@@ -197,6 +208,279 @@ def render_macro_table(macro_data: Dict, is_live: bool) -> None:
     df = pd.DataFrame(rows).set_index("Currency")
     st.dataframe(df.style.background_gradient(cmap="RdYlGn", subset=["GDP", "Inflation", "Rates", "Unemployment"]), use_container_width=True)
 
+def render_overview_tab(daily_data: Dict):
+    st.subheader("Market Overview")
+    if daily_data:
+        rows = []
+        for pair, df in daily_data.items():
+            if not df.empty:
+                price = df['Close'].iloc[-1]
+                change = df['Close'].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
+                rows.append({"Pair": pair, "Price": price, "Change %": change, "Bars": len(df)})
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+def render_mtf_matrix_tab(data_by_timeframe: Dict):
+    st.subheader("🧭 Multi-Timeframe Matrix")
+    mtf_rows = []
+    # Explicitly requested timeframes
+    target_tfs = ["Weekly", "Daily", "4 Hour", "Hourly"]
+
+    for pair in config.assets.keys():
+        sentiments = analyzer.get_mtf_sentiment(data_by_timeframe, pair)
+        row = {"Pair": pair}
+        for tf in target_tfs:
+            row[tf] = sentiments.get(tf, "N/A")
+        mtf_rows.append(row)
+
+    mtf_df = pd.DataFrame(mtf_rows).set_index("Pair")
+
+    def color_sentiment(val):
+        if val == "Bullish": return "background-color: #d4edda; color: #155724;"
+        if val == "Bearish": return "background-color: #f8d7da; color: #721c24;"
+        return ""
+
+    st.table(mtf_df.style.applymap(color_sentiment))
+
+def render_technical_chart_tab(data_by_timeframe: Dict):
+    st.subheader("📈 Technical Analysis Chart")
+    daily_data = data_by_timeframe.get('Daily', {})
+    avail = [p for p, d in daily_data.items() if not d.empty]
+    if avail:
+        c1, c2 = st.columns(2)
+        pair = c1.selectbox("Pair", avail, key="chart_pair")
+        tf = c2.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
+        df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
+        if not df.empty:
+            df = analyzer.add_indicators(df)
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3], subplot_titles=(f"{pair} — {tf}", "RSI"))
+            fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name="Price"), row=1, col=1)
+            for ma, color in [('EMA_20', 'orange'), ('EMA_50', 'blue')]:
+                if ma in df.columns:
+                    fig.add_trace(go.Scatter(x=df.index, y=df[ma], name=ma, line=dict(color=color)), row=1, col=1)
+            if 'RSI' in df.columns:
+                fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI", line=dict(color='purple')), row=2, col=1)
+                fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
+                fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
+            fig.update_layout(height=600, xaxis_rangeslider_visible=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+def render_trading_view_tab(data_by_timeframe: Dict):
+    st.subheader("🛒 Trading View (Pivots & Fibonacci)")
+    daily_data = data_by_timeframe.get('Daily', {})
+    avail_tv = [p for p, d in daily_data.items() if not d.empty]
+    if avail_tv:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            tv_pair = st.selectbox("Select Pair", avail_tv, key="tv_pair")
+            tv_tf = st.selectbox("Anchor Timeframe", ["Weekly", "Daily", "4 Hour"], index=1, key="tv_tf")
+
+            df_anchor = data_by_timeframe.get(tv_tf, {}).get(tv_pair, pd.DataFrame())
+            if not df_anchor.empty:
+                pivots = analyzer.calculate_pivots(df_anchor)
+                fibs = analyzer.calculate_fibonacci(df_anchor)
+
+                st.markdown("### 📏 Pivot Points")
+                for k, v in pivots.items():
+                    st.text(f"{k:5}: {v:.5f}")
+
+                st.markdown("### 🔢 Fibonacci")
+                for k, v in fibs.items():
+                    st.text(f"{k:6}: {v:.5f}")
+
+        with col2:
+            df_chart = data_by_timeframe.get(tv_tf, {}).get(tv_pair, pd.DataFrame())
+            if not df_chart.empty:
+                fig = go.Figure()
+                fig.add_trace(go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'], name="Price"))
+
+                # Add Pivot Lines
+                pivots = analyzer.calculate_pivots(df_chart)
+                colors = {"R": "rgba(255,0,0,0.5)", "S": "rgba(0,128,0,0.5)", "P": "rgba(0,0,255,0.5)"}
+                for level, val in pivots.items():
+                    color = colors.get(level[0], "blue")
+                    fig.add_hline(y=val, line_dash="dash", line_color=color, annotation_text=level)
+
+                fig.update_layout(height=600, xaxis_rangeslider_visible=False, title=f"{tv_pair} - {tv_tf} with Pivot Points")
+                st.plotly_chart(fig, use_container_width=True)
+
+def render_15m_entry_tab(data_by_timeframe: Dict):
+    st.subheader("⏱️ 15-Minute Entry Signal")
+    daily_data = data_by_timeframe.get('Daily', {})
+    avail_pairs = [p for p in daily_data if not daily_data[p].empty]
+    if avail_pairs:
+        pair_e = st.selectbox("Pair", avail_pairs, key="entry_pair")
+        df_15m = data_by_timeframe.get('15 Minute', {}).get(pair_e, pd.DataFrame())
+        df_d = data_by_timeframe.get('Daily', {}).get(pair_e, pd.DataFrame())
+
+        if not df_15m.empty and not df_d.empty:
+            df_d = analyzer.add_indicators(df_d)
+            di = df_d.iloc[-1]
+            adx_v = safe_get(di, "ADX", 0.0)
+            close_v = safe_get(di, "Close", 0.0)
+            ema20_v = safe_get(di, "EMA_20", close_v)
+
+            bias_v = ("Long" if close_v > ema20_v else "Short") if adx_v > config.adx_trend_min else "Neutral"
+            st.write(f"**Daily Trend Bias:** `{bias_v}` | ADX = {adx_v:.1f}")
+
+            sig = entry_generator.get_entry_signal(df_15m, bias_v)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if sig["signal"] == 1: st.success("### 🟢 LONG")
+                elif sig["signal"] == -1: st.error("### 🔴 SHORT")
+                else: st.info("### ⚪ NO SIGNAL")
+            c2.metric("Confidence", f"{sig['confidence']}/5")
+            c3.metric("Price", f"{sig.get('price', 0):.5f}")
+
+            for r in sig.get("reasons", []):
+                st.info(f"ℹ️ {r}")
+        else:
+            st.warning("Insufficient data for 15-minute analysis")
+
+def render_signal_pro_tab(data_by_timeframe: Dict):
+    st.subheader("⚡ Signal Dashboard (QuantConnect-Style)")
+    daily_data = data_by_timeframe.get('Daily', {})
+    avail = [p for p, d in daily_data.items() if not d.empty]
+    if avail:
+        c1, c2 = st.columns([1, 4])
+        with c1:
+            pair = st.selectbox("Select Asset", avail, key="pro_pair")
+            tf = st.selectbox("Timeframe", ["Daily", "4 Hour", "Hourly", "15 Minute"], key="pro_tf")
+            pivot_tf = st.selectbox("Pivot Lookback", ["Weekly", "Daily"], index=0, key="pro_piv_tf")
+
+        df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
+        df_piv = data_by_timeframe.get(pivot_tf, {}).get(pair, pd.DataFrame())
+
+        if not df.empty and not df_piv.empty:
+            pivots = analyzer.calculate_expanded_pivots(df_piv)
+            df = analyzer.generate_pro_signals(df, pivots)
+
+            # Metrics
+            latest = df["Close"].iloc[-1]
+            last_signal = df["Signal"].iloc[-1]
+            rsi_val = df["RSI"].iloc[-1] if "RSI" in df.columns else 0
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Price", f"{latest:.5f}")
+            m2.metric("Signal", last_signal)
+            m3.metric("RSI", f"{rsi_val:.1f}")
+            m4.metric("PP Level", f"{pivots['PP']:.5f}")
+
+            # Chart
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3])
+            fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name="Price"), row=1, col=1)
+
+            # Add Pivot Lines
+            colors = {"R": "rgba(255,0,0,0.3)", "S": "rgba(0,128,0,0.3)", "P": "rgba(0,0,255,0.3)"}
+            for level, val in pivots.items():
+                if level in ["PP", "R1", "S1", "R2", "S2", "R3", "S3"]:
+                    color = colors.get(level[0], "blue")
+                    fig.add_hline(y=val, line_dash="dash", line_color=color, annotation_text=level, row=1, col=1)
+
+            # Add Signal markers
+            for sig, color, sym in [("STRONG BUY","green","triangle-up"), ("BUY","lightgreen","triangle-up"),
+                                    ("STRONG SELL","red","triangle-down"), ("SELL","orange","triangle-down")]:
+                mask = df["Signal"] == sig
+                if mask.any():
+                    fig.add_trace(go.Scatter(x=df.index[mask], y=df.loc[mask, "High" if "SELL" in sig else "Low"],
+                                             mode="markers", marker=dict(symbol=sym, color=color, size=10), name=sig), row=1, col=1)
+
+            # RSI
+            fig.add_trace(go.Scatter(x=df.index, y=df["RSI"], name="RSI", line=dict(color="orange")), row=2, col=1)
+            fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
+            fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
+
+            fig.update_layout(height=600, xaxis_rangeslider_visible=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("#### Signal Score Timeline")
+            fig_score = go.Figure(go.Bar(x=df.index, y=df["Signal_Score"], marker_color=df["Signal_Score"], marker_colorscale="RdYlGn"))
+            fig_score.update_layout(height=150, margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(fig_score, use_container_width=True)
+
+def render_macro_pro_tab(fred_key: str):
+    st.subheader("🏛 FRED Macro Dashboard (8-Grid)")
+    if not fred_key:
+        st.warning("Enter a FRED API key in the sidebar to view the macro grid.")
+        return
+
+    fred_series_map = {
+        "Fed Funds Rate": "FEDFUNDS",
+        "CPI YoY":        "CPIAUCSL",
+        "10Y Treasury":   "DGS10",
+        "2Y Treasury":    "DGS2",
+        "Unemployment":   "UNRATE",
+        "GDP Growth":     "A191RL1Q225SBEA",
+        "DXY Index":      "DTWEXBGS",
+        "VIX":            "VIXCLS",
+    }
+
+    with st.spinner("Fetching macro series..."):
+        loaded_data = {name: fetch_fred_series(sid, fred_key) for name, sid in fred_series_map.items()}
+
+    valid_data = {k: v for k, v in loaded_data.items() if v is not None and not v.empty}
+
+    if valid_data:
+        fig = make_subplots(rows=2, cols=4, subplot_titles=list(valid_data.keys()))
+        for i, (name, df) in enumerate(valid_data.items()):
+            row, col = divmod(i, 4)
+            fig.add_trace(go.Scatter(x=df["date"], y=df["value"], name=name, fill="tozeroy"), row=row+1, col=col+1)
+
+        fig.update_layout(height=400, showlegend=False, template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Macro Regime
+        st.markdown("### Macro Regime Assessment")
+        score = 0
+        notes = []
+        if "Fed Funds Rate" in valid_data:
+            val = valid_data["Fed Funds Rate"]["value"].iloc[-1]
+            if val > 4.5: notes.append("🔴 High Rates (Restrictive)"); score -= 1
+            else: notes.append("🟢 Moderate Rates"); score += 1
+
+        regime = "BULLISH 🟢" if score > 0 else ("BEARISH 🔴" if score < 0 else "NEUTRAL ⚪")
+        st.metric("Overall Macro Regime", regime)
+        for n in notes: st.write(n)
+    else:
+        st.error("Could not fetch FRED data. Please check your API key.")
+
+def render_trading_ideas_tab(data_by_timeframe: Dict):
+    st.subheader("🎯 Trading Ideas")
+    if st.button("🔄 Generate Trading Ideas", type="primary", key="gen_ideas_main"):
+        with st.spinner("Analysing pairs..."):
+            for tf in data_by_timeframe:
+                for p in data_by_timeframe[tf]:
+                    data_by_timeframe[tf][p] = analyzer.add_indicators(data_by_timeframe[tf][p])
+
+            ideas, skipped = generate_trading_ideas(data_by_timeframe)
+            st.session_state.latest_ideas = ideas
+            check_and_notify(ideas)
+
+    ideas = st.session_state.get('latest_ideas', [])
+    if ideas:
+        st.success(f"✅ Generated {len(ideas)} trading ideas")
+        for idx, idea in enumerate(ideas):
+            direction = "📈" if idea['bias'] == 'Long' else "📉"
+            header = f"### {idx+1}. {idea['pair']} — {idea['bias'].upper()} {direction}"
+
+            if idea['conviction'] == "High":
+                st.success(header + " 🔔 HIGH CONVICTION")
+            else:
+                st.info(header)
+
+            cols = st.columns(5)
+            cols[0].metric("Entry", f"{idea['entry']:.5f}")
+            cols[1].metric("TP1", f"{idea['take_profit_1']:.5f}", delta=f"R:R {idea['risk_reward_1']:.2f}")
+            cols[2].metric("TP2", f"{idea['take_profit_2']:.5f}", delta=f"R:R {idea['risk_reward_2']:.2f}")
+            cols[3].metric("Stop Loss", f"{idea['stop_loss']:.5f}")
+            risk_pct = (abs(idea["entry"] - idea["stop_loss"]) / idea["entry"]) * 100
+            cols[4].metric("Risk %", f"{risk_pct:.2f}%")
+
+            st.markdown(f"**Thesis:** {idea['thesis']}")
+            st.caption(f"Stop method: {idea['stop_loss_method']} | Distance: {idea['stop_loss_pips']} pips")
+            st.divider()
+    else:
+        st.info("No trading ideas found or button not clicked yet.")
+
 # ============================================================================
 # MAIN APPLICATION
 # ============================================================================
@@ -232,180 +516,29 @@ def main():
     if daily_data:
         render_kpis(daily_data)
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tabs = st.tabs([
         "📊 Overview",
         "🧭 MTF Matrix",
         "🌍 Macro Fundamentals",
         "📈 Technical Chart",
         "🛒 Trading View",
+        "⚡ Signal Pro",
+        "🏛 Macro Pro",
         "⏱️ 15-Min Entry",
         "🎯 Trading Ideas",
         "📅 Weekly Swing",
     ])
 
-    with tab1:
-        st.subheader("Market Overview")
-        if daily_data:
-            rows = []
-            for pair, df in daily_data.items():
-                if not df.empty:
-                    price = df['Close'].iloc[-1]
-                    change = df['Close'].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
-                    rows.append({"Pair": pair, "Price": price, "Change %": change, "Bars": len(df)})
-            st.dataframe(pd.DataFrame(rows), use_container_width=True)
-
-    with tab2:
-        st.subheader("🧭 Multi-Timeframe Matrix")
-        mtf_rows = []
-        for pair in config.assets.keys():
-            sentiments = analyzer.get_mtf_sentiment(data_by_timeframe, pair)
-            row = {"Pair": pair}
-            row.update(sentiments)
-            mtf_rows.append(row)
-
-        mtf_df = pd.DataFrame(mtf_rows).set_index("Pair")
-
-        def color_sentiment(val):
-            if val == "Bullish": return "background-color: #d4edda; color: #155724;"
-            if val == "Bearish": return "background-color: #f8d7da; color: #721c24;"
-            return ""
-
-        st.table(mtf_df.style.applymap(color_sentiment))
-
-    with tab3:
-        st.subheader("🌍 Macro Fundamentals")
-        render_macro_table(macro_data, macro_live)
-
-    with tab4:
-        st.subheader("📈 Technical Analysis Chart")
-        avail = [p for p, d in daily_data.items() if not d.empty]
-        if avail:
-            c1, c2 = st.columns(2)
-            pair = c1.selectbox("Pair", avail, key="chart_pair")
-            tf = c2.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
-            df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
-            if not df.empty:
-                df = analyzer.add_indicators(df)
-                fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3], subplot_titles=(f"{pair} — {tf}", "RSI"))
-                fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name="Price"), row=1, col=1)
-                for ma, color in [('EMA_20', 'orange'), ('EMA_50', 'blue')]:
-                    if ma in df.columns:
-                        fig.add_trace(go.Scatter(x=df.index, y=df[ma], name=ma, line=dict(color=color)), row=1, col=1)
-                if 'RSI' in df.columns:
-                    fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI", line=dict(color='purple')), row=2, col=1)
-                    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-                    fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-                fig.update_layout(height=600, xaxis_rangeslider_visible=False)
-                st.plotly_chart(fig, use_container_width=True)
-
-    with tab5:
-        st.subheader("🛒 Trading View (Pivots & Fibonacci)")
-        avail_tv = [p for p, d in daily_data.items() if not d.empty]
-        if avail_tv:
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                tv_pair = st.selectbox("Select Pair", avail_tv, key="tv_pair")
-                tv_tf = st.selectbox("Anchor Timeframe", ["Weekly", "Daily", "4 Hour"], index=1, key="tv_tf")
-
-                df_anchor = data_by_timeframe.get(tv_tf, {}).get(tv_pair, pd.DataFrame())
-                if not df_anchor.empty:
-                    pivots = analyzer.calculate_pivots(df_anchor)
-                    fibs = analyzer.calculate_fibonacci(df_anchor)
-
-                    st.markdown("### 📏 Pivot Points")
-                    for k, v in pivots.items():
-                        st.text(f"{k:5}: {v:.5f}")
-
-                    st.markdown("### 🔢 Fibonacci")
-                    for k, v in fibs.items():
-                        st.text(f"{k:6}: {v:.5f}")
-
-            with col2:
-                df_chart = data_by_timeframe.get(tv_tf, {}).get(tv_pair, pd.DataFrame())
-                if not df_chart.empty:
-                    fig = go.Figure()
-                    fig.add_trace(go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'], name="Price"))
-
-                    # Add Pivot Lines
-                    pivots = analyzer.calculate_pivots(df_chart)
-                    colors = {"R": "rgba(255,0,0,0.5)", "S": "rgba(0,128,0,0.5)", "P": "rgba(0,0,255,0.5)"}
-                    for level, val in pivots.items():
-                        color = colors.get(level[0], "blue")
-                        fig.add_hline(y=val, line_dash="dash", line_color=color, annotation_text=level)
-
-                    fig.update_layout(height=600, xaxis_rangeslider_visible=False, title=f"{tv_pair} - {tv_tf} with Pivot Points")
-                    st.plotly_chart(fig, use_container_width=True)
-
-    with tab6:
-        st.subheader("⏱️ 15-Minute Entry Signal")
-        avail_pairs = [p for p in daily_data if not daily_data[p].empty]
-        if avail_pairs:
-            pair_e = st.selectbox("Pair", avail_pairs, key="entry_pair")
-            df_15m = data_by_timeframe.get('15 Minute', {}).get(pair_e, pd.DataFrame())
-            df_d = data_by_timeframe.get('Daily', {}).get(pair_e, pd.DataFrame())
-
-            if not df_15m.empty and not df_d.empty:
-                df_d = analyzer.add_indicators(df_d)
-                di = df_d.iloc[-1]
-                adx_v = safe_get(di, "ADX", 0.0)
-                close_v = safe_get(di, "Close", 0.0)
-                ema20_v = safe_get(di, "EMA_20", close_v)
-
-                bias_v = ("Long" if close_v > ema20_v else "Short") if adx_v > config.adx_trend_min else "Neutral"
-                st.write(f"**Daily Trend Bias:** `{bias_v}` | ADX = {adx_v:.1f}")
-
-                sig = entry_generator.get_entry_signal(df_15m, bias_v)
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    if sig["signal"] == 1: st.success("### 🟢 LONG")
-                    elif sig["signal"] == -1: st.error("### 🔴 SHORT")
-                    else: st.info("### ⚪ NO SIGNAL")
-                c2.metric("Confidence", f"{sig['confidence']}/5")
-                c3.metric("Price", f"{sig.get('price', 0):.5f}")
-
-                for r in sig.get("reasons", []):
-                    st.info(f"ℹ️ {r}")
-            else:
-                st.warning("Insufficient data for 15-minute analysis")
-
-    with tab7:
-        st.subheader("🎯 Trading Ideas")
-        if st.button("🔄 Generate Trading Ideas", type="primary", key="gen_ideas_main"):
-            with st.spinner("Analysing pairs..."):
-                for tf in data_by_timeframe:
-                    for p in data_by_timeframe[tf]:
-                        data_by_timeframe[tf][p] = analyzer.add_indicators(data_by_timeframe[tf][p])
-
-                ideas, skipped = generate_trading_ideas(data_by_timeframe)
-                st.session_state.latest_ideas = ideas
-                check_and_notify(ideas)
-
-            if ideas:
-                st.success(f"✅ Generated {len(ideas)} trading ideas")
-                for idx, idea in enumerate(ideas):
-                    direction = "📈" if idea['bias'] == 'Long' else "📉"
-                    header = f"### {idx+1}. {idea['pair']} — {idea['bias'].upper()} {direction}"
-
-                    if idea['conviction'] == "High":
-                        st.success(header + " 🔔 HIGH CONVICTION")
-                    else:
-                        st.info(header)
-
-                    cols = st.columns(5)
-                    cols[0].metric("Entry", f"{idea['entry']:.5f}")
-                    cols[1].metric("TP1", f"{idea['take_profit_1']:.5f}", delta=f"R:R {idea['risk_reward_1']:.2f}")
-                    cols[2].metric("TP2", f"{idea['take_profit_2']:.5f}", delta=f"R:R {idea['risk_reward_2']:.2f}")
-                    cols[3].metric("Stop Loss", f"{idea['stop_loss']:.5f}")
-                    risk_pct = (abs(idea["entry"] - idea["stop_loss"]) / idea["entry"]) * 100
-                    cols[4].metric("Risk %", f"{risk_pct:.2f}%")
-
-                    st.markdown(f"**Thesis:** {idea['thesis']}")
-                    st.caption(f"Stop method: {idea['stop_loss_method']} | Distance: {idea['stop_loss_pips']} pips")
-                    st.divider()
-            else:
-                st.info("No trading ideas found with current market conditions.")
-
-    with tab8:
+    with tabs[0]: render_overview_tab(daily_data)
+    with tabs[1]: render_mtf_matrix_tab(data_by_timeframe)
+    with tabs[2]: render_macro_table(macro_data, macro_live)
+    with tabs[3]: render_technical_chart_tab(data_by_timeframe)
+    with tabs[4]: render_trading_view_tab(data_by_timeframe)
+    with tabs[5]: render_signal_pro_tab(data_by_timeframe)
+    with tabs[6]: render_macro_pro_tab(fred_api_key)
+    with tabs[7]: render_15m_entry_tab(data_by_timeframe)
+    with tabs[8]: render_trading_ideas_tab(data_by_timeframe)
+    with tabs[9]:
         st.subheader("📅 Weekly Swing Trading")
         st.info("Coming soon: Swing analysis based on Weekly/Daily confluence.")
 

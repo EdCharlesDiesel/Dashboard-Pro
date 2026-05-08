@@ -148,6 +148,68 @@ class TechnicalAnalyzer:
             return "Neutral"
 
     @staticmethod
+    def calculate_expanded_pivots(df: pd.DataFrame) -> dict:
+        """Calculates expanded pivot points (R1-3, S1-3, and Midpoints)."""
+        if len(df) < 2:
+            if df.empty: return {}
+            ref = df.iloc[-1]
+        else:
+            ref = df.iloc[-2]
+
+        h, l, c = ref["High"], ref["Low"], ref["Close"]
+        pp = (h + l + c) / 3
+        r1 = 2*pp - l
+        r2 = pp + (h - l)
+        r3 = h + 2*(pp - l)
+        s1 = 2*pp - h
+        s2 = pp - (h - l)
+        s3 = l - 2*(h - pp)
+
+        return {
+            "R3":r3, "M4":(r2+r3)/2, "R2":r2, "M3":(r1+r2)/2, "R1":r1,
+            "M2":(pp+r1)/2, "PP":pp, "M1":(s1+pp)/2, "S1":s1,
+            "M0":(s1+s2)/2, "S2":s2, "S3":s3,
+        }
+
+    @staticmethod
+    def generate_pro_signals(df: pd.DataFrame, pivots: dict) -> pd.DataFrame:
+        """Generates QuantConnect-style signals based on pivots, MAs, and RSI."""
+        if df.empty: return df
+        df = df.copy()
+
+        # Ensure base indicators exist
+        if "RSI" not in df.columns:
+            df["RSI"] = ta.momentum.RSIIndicator(df["Close"], window=14).rsi()
+
+        for name, period in [("MA5",5),("MA10",10),("MA20",20),("MA50",50)]:
+            if name not in df.columns:
+                df[name] = df["Close"].rolling(period).mean()
+
+        df["Signal"] = "HOLD"
+        df["Signal_Score"] = 0
+
+        if pivots and "PP" in pivots:
+            pp, r1, s1 = pivots["PP"], pivots["R1"], pivots["S1"]
+            close = df["Close"]
+
+            # Logic from provided snippet
+            buy  = (close > pp) & (close < r1) & (df["MA5"] > df["MA10"]) & (df["MA10"] > df["MA20"]) & (df["RSI"] < 70) & (close > df["MA20"])
+            sell = (close < pp) & (close > s1) & (df["MA5"] < df["MA10"]) & (df["MA10"] < df["MA20"]) & (df["RSI"] > 30) & (close < df["MA20"])
+
+            sbuy  = buy  & (close > df["MA50"]) & (df["RSI"] < 60)
+            ssell = sell & (close < df["MA50"]) & (df["RSI"] > 40)
+
+            df.loc[buy,  "Signal"] = "BUY"
+            df.loc[sbuy, "Signal"] = "STRONG BUY"
+            df.loc[sell, "Signal"] = "SELL"
+            df.loc[ssell,"Signal"] = "STRONG SELL"
+
+            scores = {"STRONG BUY":2,"BUY":1,"HOLD":0,"SELL":-1,"STRONG SELL":-2}
+            df["Signal_Score"] = df["Signal"].map(scores)
+
+        return df
+
+    @staticmethod
     def get_mtf_sentiment(data_by_tf: dict, pair: str) -> dict:
         """Aggregates sentiment across all available timeframes for a pair."""
         results = {}
