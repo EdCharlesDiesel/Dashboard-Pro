@@ -1,6 +1,7 @@
 import pandas as pd
 import yfinance as yf
 import requests
+import streamlit as st
 import logging
 from typing import Dict, Optional, Tuple
 from fredapi import Fred
