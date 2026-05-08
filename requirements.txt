@@ -7,3 +7,4 @@ ta
 fredapi
 matplotlib
 requests
+tenacity

@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+venv/
+ENV/
+*.log
+*.png
+*.jpg
+*.jpeg
+*.webm
+forex_notify_cache.json
+.streamlit/config.toml
+.streamlit/secrets.toml
