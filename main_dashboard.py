@@ -232,10 +232,12 @@ def main():
     if daily_data:
         render_kpis(daily_data)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📊 Overview",
+        "🧭 MTF Matrix",
         "🌍 Macro Fundamentals",
         "📈 Technical Chart",
+        "🛒 Trading View",
         "⏱️ 15-Min Entry",
         "🎯 Trading Ideas",
         "📅 Weekly Swing",
@@ -253,10 +255,28 @@ def main():
             st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
     with tab2:
+        st.subheader("🧭 Multi-Timeframe Matrix")
+        mtf_rows = []
+        for pair in config.assets.keys():
+            sentiments = analyzer.get_mtf_sentiment(data_by_timeframe, pair)
+            row = {"Pair": pair}
+            row.update(sentiments)
+            mtf_rows.append(row)
+
+        mtf_df = pd.DataFrame(mtf_rows).set_index("Pair")
+
+        def color_sentiment(val):
+            if val == "Bullish": return "background-color: #d4edda; color: #155724;"
+            if val == "Bearish": return "background-color: #f8d7da; color: #721c24;"
+            return ""
+
+        st.table(mtf_df.style.applymap(color_sentiment))
+
+    with tab3:
         st.subheader("🌍 Macro Fundamentals")
         render_macro_table(macro_data, macro_live)
 
-    with tab3:
+    with tab4:
         st.subheader("📈 Technical Analysis Chart")
         avail = [p for p, d in daily_data.items() if not d.empty]
         if avail:
@@ -278,7 +298,45 @@ def main():
                 fig.update_layout(height=600, xaxis_rangeslider_visible=False)
                 st.plotly_chart(fig, use_container_width=True)
 
-    with tab4:
+    with tab5:
+        st.subheader("🛒 Trading View (Pivots & Fibonacci)")
+        avail_tv = [p for p, d in daily_data.items() if not d.empty]
+        if avail_tv:
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                tv_pair = st.selectbox("Select Pair", avail_tv, key="tv_pair")
+                tv_tf = st.selectbox("Anchor Timeframe", ["Weekly", "Daily", "4 Hour"], index=1, key="tv_tf")
+
+                df_anchor = data_by_timeframe.get(tv_tf, {}).get(tv_pair, pd.DataFrame())
+                if not df_anchor.empty:
+                    pivots = analyzer.calculate_pivots(df_anchor)
+                    fibs = analyzer.calculate_fibonacci(df_anchor)
+
+                    st.markdown("### 📏 Pivot Points")
+                    for k, v in pivots.items():
+                        st.text(f"{k:5}: {v:.5f}")
+
+                    st.markdown("### 🔢 Fibonacci")
+                    for k, v in fibs.items():
+                        st.text(f"{k:6}: {v:.5f}")
+
+            with col2:
+                df_chart = data_by_timeframe.get(tv_tf, {}).get(tv_pair, pd.DataFrame())
+                if not df_chart.empty:
+                    fig = go.Figure()
+                    fig.add_trace(go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'], name="Price"))
+
+                    # Add Pivot Lines
+                    pivots = analyzer.calculate_pivots(df_chart)
+                    colors = {"R": "rgba(255,0,0,0.5)", "S": "rgba(0,128,0,0.5)", "P": "rgba(0,0,255,0.5)"}
+                    for level, val in pivots.items():
+                        color = colors.get(level[0], "blue")
+                        fig.add_hline(y=val, line_dash="dash", line_color=color, annotation_text=level)
+
+                    fig.update_layout(height=600, xaxis_rangeslider_visible=False, title=f"{tv_pair} - {tv_tf} with Pivot Points")
+                    st.plotly_chart(fig, use_container_width=True)
+
+    with tab6:
         st.subheader("⏱️ 15-Minute Entry Signal")
         avail_pairs = [p for p in daily_data if not daily_data[p].empty]
         if avail_pairs:
@@ -310,7 +368,7 @@ def main():
             else:
                 st.warning("Insufficient data for 15-minute analysis")
 
-    with tab5:
+    with tab7:
         st.subheader("🎯 Trading Ideas")
         if st.button("🔄 Generate Trading Ideas", type="primary", key="gen_ideas_main"):
             with st.spinner("Analysing pairs..."):
@@ -347,7 +405,7 @@ def main():
             else:
                 st.info("No trading ideas found with current market conditions.")
 
-    with tab6:
+    with tab8:
         st.subheader("📅 Weekly Swing Trading")
         st.info("Coming soon: Swing analysis based on Weekly/Daily confluence.")
 

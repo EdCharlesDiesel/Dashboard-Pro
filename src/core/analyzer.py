@@ -88,3 +88,75 @@ class TechnicalAnalyzer:
             logger.error("Indicator calculation error: %s", exc)
 
         return df
+
+    @staticmethod
+    def calculate_pivots(df: pd.DataFrame) -> dict:
+        """Calculates standard pivot points based on the previous period's OHLC."""
+        if len(df) < 2:
+            if df.empty: return {}
+            ref = df.iloc[-1]
+        else:
+            # Use previous completed candle for current pivots
+            ref = df.iloc[-2]
+
+        h, l, c = ref["High"], ref["Low"], ref["Close"]
+        p = (h + l + c) / 3
+        return {
+            "Pivot": p,
+            "R1": (2 * p) - l,
+            "S1": (2 * p) - h,
+            "R2": p + (h - l),
+            "S2": p - (h - l),
+            "R3": h + 2 * (p - l),
+            "S3": l - 2 * (h - p),
+        }
+
+    @staticmethod
+    def calculate_fibonacci(df: pd.DataFrame) -> dict:
+        """Calculates Fibonacci levels based on the high and low of the provided dataframe."""
+        if df.empty:
+            return {}
+        high = df["High"].max()
+        low = df["Low"].min()
+        diff = high - low
+        return {
+            "0.0%": high,
+            "23.6%": high - 0.236 * diff,
+            "38.2%": high - 0.382 * diff,
+            "50.0%": high - 0.5 * diff,
+            "61.8%": high - 0.618 * diff,
+            "78.6%": high - 0.786 * diff,
+            "100.0%": low,
+        }
+
+    @staticmethod
+    def get_sentiment(df: pd.DataFrame) -> str:
+        """Returns 'Bullish', 'Bearish', or 'Neutral' sentiment based on EMA and RSI."""
+        if df.empty or "EMA_20" not in df.columns:
+            return "Neutral"
+
+        last = df.iloc[-1]
+        close = last["Close"]
+        ema20 = last["EMA_20"]
+        rsi = last.get("RSI", 50)
+
+        if close > ema20 and rsi > 50:
+            return "Bullish"
+        elif close < ema20 and rsi < 50:
+            return "Bearish"
+        else:
+            return "Neutral"
+
+    @staticmethod
+    def get_mtf_sentiment(data_by_tf: dict, pair: str) -> dict:
+        """Aggregates sentiment across all available timeframes for a pair."""
+        results = {}
+        for tf, pairs in data_by_tf.items():
+            df = pairs.get(pair)
+            if df is not None and not df.empty:
+                # Ensure indicators are present
+                df = TechnicalAnalyzer.add_indicators(df)
+                results[tf] = TechnicalAnalyzer.get_sentiment(df)
+            else:
+                results[tf] = "N/A"
+        return results
