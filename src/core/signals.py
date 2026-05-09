@@ -107,31 +107,44 @@ class StopLossCalculator:
             return float(recent['High'].max())
         return None
 
-    def calculate(self, df: pd.DataFrame, pair: str, bias: str, current_price: float, atr: float, lookback: int = 20) -> Dict:
+    def calculate(self, df: pd.DataFrame, pair: str, bias: str, current_price: float, atr: float, pivots: dict = None, lookback: int = 20) -> Dict:
         atr_mult = config.pair_atr_multipliers.get(pair, config.atr_sl_mult)
         min_dist = config.pair_min_stop.get(pair, 0.0010)
         buffer   = atr * 0.25
 
         atr_stop = (current_price - atr * atr_mult) if bias == 'Long' else (current_price + atr * atr_mult)
         swing  = self.get_swing_stop(df, bias, lookback)
+
+        # Start with ATR as default
         stop   = atr_stop
         method = "ATR"
+
+        # Pivot-based stops
+        if pivots:
+            if bias == 'Long':
+                # Use S1 as a conservative stop if it's below current price
+                s1 = pivots.get("S1")
+                if s1 and s1 < current_price:
+                    stop, method = s1, "Pivot S1"
+            else:
+                # Use R1 as a conservative stop if it's above current price
+                r1 = pivots.get("R1")
+                if r1 and r1 > current_price:
+                    stop, method = r1, "Pivot R1"
 
         if swing is not None:
             if bias == 'Long':
                 struct_stop = swing - buffer
                 if struct_stop < current_price:
-                    if struct_stop <= atr_stop:
+                    # Prefer swing low if it's more conservative than pivot/ATR
+                    if struct_stop < stop:
                         stop, method = struct_stop, "Swing Low"
-                    else:
-                        stop, method = atr_stop, "ATR (struct too tight)"
             else:
                 struct_stop = swing + buffer
                 if struct_stop > current_price:
-                    if struct_stop >= atr_stop:
+                    # Prefer swing high if it's more conservative than pivot/ATR
+                    if struct_stop > stop:
                         stop, method = struct_stop, "Swing High"
-                    else:
-                        stop, method = atr_stop, "ATR (struct too tight)"
 
         raw_dist = abs(current_price - stop)
         if raw_dist < min_dist:
@@ -155,34 +168,54 @@ class TakeProfitCalculator:
             return float(recent['Low'].min())
         return None
 
-    def calculate(self, df: pd.DataFrame, pair: str, bias: str, current_price: float, atr: float, stop_loss: float, lookback: int = 20) -> Dict:
+    def calculate(self, df: pd.DataFrame, pair: str, bias: str, current_price: float, atr: float, stop_loss: float, pivots: dict = None, lookback: int = 20) -> Dict:
         stop_dist = abs(current_price - stop_loss) or atr
         swing     = self.get_swing_target(df, bias, lookback)
 
         if bias == 'Long':
-            tp1_atr = current_price + atr * config.tp1_atr_mult
-            tp2_atr = current_price + atr * config.tp2_atr_mult
-            if swing is not None and current_price < swing < tp1_atr:
-                tp1, m1 = swing, "Swing High"
-            else:
-                tp1, m1 = tp1_atr, f"ATR ×{config.tp1_atr_mult}"
-            if swing is not None and tp1 < swing < tp2_atr:
-                tp2, m2 = swing, "Swing High (ext)"
-            else:
-                tp2, m2 = tp2_atr, f"ATR ×{config.tp2_atr_mult}"
+            tp1 = current_price + atr * config.tp1_atr_mult
+            m1  = f"ATR ×{config.tp1_atr_mult}"
+            tp2 = current_price + atr * config.tp2_atr_mult
+            m2  = f"ATR ×{config.tp2_atr_mult}"
+
+            if pivots:
+                r1, r2, r3 = pivots.get("R1"), pivots.get("R2"), pivots.get("R3")
+                if r1 and r1 > current_price:
+                    tp1, m1 = r1, "Pivot R1"
+                if r2 and r2 > tp1:
+                    tp2, m2 = r2, "Pivot R2"
+                elif r3 and r3 > tp1:
+                    tp2, m2 = r3, "Pivot R3"
+
+            if swing is not None:
+                if tp1 < swing < tp2:
+                    tp2, m2 = swing, "Swing High"
+                elif swing > tp2:
+                    tp2, m2 = swing, "Swing High (ext)"
+
             rr1 = (tp1 - current_price) / stop_dist
             rr2 = (tp2 - current_price) / stop_dist
         else:
-            tp1_atr = current_price - atr * config.tp1_atr_mult
-            tp2_atr = current_price - atr * config.tp2_atr_mult
-            if swing is not None and tp1_atr < swing < current_price:
-                tp1, m1 = swing, "Swing Low"
-            else:
-                tp1, m1 = tp1_atr, f"ATR ×{config.tp1_atr_mult}"
-            if swing is not None and tp2_atr < swing < tp1:
-                tp2, m2 = swing, "Swing Low (ext)"
-            else:
-                tp2, m2 = tp2_atr, f"ATR ×{config.tp2_atr_mult}"
+            tp1 = current_price - atr * config.tp1_atr_mult
+            m1  = f"ATR ×{config.tp1_atr_mult}"
+            tp2 = current_price - atr * config.tp2_atr_mult
+            m2  = f"ATR ×{config.tp2_atr_mult}"
+
+            if pivots:
+                s1, s2, s3 = pivots.get("S1"), pivots.get("S2"), pivots.get("S3")
+                if s1 and s1 < current_price:
+                    tp1, m1 = s1, "Pivot S1"
+                if s2 and s2 < tp1:
+                    tp2, m2 = s2, "Pivot S2"
+                elif s3 and s3 < tp1:
+                    tp2, m2 = s3, "Pivot S3"
+
+            if swing is not None:
+                if tp2 < swing < tp1:
+                    tp2, m2 = swing, "Swing Low"
+                elif swing < tp2:
+                    tp2, m2 = swing, "Swing Low (ext)"
+
             rr1 = (current_price - tp1) / stop_dist
             rr2 = (current_price - tp2) / stop_dist
 
@@ -286,8 +319,11 @@ def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: 
     if current_price <= 0.0:
         return None
 
-    sl_result = sl_calculator.calculate(df_1h, pair_name, final_bias, current_price, atr)
-    tp_result = tp_calculator.calculate(df_4h, pair_name, final_bias, current_price, atr, sl_result["stop"])
+    # Calculate Daily Pivots for SL/TP
+    pivots = analyzer.calculate_expanded_pivots(df_daily)
+
+    sl_result = sl_calculator.calculate(df_1h, pair_name, final_bias, current_price, atr, pivots=pivots)
+    tp_result = tp_calculator.calculate(df_4h, pair_name, final_bias, current_price, atr, sl_result["stop"], pivots=pivots)
 
     thesis = " | ".join(reasons)
     if entry_signal and entry_signal['signal'] != 0:
