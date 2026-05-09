@@ -77,20 +77,27 @@ def check_and_notify(ideas: List[Dict]) -> List[Dict]:
     new_alerts: List[Dict] = []
 
     for idea in ideas:
-        if idea['conviction'] != 'High':
+        # Check for High conviction or high score (>=8)
+        if idea['conviction'] != 'High' and idea.get('strength_score', 0) < 8:
             continue
-        key = f"{idea['pair']}_{idea['bias']}"
+
+        # Unique key based on pair, bias AND entry price (to allow new alerts for the same pair if price moved)
+        # Use rounded price to avoid jitter
+        price_key = f"{idea['entry']:.4f}"
+        key = f"{idea['pair']}_{idea['bias']}_{price_key}"
+
         if key not in st.session_state.notified_keys:
             st.session_state.notified_keys.add(key)
             new_alerts.append(idea)
 
-    save_notified_keys(st.session_state.notified_keys)
+    if new_alerts:
+        save_notified_keys(st.session_state.notified_keys)
 
     for idea in new_alerts:
         direction = "📈 LONG" if idea['bias'] == 'Long' else "📉 SHORT"
         st.toast(
-            f"🚨 HIGH CONVICTION\n{idea['pair']} {direction}\n"
-            f"Entry {idea['entry']:.5f} | R:R 1:{idea['risk_reward_1']:.2f}",
+            f"🚨 NEW SIGNAL: {idea['pair']} {direction}\n"
+            f"Score: {idea['strength_score']}/10 | Entry: {idea['entry']:.5f}",
             icon="🔔",
         )
         st.session_state.notification_log.append({
@@ -135,19 +142,16 @@ def clear_data_cache() -> None:
 # ============================================================================
 # UI COMPONENTS
 # ============================================================================
-def render_sidebar(default_key: str) -> Tuple[str, str]:
+def render_sidebar() -> str:
     with st.sidebar:
         st.header("⚙️ Dashboard Settings")
 
-        st.subheader("🔑 FRED API Key")
-        fred_api_key = st.text_input(
-            "API Key", value=default_key, type="password",
-            help="Free key at https://fred.stlouisfed.org/docs/api/api_key.html",
-        )
+        # Sidebar FRED key removal - now read from .env/secrets
+        fred_api_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
         if fred_api_key:
-            st.success("✅ FRED key loaded")
+            st.success("✅ FRED API Key loaded from environment")
         else:
-            st.warning("⚠️ No key — using static fallback data")
+            st.error("❌ FRED API Key missing in environment")
 
         st.divider()
 
@@ -182,7 +186,7 @@ def render_sidebar(default_key: str) -> Tuple[str, str]:
         else:
             st.caption("No alerts yet.")
 
-    return selected_tf, fred_api_key
+    return selected_tf
 
 def render_kpis(daily_data: Dict) -> None:
     kpi_pairs = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "XAU/USD", "BTC/USD"]
@@ -460,20 +464,23 @@ def render_trading_ideas_tab(data_by_timeframe: Dict):
         st.success(f"✅ Generated {len(ideas)} trading ideas")
         for idx, idea in enumerate(ideas):
             direction = "📈" if idea['bias'] == 'Long' else "📉"
-            header = f"### {idx+1}. {idea['pair']} — {idea['bias'].upper()} {direction}"
+            color = "green" if idea['bias'] == 'Long' else "red"
+            header = f"### {idx+1}. {idea['pair']} — <span style='color:{color}'>{idea['bias'].upper()} {direction}</span>"
 
             if idea['conviction'] == "High":
-                st.success(header + " 🔔 HIGH CONVICTION")
+                st.markdown(f"{header} <span style='background-color:#ffd700; color:black; padding:2px 6px; border-radius:3px;'>🔔 HIGH CONVICTION</span>", unsafe_allow_html=True)
             else:
-                st.info(header)
+                st.markdown(header, unsafe_allow_html=True)
 
-            cols = st.columns(5)
+            cols = st.columns(6)
             cols[0].metric("Entry", f"{idea['entry']:.5f}")
             cols[1].metric("TP1", f"{idea['take_profit_1']:.5f}", delta=f"R:R {idea['risk_reward_1']:.2f}")
             cols[2].metric("TP2", f"{idea['take_profit_2']:.5f}", delta=f"R:R {idea['risk_reward_2']:.2f}")
             cols[3].metric("Stop Loss", f"{idea['stop_loss']:.5f}")
-            risk_pct = (abs(idea["entry"] - idea["stop_loss"]) / idea["entry"]) * 100
-            cols[4].metric("Risk %", f"{risk_pct:.2f}%")
+
+            # Show Scoring and Confidence 1-10
+            cols[4].metric("Score", f"{idea['strength_score']}/10")
+            cols[5].metric("Confidence", f"{idea['confidence']}/10")
 
             st.markdown(f"**Thesis:** {idea['thesis']}")
             st.caption(f"Stop method: {idea['stop_loss_method']} | Distance: {idea['stop_loss_pips']} pips")
@@ -489,10 +496,9 @@ def main():
 
     init_notification_state()
 
-    # Get default FRED key
-    default_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
+    fred_api_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
 
-    selected_tf, fred_api_key = render_sidebar(default_key)
+    selected_tf = render_sidebar()
 
     if not st.session_state.data_loaded:
         with st.spinner("Loading market data…"):
@@ -504,6 +510,17 @@ def main():
     macro_data, macro_live = get_macro_data(fred_api_key)
 
     data_by_timeframe = st.session_state.data_by_timeframe
+
+    # BACKGROUND ALERT ENGINE
+    # This ensures high-conviction ideas are checked even if the user is on another tab
+    if st.session_state.data_loaded:
+        # Check every 5 minutes (config.cache_ttl)
+        # We don't want to re-run heavy analysis on every interaction,
+        # but we do want to ensure ideas are processed.
+        # If latest_ideas exists, we re-verify notifications.
+        ideas = st.session_state.get('latest_ideas', [])
+        if ideas:
+            check_and_notify(ideas)
 
     daily_data = data_by_timeframe.get('Daily', {})
     if daily_data:

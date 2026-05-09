@@ -308,6 +308,11 @@ def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: 
     else:
         return None
 
+    # Scoring/Confidence logic (1-10)
+    # Based on about 8-10 possible points in the reasons above
+    normalized_score = min(int(strength * 1.25), 10)
+    confidence = min(int(strength * 1.1), 10)
+
     conviction   = "High" if strength >= 6 else ("Medium" if strength >= 3 else "Low")
     entry_signal = entry_generator.get_entry_signal(df_15m, final_bias)
 
@@ -333,7 +338,8 @@ def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: 
         "pair":             pair_name,
         "bias":             final_bias,
         "conviction":       conviction,
-        "strength_score":   strength,
+        "strength_score":   normalized_score,
+        "confidence":       confidence,
         "thesis":           thesis,
         "entry":            current_price,
         "take_profit_1":    tp_result["tp1"],
