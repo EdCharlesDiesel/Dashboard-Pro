@@ -125,6 +125,7 @@ def _yoy_pct(series: pd.Series) -> Optional[float]:
     vals = (clean.pct_change(12) * 100).dropna()
     return float(vals.iloc[-1]) if not vals.empty else None
 
+@st.cache_data(ttl=3600)
 def get_macro_data(api_key: str) -> Tuple[Dict[str, Dict[str, float]], bool]:
     if not api_key:
         return MACRO_FALLBACKS.copy(), False

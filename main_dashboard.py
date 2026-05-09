@@ -490,27 +490,20 @@ def main():
     init_notification_state()
 
     # Get default FRED key
-    default_key = ""
-    try:
-        if hasattr(st, "secrets") and "FRED_API_KEY" in st.secrets:
-            default_key = st.secrets["FRED_API_KEY"]
-        else:
-            default_key = os.environ.get("FRED_API_KEY", "")
-    except Exception:
-        pass
+    default_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
 
     selected_tf, fred_api_key = render_sidebar(default_key)
 
     if not st.session_state.data_loaded:
         with st.spinner("Loading market data…"):
             st.session_state.data_by_timeframe = load_all_market_data()
-            st.session_state.macro_data, st.session_state.macro_live = get_macro_data(fred_api_key)
             st.session_state.data_loaded = True
             st.session_state.last_refresh = datetime.now()
 
+    # Get macro data reactively based on FRED key in sidebar
+    macro_data, macro_live = get_macro_data(fred_api_key)
+
     data_by_timeframe = st.session_state.data_by_timeframe
-    macro_data = st.session_state.macro_data
-    macro_live = st.session_state.macro_live
 
     daily_data = data_by_timeframe.get('Daily', {})
     if daily_data:
