@@ -3,6 +3,8 @@ import logging
 import ta
 
 logger = logging.getLogger("ForexDashboard")
+
+
 class TechnicalAnalyzer:
     RSI_WINDOW = 14
     MACD_FAST = 12
@@ -32,7 +34,10 @@ class TechnicalAnalyzer:
 
     @staticmethod
     def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty or len(df) < TechnicalAnalyzer.BB_WINDOW:
+        # EMA_50 is the slowest indicator — it needs at least EMA_LONG_WINDOW bars to produce
+        # a non-NaN value. BB_WINDOW (20) was previously used here but would silently produce
+        # all-NaN EMA_50 columns on timeframes with limited history (e.g. Weekly at "3mo").
+        if df.empty or len(df) < TechnicalAnalyzer.EMA_LONG_WINDOW:
             return df
         if not all(c in df.columns for c in TechnicalAnalyzer.REQUIRED_COLUMNS):
             logger.warning("Missing required OHLC columns for indicator calculation")

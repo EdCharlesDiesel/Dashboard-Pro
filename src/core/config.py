@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict
+
+
 @dataclass
 class AppConfig:
     """Application configuration — all tuneable parameters in one place."""
@@ -20,7 +22,7 @@ class AppConfig:
     })
 
     timeframes: Dict[str, Dict] = field(default_factory=lambda: {
-        "Weekly": {"interval": "1wk", "period": "3mo"},
+        "Weekly": {"interval": "1wk", "period": "2y"},   # ~104 bars — enough for EMA50, BB, ADX etc.
         "Daily": {"interval": "1d", "period": "3mo"},
         "4 Hour": {"interval": "4h", "period": "1mo"},
         "Hourly": {"interval": "1h", "period": "1mo"},
