@@ -1,0 +1,10 @@
+streamlit
+plotly
+pandas
+numpy
+yfinance
+ta
+fredapi
+matplotlib
+requests
+tenacity
