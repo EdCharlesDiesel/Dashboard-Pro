@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import warnings
 from src.core.analyzer import TechnicalAnalyzer as analyzer
+from src.core.config import CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
+
 warnings.filterwarnings("ignore")
 
 # ─── PAGE CONFIG ──────────────────────────────────────────────────────────────
@@ -218,16 +220,15 @@ def build_chart(df_tf, bias, levels, tf_label, show_ema, show_bb, show_sessions,
         x=df_tf["datetime"],
         open=df_tf["Open"], high=df_tf["High"],
         low=df_tf["Low"], close=df_tf["Close"],
-        increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
-        name="Price", showlegend=False,
+        name="Price", showlegend=False, **CANDLE_STYLE,
     ), row=1, col=1)
 
     if show_ema:
-        for col, color in [("EMA_20", "#ff9800"), ("EMA_50", "#ab47bc")]:
+        for col, color in EMA_COLORS.items():
             if col in df_tf.columns:
                 fig.add_trace(
-                    go.Scatter(x=df_tf["datetime"], y=df_tf[col], line=dict(color=color, width=1.2), name=col), row=1,
-                    col=1)
+                    go.Scatter(x=df_tf["datetime"], y=df_tf[col],
+                               line=dict(color=color, width=1.4), name=col), row=1, col=1)
 
     if show_bb:
         bb_styles = [("BB_Upper", "#4fc3f7", "dot"), ("BB_Middle", "#90a4ae", "solid"), ("BB_Lower", "#4fc3f7", "dot")]
@@ -261,15 +262,16 @@ def build_chart(df_tf, bias, levels, tf_label, show_ema, show_bb, show_sessions,
     # RSI
     if "RSI" in df_tf.columns:
         fig.add_trace(
-            go.Scatter(x=df_tf["datetime"], y=df_tf["RSI"], line=dict(color="#7986cb", width=1.5), name="RSI"), row=2,
-            col=1)
+            go.Scatter(x=df_tf["datetime"], y=df_tf["RSI"], line=RSI_LINE, name="RSI"), row=2, col=1)
+        fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
+        fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
 
     # MACD
     if "MACD" in df_tf.columns:
-        fig.add_trace(go.Bar(x=df_tf["datetime"], y=df_tf["MACD_Histogram"], name="MACD Hist"), row=3, col=1)
+        fig.add_trace(go.Bar(x=df_tf["datetime"], y=df_tf["MACD_Histogram"], name="MACD Hist",
+                             marker_color="#7986cb"), row=3, col=1)
 
-    fig.update_layout(height=720, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font=dict(color="#c0c0c0", size=11),
-                      xaxis_rangeslider_visible=False)
+    fig.update_layout(height=720, **CHART_LAYOUT)
     return fig
 
 

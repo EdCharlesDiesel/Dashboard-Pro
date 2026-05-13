@@ -1,4 +1,7 @@
-
+"""
+Trading Signal Dashboard
+Pivot Points + FRED Macro Data + Yahoo Finance Prices + QuantConnect-style signals
+"""
 
 import streamlit as st
 import pandas as pd
@@ -66,6 +69,26 @@ TIMEFRAMES = {
 }
 
 PIVOT_LOOKBACKS = {"Daily":"1d","Weekly":"1wk","Monthly":"1mo"}
+
+# ─── Shared chart style ───────────────────────────────────────────────────────
+CANDLE_STYLE = dict(
+    increasing_fillcolor="#1a4d2e",
+    increasing_line_color="#26a69a",
+    decreasing_fillcolor="#4d1a22",
+    decreasing_line_color="#ef5350",
+    line_width=1,
+)
+CHART_LAYOUT = dict(
+    plot_bgcolor="#0a0e17",
+    paper_bgcolor="#0a0e17",
+    font=dict(color="#c0c0c0", size=11),
+    xaxis_rangeslider_visible=False,
+    hovermode="x unified",
+)
+EMA_COLORS = {"EMA_20": "#ff9800", "EMA_50": "#ab47bc"}
+RSI_LINE = dict(color="#7986cb", width=1.5)
+RSI_OB   = dict(dash="dot", color="#ef5350", width=1)
+RSI_OS   = dict(dash="dot", color="#26a69a", width=1)
 
 
 # ── Pivot calculation ─────────────────────────────────────────────────────────
@@ -172,16 +195,13 @@ def build_chart(df, pivots, symbol, show_vol):
 
     fig.add_trace(go.Candlestick(
         x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
-        name="Price",
-        increasing_fillcolor="#1a4d2e", increasing_line_color="#4af0c4",
-        decreasing_fillcolor="#4d1a22", decreasing_line_color="#f04a6a",
-        line_width=1,
+        name="Price", **CANDLE_STYLE,
     ), row=1, col=1)
 
-    for col, color, width in [("MA5","#ffffff",1.2),("MA10","#e05050",1.5),("MA20","#5090e0",1.8),("MA50","#50c878",2.2)]:
+    for col, color in EMA_COLORS.items():
         if col in df.columns:
             fig.add_trace(go.Scatter(x=df.index, y=df[col], name=col,
-                                     line=dict(color=color, width=width), opacity=0.85), row=1, col=1)
+                                     line=dict(color=color, width=1.4), opacity=0.85), row=1, col=1)
 
     if pivots:
         pivot_style = {
@@ -218,10 +238,10 @@ def build_chart(df, pivots, symbol, show_vol):
     rsi_row = 3 if show_vol else 2
     if "RSI" in df.columns:
         fig.add_trace(go.Scatter(x=df.index, y=df["RSI"], name="RSI",
-                                  line=dict(color="#f0a030", width=1.2),
-                                  fill="tozeroy", fillcolor="rgba(240,160,48,0.07)"), row=rsi_row, col=1)
-        for lvl, col in [(70,"rgba(240,80,80,0.4)"),(30,"rgba(74,240,196,0.4)")]:
-            fig.add_hline(y=lvl, line_dash="dot", line_color=col, line_width=1, row=rsi_row, col=1)
+                                  line=RSI_LINE,
+                                  fill="tozeroy", fillcolor="rgba(121,134,203,0.07)"), row=rsi_row, col=1)
+        for lvl, line in [(70, RSI_OB), (30, RSI_OS)]:
+            fig.add_hline(y=lvl, line=line, row=rsi_row, col=1)
 
     if show_vol and "Volume" in df.columns:
         colors_vol = ["#1a4d2e" if c >= o else "#4d1a22" for c,o in zip(df["Close"], df["Open"])]
@@ -229,14 +249,13 @@ def build_chart(df, pivots, symbol, show_vol):
                               marker_color=colors_vol, opacity=0.7), row=2, col=1)
 
     fig.update_layout(
-        template="plotly_dark", paper_bgcolor="#0a0e17", plot_bgcolor="#0a0e17",
-        font=dict(family="JetBrains Mono", size=10, color="#8899bb"),
+        height=640,
         title=dict(text=f"<b>{symbol}</b>  Pivot Signal Dashboard",
                    font=dict(size=16, color="#e0e8ff", family="Syne"), x=0.01),
         legend=dict(bgcolor="#0d1220", bordercolor="#1e2d45", borderwidth=1,
                     font=dict(size=9), orientation="h", x=0, y=1.02),
-        xaxis_rangeslider_visible=False, hovermode="x unified",
-        margin=dict(l=10, r=90, t=50, b=10), height=640,
+        margin=dict(l=10, r=90, t=50, b=10),
+        **CHART_LAYOUT,
     )
     for i in range(1, rows+1):
         fig.update_xaxes(gridcolor="#1e2d45", zeroline=False, showspikes=True,

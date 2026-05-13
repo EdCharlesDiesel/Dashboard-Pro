@@ -59,3 +59,38 @@ class AppConfig:
 
 
 default_config = AppConfig()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared chart style constants
+# Import these in every file that builds a Plotly chart so all charts look
+# identical across the application.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Candlestick colours — dark fill with coloured wick/border
+CANDLE_STYLE = dict(
+    increasing_fillcolor="#1a4d2e",   # dark green body
+    increasing_line_color="#26a69a",  # teal wick/border
+    decreasing_fillcolor="#4d1a22",   # dark red body
+    decreasing_line_color="#ef5350",  # red wick/border
+    line_width=1,
+)
+
+# Dark chart background applied via fig.update_layout(**CHART_LAYOUT)
+CHART_LAYOUT = dict(
+    plot_bgcolor="#0e1117",
+    paper_bgcolor="#0e1117",
+    font=dict(color="#c0c0c0", size=11),
+    xaxis_rangeslider_visible=False,
+    hovermode="x unified",
+)
+
+# EMA overlay colours
+EMA_COLORS = {
+    "EMA_20": "#ff9800",   # amber
+    "EMA_50": "#ab47bc",   # purple
+}
+
+# RSI line style
+RSI_LINE   = dict(color="#7986cb", width=1.5)
+RSI_OB     = dict(dash="dot", color="#ef5350", width=1)   # overbought (70)
+RSI_OS     = dict(dash="dot", color="#26a69a", width=1)   # oversold  (30)

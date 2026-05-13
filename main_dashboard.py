@@ -9,7 +9,7 @@ import logging
 import traceback
 from typing import Dict, Tuple, List, Optional
 
-from src.core.config import default_config as config
+from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
 from src.core.signals import generate_trading_ideas, safe_get, entry_generator
@@ -268,15 +268,14 @@ def render_technical_chart_tab(data_by_timeframe: Dict):
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3],
                                 subplot_titles=(f"{pair} — {tf}", "RSI"))
             fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-                                         name="Price"), row=1, col=1)
-            for ma, color in [('EMA_20', 'orange'), ('EMA_50', 'blue')]:
-                if ma in df.columns:
-                    fig.add_trace(go.Scatter(x=df.index, y=df[ma], name=ma, line=dict(color=color)), row=1, col=1)
+                                         name="Price", **CANDLE_STYLE), row=1, col=1)
+            for ma, color in [(k, v) for k, v in EMA_COLORS.items() if k in df.columns]:
+                fig.add_trace(go.Scatter(x=df.index, y=df[ma], name=ma, line=dict(color=color, width=1.4)), row=1, col=1)
             if 'RSI' in df.columns:
-                fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI", line=dict(color='purple')), row=2, col=1)
-                fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-                fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
-            fig.update_layout(height=600, xaxis_rangeslider_visible=False)
+                fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI", line=RSI_LINE), row=2, col=1)
+                fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
+                fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
+            fig.update_layout(height=600, **CHART_LAYOUT)
             st.plotly_chart(fig, use_container_width=True)
 
 
@@ -308,18 +307,18 @@ def render_trading_view_tab(data_by_timeframe: Dict):
             if not df_chart.empty:
                 fig = go.Figure()
                 fig.add_trace(
-                    go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'],
-                                   close=df_chart['Close'], name="Price"))
+                    go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'],
+                                   low=df_chart['Low'], close=df_chart['Close'],
+                                   name="Price", **CANDLE_STYLE))
 
                 # Add Pivot Lines
                 pivots = analyzer.calculate_pivots(df_chart)
-                colors = {"R": "rgba(255,0,0,0.5)", "S": "rgba(0,128,0,0.5)", "P": "rgba(0,0,255,0.5)"}
+                colors = {"R": "rgba(239,83,80,0.5)", "S": "rgba(38,166,154,0.5)", "P": "rgba(200,200,200,0.5)"}
                 for level, val in pivots.items():
-                    color = colors.get(level[0], "blue")
-                    fig.add_hline(y=val, line_dash="dash", line_color=color, annotation_text=level)
+                    color = colors.get(level[0], "rgba(200,200,200,0.5)")
+                    fig.add_hline(y=val, line_dash="dot", line_color=color, annotation_text=level)
 
-                fig.update_layout(height=600, xaxis_rangeslider_visible=False,
-                                  title=f"{tv_pair} - {tv_tf} with Pivot Points")
+                fig.update_layout(height=600, title=f"{tv_pair} - {tv_tf} with Pivot Points", **CHART_LAYOUT)
                 st.plotly_chart(fig, use_container_width=True)
 
 
@@ -389,21 +388,20 @@ def render_signal_pro_tab(data_by_timeframe: Dict):
             m3.metric("RSI", f"{rsi_val:.1f}")
             m4.metric("PP Level", f"{pivots['PP']:.5f}")
 
-            # Chart
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3])
             fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-                                         name="Price"), row=1, col=1)
+                                         name="Price", **CANDLE_STYLE), row=1, col=1)
 
             # Add Pivot Lines
-            colors = {"R": "rgba(255,0,0,0.3)", "S": "rgba(0,128,0,0.3)", "P": "rgba(0,0,255,0.3)"}
+            colors = {"R": "rgba(239,83,80,0.3)", "S": "rgba(38,166,154,0.3)", "P": "rgba(200,200,200,0.3)"}
             for level, val in pivots.items():
                 if level in ["PP", "R1", "S1", "R2", "S2", "R3", "S3"]:
-                    color = colors.get(level[0], "blue")
-                    fig.add_hline(y=val, line_dash="dash", line_color=color, annotation_text=level, row=1, col=1)
+                    color = colors.get(level[0], "rgba(200,200,200,0.3)")
+                    fig.add_hline(y=val, line_dash="dot", line_color=color, annotation_text=level, row=1, col=1)
 
             # Add Signal markers
-            for sig, color, sym in [("STRONG BUY", "green", "triangle-up"), ("BUY", "lightgreen", "triangle-up"),
-                                    ("STRONG SELL", "red", "triangle-down"), ("SELL", "orange", "triangle-down")]:
+            for sig, color, sym in [("STRONG BUY", "#26a69a", "triangle-up"), ("BUY", "#66bb6a", "triangle-up"),
+                                    ("STRONG SELL", "#ef5350", "triangle-down"), ("SELL", "#ffa726", "triangle-down")]:
                 mask = df["Signal"] == sig
                 if mask.any():
                     fig.add_trace(go.Scatter(x=df.index[mask], y=df.loc[mask, "High" if "SELL" in sig else "Low"],
@@ -411,11 +409,11 @@ def render_signal_pro_tab(data_by_timeframe: Dict):
                                   row=1, col=1)
 
             # RSI
-            fig.add_trace(go.Scatter(x=df.index, y=df["RSI"], name="RSI", line=dict(color="orange")), row=2, col=1)
-            fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
-            fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df["RSI"], name="RSI", line=RSI_LINE), row=2, col=1)
+            fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
+            fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
 
-            fig.update_layout(height=600, xaxis_rangeslider_visible=False)
+            fig.update_layout(height=600, **CHART_LAYOUT)
             st.plotly_chart(fig, use_container_width=True)
 
             st.markdown("#### Signal Score Timeline")
@@ -561,7 +559,7 @@ def main():
 
     tabs = st.tabs([
         "📊 Overview",
-        "🧭 Multi-time-frame Matrix",
+        "🧭 MTF Matrix",
         "🌍 Macro Fundamentals",
         "📈 Technical Chart",
         "🛒 Trading View",
