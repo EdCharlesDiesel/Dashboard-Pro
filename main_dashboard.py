@@ -472,49 +472,80 @@ def render_macro_pro_tab(fred_key: str):
         st.error("Could not fetch FRED data. Please check your API key.")
 
 
-def render_trading_ideas_tab(data_by_timeframe: Dict):
-    st.subheader("🎯 Trading Ideas")
-    if st.button("🔄 Generate Trading Ideas", type="primary", key="gen_ideas_main"):
-        with st.spinner("Analysing pairs..."):
-            for tf in data_by_timeframe:
-                for p in data_by_timeframe[tf]:
-                    data_by_timeframe[tf][p] = analyzer.add_indicators(data_by_timeframe[tf][p])
+@st.fragment(run_every=300)
+def render_trading_ideas_tab():
+    """
+    Decorated with @st.fragment(run_every=300) so Streamlit re-executes this
+    block automatically every 5 minutes without re-running the full page.
+    Reads data from session_state so each auto-run picks up the current dataset.
+    """
+    st.subheader("🎯 Live Trading Ideas")
 
-            ideas, skipped = generate_trading_ideas(data_by_timeframe)
-            st.session_state.latest_ideas = ideas
-            check_and_notify(ideas)
+    data = st.session_state.get("data_by_timeframe", {})
+    if not data:
+        st.warning("Market data not loaded yet — waiting for initial fetch.")
+        return
 
-    ideas = st.session_state.get('latest_ideas', [])
-    if ideas:
-        st.success(f"✅ Generated {len(ideas)} trading ideas")
-        for idx, idea in enumerate(ideas):
-            direction = "📈" if idea['bias'] == 'Long' else "📉"
-            color = "green" if idea['bias'] == 'Long' else "red"
-            header = f"### {idx + 1}. {idea['pair']} — <span style='color:{color}'>{idea['bias'].upper()} {direction}</span>"
+    # ── Run analysis ─────────────────────────────────────────────────────────
+    with st.spinner("Scanning all pairs…"):
+        for tf in data:
+            for p in data[tf]:
+                if not data[tf][p].empty:
+                    data[tf][p] = analyzer.add_indicators(data[tf][p])
 
-            if idea['conviction'] == "High":
-                st.markdown(
-                    f"{header} <span style='background-color:#ffd700; color:black; padding:2px 6px; border-radius:3px;'>🔔 HIGH CONVICTION</span>",
-                    unsafe_allow_html=True)
-            else:
-                st.markdown(header, unsafe_allow_html=True)
+        ideas, skipped = generate_trading_ideas(data)
+        st.session_state.latest_ideas = ideas
+        check_and_notify(ideas)
 
-            cols = st.columns(6)
-            cols[0].metric("Entry", f"{idea['entry']:.5f}")
-            cols[1].metric("TP1", f"{idea['take_profit_1']:.5f}", delta=f"R:R {idea['risk_reward_1']:.2f}")
-            cols[2].metric("TP2", f"{idea['take_profit_2']:.5f}", delta=f"R:R {idea['risk_reward_2']:.2f}")
-            cols[3].metric("Stop Loss", f"{idea['stop_loss']:.5f}")
+    # ── Header row ────────────────────────────────────────────────────────────
+    now = datetime.now()
+    h_left, h_right = st.columns([3, 1])
+    h_left.caption(
+        f"🕐 Last scanned: **{now.strftime('%H:%M:%S')}**  ·  "
+        f"Auto-refreshes every 5 min"
+    )
+    if skipped:
+        h_right.caption(f"⚠️ {len(skipped)} pairs skipped")
 
-            cols[4].metric("Multi-TF Score", f"{idea['strength_score']}/10",
-                           help="Multi-timeframe alignment strength")
-            cols[5].metric("Entry Quality", f"{idea['confidence']}/10",
-                           help="15-min entry trigger confidence (Stoch, RSI, BB)")
+    if not ideas:
+        st.info("No qualifying setups found on this scan. Next scan in 5 min.")
+        return
 
-            st.markdown(f"**Thesis:** {idea['thesis']}")
-            st.caption(f"Stop method: {idea['stop_loss_method']} | Distance: {idea['stop_loss_pips']} pips")
-            st.divider()
-    else:
-        st.info("No trading ideas found or button not clicked yet.")
+    st.success(f"✅ {len(ideas)} setup{'s' if len(ideas) != 1 else ''} found")
+
+    for idx, idea in enumerate(ideas):
+        direction = "📈" if idea["bias"] == "Long" else "📉"
+        color     = "green" if idea["bias"] == "Long" else "red"
+        header    = (f"### {idx + 1}. {idea['pair']} — "
+                     f"<span style='color:{color}'>{idea['bias'].upper()} {direction}</span>")
+
+        if idea["conviction"] == "High":
+            st.markdown(
+                f"{header} &nbsp;"
+                f"<span style='background:#ffd700;color:#000;padding:2px 8px;"
+                f"border-radius:3px;font-size:12px'>🔔 HIGH CONVICTION</span>",
+                unsafe_allow_html=True)
+        else:
+            st.markdown(header, unsafe_allow_html=True)
+
+        cols = st.columns(6)
+        cols[0].metric("Entry",          f"{idea['entry']:.5f}")
+        cols[1].metric("TP1",            f"{idea['take_profit_1']:.5f}",
+                       delta=f"R:R {idea['risk_reward_1']:.2f}")
+        cols[2].metric("TP2",            f"{idea['take_profit_2']:.5f}",
+                       delta=f"R:R {idea['risk_reward_2']:.2f}")
+        cols[3].metric("Stop Loss",      f"{idea['stop_loss']:.5f}")
+        cols[4].metric("Multi-TF Score", f"{idea['strength_score']}/10",
+                       help="Multi-timeframe alignment strength")
+        cols[5].metric("Entry Quality",  f"{idea['confidence']}/10",
+                       help="15-min entry trigger confidence (Stoch, RSI, BB)")
+
+        st.markdown(f"**Thesis:** {idea['thesis']}")
+        st.caption(
+            f"Stop method: {idea['stop_loss_method']} | "
+            f"Distance: {idea['stop_loss_pips']} pips"
+        )
+        st.divider()
 
 
 def render_weekly_swing_tab(data_by_timeframe: Dict):
@@ -790,38 +821,38 @@ def main():
         render_kpis(daily_data)
 
     tabs = st.tabs([
-        "📊 Overview",
-        "🧭 Multi-Timeframe Matrix",
-        "🌍 Macro Fundamentals",
-        "📈 Technical Chart",
-        "🛒 Trading View",
-        "⚡ Signal Pro",
-        "🏛 Macro Pro",
-        "⏱️ 15-Min Entry",
-        "🎯 Trading Ideas",
-        "📅 Weekly Swing",
+        "📊 Market Overview",           # Step 0 — morning scan
+        "🌍 Macro Fundamentals",        # Step 1 — fundamental backdrop
+        "🏛 Macro Dashboard",           # Step 2 — deep FRED macro
+        "📅 Weekly Swing",              # Step 3 — weekly direction filter
+        "🧭 Multi-Timeframe Matrix",    # Step 4 — timeframe alignment
+        "📈 Technical Chart",           # Step 5 — chart analysis per pair
+        "🛒 Pivots & Fibonacci",        # Step 6 — session key levels
+        "⚡ Signal Pro",                # Step 7 — signal confirmation
+        "🎯 Trading Ideas",             # Step 8 — auto-refreshed setups
+        "⏱️ 15-Min Entry",              # Step 9 — execution timing
     ])
 
     with tabs[0]:
         render_overview_tab(daily_data)
     with tabs[1]:
-        render_mtf_matrix_tab(data_by_timeframe)
-    with tabs[2]:
         render_macro_table(macro_data, macro_live)
-    with tabs[3]:
-        render_technical_chart_tab(data_by_timeframe)
-    with tabs[4]:
-        render_trading_view_tab(data_by_timeframe)
-    with tabs[5]:
-        render_signal_pro_tab(data_by_timeframe)
-    with tabs[6]:
+    with tabs[2]:
         render_macro_pro_tab(fred_api_key)
-    with tabs[7]:
-        render_15m_entry_tab(data_by_timeframe)
-    with tabs[8]:
-        render_trading_ideas_tab(data_by_timeframe)
-    with tabs[9]:
+    with tabs[3]:
         render_weekly_swing_tab(data_by_timeframe)
+    with tabs[4]:
+        render_mtf_matrix_tab(data_by_timeframe)
+    with tabs[5]:
+        render_technical_chart_tab(data_by_timeframe)
+    with tabs[6]:
+        render_trading_view_tab(data_by_timeframe)
+    with tabs[7]:
+        render_signal_pro_tab(data_by_timeframe)
+    with tabs[8]:
+        render_trading_ideas_tab()
+    with tabs[9]:
+        render_15m_entry_tab(data_by_timeframe)
 
 
 if __name__ == "__main__":
