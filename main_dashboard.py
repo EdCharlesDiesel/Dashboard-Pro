@@ -505,7 +505,7 @@ def render_trading_ideas_tab(data_by_timeframe: Dict):
             cols[2].metric("TP2", f"{idea['take_profit_2']:.5f}", delta=f"R:R {idea['risk_reward_2']:.2f}")
             cols[3].metric("Stop Loss", f"{idea['stop_loss']:.5f}")
 
-            cols[4].metric("MTF Score", f"{idea['strength_score']}/10",
+            cols[4].metric("Multi-TF Score", f"{idea['strength_score']}/10",
                            help="Multi-timeframe alignment strength")
             cols[5].metric("Entry Quality", f"{idea['confidence']}/10",
                            help="15-min entry trigger confidence (Stoch, RSI, BB)")
@@ -515,6 +515,238 @@ def render_trading_ideas_tab(data_by_timeframe: Dict):
             st.divider()
     else:
         st.info("No trading ideas found or button not clicked yet.")
+
+
+def render_weekly_swing_tab(data_by_timeframe: Dict):
+    st.subheader("📅 Weekly Swing Trading Ideas")
+    st.caption("Pivot-point driven setups anchored to the weekly timeframe, confirmed by the daily chart.")
+
+    weekly_data = data_by_timeframe.get("Weekly", {})
+    daily_data  = data_by_timeframe.get("Daily",  {})
+
+    if not weekly_data:
+        st.warning("No weekly data available — click ↺ Refresh in the sidebar.")
+        return
+
+    ideas = []
+
+    for pair in config.assets:
+        df_w = weekly_data.get(pair, pd.DataFrame())
+        df_d = daily_data.get(pair,  pd.DataFrame())
+
+        if df_w.empty or len(df_w) < 20:
+            continue
+
+        df_w = analyzer.add_indicators(df_w.copy())
+        last = df_w.iloc[-1]
+
+        price  = float(last["Close"])
+        ema20  = float(last.get("EMA_20", price))
+        ema50  = float(last.get("EMA_50", price))
+        rsi    = float(last.get("RSI",   50.0))
+        adx    = float(last.get("ADX",    0.0))
+        atr    = float(last.get("ATR",  price * 0.01))
+
+        # ── Weekly pivots (based on previous completed weekly candle) ─────────
+        pivots = analyzer.calculate_pivots(df_w)
+        if not pivots:
+            continue
+        pp = pivots["Pivot"]
+        r1 = pivots["R1"]; r2 = pivots["R2"]; r3 = pivots["R3"]
+        s1 = pivots["S1"]; s2 = pivots["S2"]; s3 = pivots["S3"]
+
+        # ── Fibonacci levels over the last 12 weeks ───────────────────────────
+        fibs = analyzer.calculate_fibonacci(df_w.tail(12))
+
+        # ── Bias scoring ──────────────────────────────────────────────────────
+        bull_s = bear_s = 0
+        reasons: List[str] = []
+
+        if price > ema20:  bull_s += 2
+        else:              bear_s += 2
+
+        if ema20 > ema50:  bull_s += 2; reasons.append("EMA20 > EMA50 — weekly uptrend")
+        else:              bear_s += 2; reasons.append("EMA20 < EMA50 — weekly downtrend")
+
+        if rsi > 55:       bull_s += 1; reasons.append(f"RSI {rsi:.0f} — bullish momentum")
+        elif rsi < 45:     bear_s += 1; reasons.append(f"RSI {rsi:.0f} — bearish momentum")
+
+        if price > pp:     bull_s += 1; reasons.append(f"Price above weekly pivot ({pp:.5f})")
+        else:              bear_s += 1; reasons.append(f"Price below weekly pivot ({pp:.5f})")
+
+        if adx > 20:
+            if bull_s > bear_s: bull_s += 1; reasons.append(f"ADX {adx:.0f} — trend is strong")
+            else:               bear_s += 1; reasons.append(f"ADX {adx:.0f} — trend is strong")
+
+        if bull_s == bear_s or adx < 15:
+            continue  # skip flat / trendless markets
+
+        bias = "Long" if bull_s > bear_s else "Short"
+
+        # ── Entry / SL / TP ───────────────────────────────────────────────────
+        fib_382 = fibs.get("38.2%", price)
+        fib_500 = fibs.get("50.0%", price)
+        fib_618 = fibs.get("61.8%", price)
+
+        if bias == "Long":
+            # Entry: current price (or tighten to S1 pullback zone)
+            entry    = price
+            # SL: below S1 or below 61.8% fib — whichever is lower
+            sl       = min(s1, fib_618) - atr * 0.3
+            tp1      = r1
+            tp2      = r2
+            tp3      = r3
+        else:
+            entry    = price
+            # SL: above R1 or above 38.2% fib — whichever is higher
+            sl       = max(r1, fib_382) + atr * 0.3
+            tp1      = s1
+            tp2      = s2
+            tp3      = s3
+
+        stop_dist = abs(entry - sl)
+        if stop_dist == 0:
+            continue
+
+        rr1 = round(abs(tp1 - entry) / stop_dist, 2)
+        rr2 = round(abs(tp2 - entry) / stop_dist, 2)
+        rr3 = round(abs(tp3 - entry) / stop_dist, 2)
+
+        if rr1 < 1.5:
+            continue  # reject low-quality setups
+
+        # ── Daily confirmation ────────────────────────────────────────────────
+        daily_conf = "—"
+        if not df_d.empty:
+            df_d_ind     = analyzer.add_indicators(df_d.copy())
+            daily_sent   = analyzer.get_sentiment(df_d_ind)
+            if (bias == "Long"  and daily_sent == "Bullish") or \
+               (bias == "Short" and daily_sent == "Bearish"):
+                daily_conf = "✅ Aligned"
+            elif daily_sent == "Neutral":
+                daily_conf = "⚪ Neutral"
+            else:
+                daily_conf = "⚠️ Conflicting"
+
+        ideas.append({
+            "pair": pair, "bias": bias, "price": price,
+            "entry": entry, "sl": sl,
+            "tp1": tp1, "tp2": tp2, "tp3": tp3,
+            "rr1": rr1, "rr2": rr2, "rr3": rr3,
+            "rsi": rsi, "adx": adx, "atr": atr,
+            "pivots": pivots, "fibs": fibs,
+            "reasons": reasons, "daily_conf": daily_conf,
+            "score": bull_s if bias == "Long" else bear_s,
+            "df_w": df_w,
+        })
+
+    # Best R:R first, then highest score
+    ideas.sort(key=lambda x: (x["rr1"], x["score"]), reverse=True)
+
+    if not ideas:
+        st.warning("No qualifying swing setups found. Markets may be ranging — ADX threshold is 15.")
+        return
+
+    aligned   = [i for i in ideas if i["daily_conf"] == "✅ Aligned"]
+    other     = [i for i in ideas if i["daily_conf"] != "✅ Aligned"]
+
+    def _render_idea(idea):
+        direction = "📈 LONG" if idea["bias"] == "Long" else "📉 SHORT"
+        header = (f"{idea['pair']}  —  {direction}  |  "
+                  f"R:R {idea['rr1']:.2f}  |  Daily: {idea['daily_conf']}")
+
+        with st.expander(header, expanded=False):
+            col_info, col_chart = st.columns([1, 2])
+
+            with col_info:
+                st.markdown("##### Trade levels")
+                st.metric("Entry",      f"{idea['entry']:.5f}")
+                st.metric("Stop Loss",  f"{idea['sl']:.5f}")
+                st.metric("Target 1",   f"{idea['tp1']:.5f}", delta=f"R:R {idea['rr1']:.2f}")
+                st.metric("Target 2",   f"{idea['tp2']:.5f}", delta=f"R:R {idea['rr2']:.2f}")
+                st.metric("Target 3",   f"{idea['tp3']:.5f}", delta=f"R:R {idea['rr3']:.2f}")
+                st.divider()
+                st.markdown("##### Weekly signals")
+                for r in idea["reasons"]:
+                    st.caption(f"• {r}")
+                st.caption(f"RSI {idea['rsi']:.1f}  |  ADX {idea['adx']:.1f}  |  ATR {idea['atr']:.5f}")
+
+            with col_chart:
+                df_w    = idea["df_w"]
+                pivots  = idea["pivots"]
+                fibs    = idea["fibs"]
+
+                fig = make_subplots(
+                    rows=2, cols=1, shared_xaxes=True,
+                    vertical_spacing=0.05, row_heights=[0.75, 0.25],
+                    subplot_titles=[f"{idea['pair']} — Weekly", "RSI (14)"],
+                )
+
+                # Candlestick
+                fig.add_trace(go.Candlestick(
+                    x=df_w.index,
+                    open=df_w["Open"], high=df_w["High"],
+                    low=df_w["Low"],   close=df_w["Close"],
+                    name="Price", showlegend=False, **CANDLE_STYLE,
+                ), row=1, col=1)
+
+                # EMAs
+                for col_name, color in EMA_COLORS.items():
+                    if col_name in df_w.columns:
+                        fig.add_trace(go.Scatter(
+                            x=df_w.index, y=df_w[col_name],
+                            line=dict(color=color, width=1.4),
+                            name=col_name,
+                        ), row=1, col=1)
+
+                # Pivot dotted lines
+                piv_style = {
+                    "Pivot": ("#c0c0c0", 1.2), "R1": ("#ef5350", 0.9),
+                    "R2": ("#e53935", 0.9),     "S1": ("#26a69a", 0.9),
+                    "S2": ("#00897b", 0.9),
+                }
+                for lbl, (col_c, lw) in piv_style.items():
+                    val = pivots.get(lbl)
+                    if val:
+                        fig.add_hline(y=val, line_dash="dot", line_color=col_c,
+                                      line_width=lw, annotation_text=lbl,
+                                      annotation_font=dict(size=9, color=col_c),
+                                      row=1, col=1)
+
+                # Trade levels (solid, bolder)
+                tp_lines = [
+                    (idea["tp3"], "#1de9b6", "TP3"),
+                    (idea["tp2"], "#26a69a", "TP2"),
+                    (idea["tp1"], "#66bb6a", "TP1"),
+                    (idea["sl"],  "#ef5350", "SL"),
+                ]
+                for val, col_c, lbl in tp_lines:
+                    fig.add_hline(y=val, line_dash="dash", line_color=col_c,
+                                  line_width=1.8, annotation_text=lbl,
+                                  annotation_font=dict(size=10, color=col_c),
+                                  row=1, col=1)
+
+                # RSI
+                if "RSI" in df_w.columns:
+                    fig.add_trace(go.Scatter(
+                        x=df_w.index, y=df_w["RSI"],
+                        line=RSI_LINE, name="RSI",
+                    ), row=2, col=1)
+                    fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
+                    fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
+
+                fig.update_layout(height=420, **CHART_LAYOUT)
+                st.plotly_chart(fig, use_container_width=True)
+
+    if aligned:
+        st.markdown(f"#### ✅ Daily-Confirmed Setups ({len(aligned)})")
+        for idea in aligned:
+            _render_idea(idea)
+
+    if other:
+        st.markdown(f"#### Other Setups ({len(other)})")
+        for idea in other:
+            _render_idea(idea)
 
 
 # ============================================================================
@@ -559,7 +791,7 @@ def main():
 
     tabs = st.tabs([
         "📊 Overview",
-        "🧭 MTF Matrix",
+        "🧭 Multi-Timeframe Matrix",
         "🌍 Macro Fundamentals",
         "📈 Technical Chart",
         "🛒 Trading View",
@@ -589,8 +821,7 @@ def main():
     with tabs[8]:
         render_trading_ideas_tab(data_by_timeframe)
     with tabs[9]:
-        st.subheader("📅 Weekly Swing Trading")
-        st.info("Coming soon: Swing analysis based on Weekly/Daily confluence.")
+        render_weekly_swing_tab(data_by_timeframe)
 
 
 if __name__ == "__main__":
