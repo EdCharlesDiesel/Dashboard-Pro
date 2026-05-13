@@ -343,7 +343,6 @@ def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: 
     # alignment but a poor entry setup (low confidence), or vice versa.
     entry_conf = entry_signal.get('confidence', 0) if entry_signal else 0
     confidence = min(entry_conf * 2, 10)
-
     atr = safe_get(one_hour, 'ATR', 0.0)
     if atr <= 0:
         atr = h1_close * 0.005 if h1_close > 0 else 0.001

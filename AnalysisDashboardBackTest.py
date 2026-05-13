@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import warnings
 from src.core.analyzer import TechnicalAnalyzer as analyzer
-
 warnings.filterwarnings("ignore")
 
 # ─── PAGE CONFIG ──────────────────────────────────────────────────────────────

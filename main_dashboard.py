@@ -561,7 +561,7 @@ def main():
 
     tabs = st.tabs([
         "📊 Overview",
-        "🧭 Multitime-frame Matrix",
+        "🧭 Multi-time-frame Matrix",
         "🌍 Macro Fundamentals",
         "📈 Technical Chart",
         "🛒 Trading View",

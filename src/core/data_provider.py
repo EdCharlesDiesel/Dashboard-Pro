@@ -16,7 +16,6 @@ class MarketDataProvider:
     def get_data(self, symbol: str, interval: str, period: str):
         raise NotImplementedError
 
-
 class QuantConnectProvider(MarketDataProvider):
     def __init__(self):
         self.base_url = default_config.quantconnect_url

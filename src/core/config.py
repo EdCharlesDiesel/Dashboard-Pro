@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 from typing import Dict
-
-
 @dataclass
 class AppConfig:
     """Application configuration — all tuneable parameters in one place."""

@@ -1,7 +1,4 @@
-"""
-Trading Signal Dashboard
-Pivot Points + FRED Macro Data + Yahoo Finance Prices + QuantConnect-style signals
-"""
+
 
 import streamlit as st
 import pandas as pd

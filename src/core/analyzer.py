@@ -3,8 +3,6 @@ import logging
 import ta
 
 logger = logging.getLogger("ForexDashboard")
-
-
 class TechnicalAnalyzer:
     RSI_WINDOW = 14
     MACD_FAST = 12
