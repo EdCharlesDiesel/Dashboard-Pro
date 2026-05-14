@@ -1,4 +1,4 @@
-streamlit
+plotly
 streamlit-autorefresh
 pandas
 numpy
@@ -6,5 +6,7 @@ plotly
 yfinance
 ta
 fredapi
+matplotlib
+requests
 tenacity
 requests
