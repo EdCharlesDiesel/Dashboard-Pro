@@ -7,7 +7,12 @@ from datetime import datetime
 import json
 import logging
 import traceback
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from typing import Dict, Tuple, List, Optional
+from streamlit_autorefresh import st_autorefresh
 
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
@@ -25,6 +30,23 @@ st.set_page_config(
 )
 
 logger = logging.getLogger("ForexDashboard")
+
+# ============================================================================
+# EMAIL CONFIGURATION  (set these in .streamlit/secrets.toml under [email])
+# ============================================================================
+def _email_cfg(key: str, default: str = "") -> str:
+    """Read a value from st.secrets [email] section, fall back to env or default."""
+    try:
+        return str(st.secrets["email"][key])
+    except Exception:
+        return os.environ.get(f"EMAIL_{key.upper()}", default)
+
+EMAIL_SMTP_HOST = _email_cfg("smtp_host", "smtp.gmail.com")
+EMAIL_SMTP_PORT = int(_email_cfg("smtp_port", "587"))
+EMAIL_USER      = _email_cfg("smtp_user")
+EMAIL_PASSWORD  = _email_cfg("smtp_password")
+EMAIL_SENDER    = _email_cfg("sender", EMAIL_USER)
+EMAIL_RECIPIENT = _email_cfg("recipient")
 
 st.markdown("""
 <style>
@@ -63,9 +85,112 @@ def save_notified_keys(keys: set) -> None:
 
 
 # ============================================================================
-# NOTIFICATION SYSTEM
+# EMAIL ALERT SENDER
 # ============================================================================
-def init_notification_state() -> None:
+def _build_email_html(ideas: List[Dict]) -> str:
+    """Render a clean HTML email body for a list of new signal ideas."""
+    rows_html = ""
+    for idea in ideas:
+        direction  = "📈 LONG" if idea["bias"] == "Long" else "📉 SHORT"
+        bias_color = "#26a69a"  if idea["bias"] == "Long" else "#ef5350"
+        rows_html += f"""
+        <tr style="border-bottom:1px solid #2d3148;">
+          <td style="padding:10px 14px;font-weight:700;color:#e0e0e0;">{idea['pair']}</td>
+          <td style="padding:10px 14px;color:{bias_color};font-weight:700;">{direction}</td>
+          <td style="padding:10px 14px;color:#e0e0e0;">{idea['entry']:.5f}</td>
+          <td style="padding:10px 14px;color:#26a69a;">{idea['take_profit_1']:.5f}
+              <span style="font-size:11px;color:#8b8fa8;"> R:R {idea['risk_reward_1']:.2f}</span></td>
+          <td style="padding:10px 14px;color:#ef5350;">{idea['stop_loss']:.5f}</td>
+          <td style="padding:10px 14px;color:#ffa726;">{idea['strength_score']}/10</td>
+          <td style="padding:10px 14px;color:#c0c0c0;font-size:11px;">{idea['conviction']}</td>
+        </tr>
+        <tr>
+          <td colspan="7" style="padding:4px 14px 12px;color:#8b8fa8;font-size:12px;">
+            {idea.get('thesis', '')[:180]}
+          </td>
+        </tr>"""
+
+    return f"""<!DOCTYPE html>
+<html>
+<body style="background:#0e1117;font-family:'Courier New',monospace;color:#c0c0c0;margin:0;padding:20px;">
+  <div style="max-width:760px;margin:0 auto;">
+    <h2 style="color:#4af0c4;border-bottom:1px solid #2d3148;padding-bottom:10px;margin-bottom:20px;">
+      🚨 Macro Dashboard — New Trading Signals
+    </h2>
+    <p style="color:#8b8fa8;font-size:13px;margin-bottom:20px;">
+      {len(ideas)} new high-conviction signal{'s' if len(ideas) != 1 else ''} detected at
+      <strong style="color:#e0e0e0;">{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</strong>
+    </p>
+    <table style="width:100%;border-collapse:collapse;background:#1a1d27;border-radius:8px;overflow:hidden;">
+      <thead>
+        <tr style="background:#0d1117;">
+          <th style="padding:10px 14px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">PAIR</th>
+          <th style="padding:10px 14px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">BIAS</th>
+          <th style="padding:10px 14px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">ENTRY</th>
+          <th style="padding:10px 14px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">TP1</th>
+          <th style="padding:10px 14px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">STOP LOSS</th>
+          <th style="padding:10px 14px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">SCORE</th>
+          <th style="padding:10px 14px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">CONVICTION</th>
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p style="color:#8b8fa8;font-size:11px;margin-top:24px;border-top:1px solid #2d3148;padding-top:12px;">
+      Macro Dashboard Pro · Auto-alerts fire only for High conviction or score ≥ 8 · Each unique entry fires once.
+    </p>
+  </div>
+</body>
+</html>"""
+
+
+def send_email_alert(new_ideas: List[Dict]) -> None:
+    """Send a formatted HTML email for newly detected high-conviction signals."""
+    if not new_ideas:
+        return
+    if not all([EMAIL_USER, EMAIL_PASSWORD, EMAIL_RECIPIENT]):
+        logger.warning("Email config incomplete — set [email] section in .streamlit/secrets.toml")
+        return
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = (
+            f"🚨 {len(new_ideas)} New Signal{'s' if len(new_ideas) != 1 else ''} — "
+            f"{', '.join(i['pair'] for i in new_ideas[:3])}"
+            f"{'…' if len(new_ideas) > 3 else ''}"
+        )
+        msg["From"]    = EMAIL_SENDER
+        msg["To"]      = EMAIL_RECIPIENT
+
+        # Plain-text fallback
+        plain_lines = [f"NEW TRADING SIGNALS — {datetime.now().strftime('%Y-%m-%d %H:%M')}",  ""]
+        for idea in new_ideas:
+            direction = "LONG" if idea["bias"] == "Long" else "SHORT"
+            plain_lines.append(
+                f"{idea['pair']} {direction}  |  Entry: {idea['entry']:.5f}  |  "
+                f"TP1: {idea['take_profit_1']:.5f}  |  SL: {idea['stop_loss']:.5f}  |  "
+                f"Score: {idea['strength_score']}/10  |  {idea['conviction']}"
+            )
+            plain_lines.append(f"  Thesis: {idea.get('thesis','')[:160]}")
+            plain_lines.append("")
+
+        msg.attach(MIMEText("\n".join(plain_lines), "plain"))
+        msg.attach(MIMEText(_build_email_html(new_ideas), "html"))
+
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP(EMAIL_SMTP_HOST, EMAIL_SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls(context=ctx)
+            server.login(EMAIL_USER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECIPIENT, msg.as_string())
+
+        logger.info("Signal email sent to %s (%d ideas)", EMAIL_RECIPIENT, len(new_ideas))
+
+    except smtplib.SMTPAuthenticationError:
+        logger.error("Email auth failed — check smtp_user / smtp_password in secrets.toml")
+    except Exception as exc:
+        logger.error("Email send failed: %s", exc)
+
+
+
     if 'data_loaded' not in st.session_state:
         st.session_state.data_loaded = False
     if 'notified_keys' not in st.session_state:
@@ -96,6 +221,7 @@ def check_and_notify(ideas: List[Dict]) -> List[Dict]:
 
     if new_alerts:
         save_notified_keys(st.session_state.notified_keys)
+        send_email_alert(new_alerts)   # ← email fired once per unique signal
 
     for idea in new_alerts:
         direction = "📈 LONG" if idea['bias'] == 'Long' else "📉 SHORT"
@@ -171,7 +297,15 @@ def render_sidebar() -> str:
 
         st.divider()
 
-        st.subheader("🔔 Alert Log")
+        # ── Email alert status ────────────────────────────────────────────────
+        st.subheader("📧 Email Alerts")
+        if EMAIL_USER and EMAIL_RECIPIENT:
+            st.success(f"✅ Alerts → {EMAIL_RECIPIENT}")
+            st.caption(f"Sending via {EMAIL_USER}")
+        else:
+            st.warning("⚠️ Email not configured — add [email] to .streamlit/secrets.toml")
+
+        st.divider()
         log = st.session_state.get('notification_log', [])
         if log:
             for entry in reversed(log[-10:]):
@@ -786,6 +920,17 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
 def main():
     st.title(f"💹 Macro Dashboard Pro v{config.version}")
 
+    # ── Auto-refresh every 5 minutes ─────────────────────────────────────────
+    # st_autorefresh returns a monotonically increasing counter (0 on first load).
+    # On every tick after the first we bust the data cache so fresh prices are
+    # fetched and signals re-evaluated — identical to clicking ↺ Refresh.
+    _refresh_count = st_autorefresh(interval=300_000, key="dashboard_autorefresh")
+    if _refresh_count > 0 and st.session_state.get("_last_refresh_count", -1) != _refresh_count:
+        st.session_state["_last_refresh_count"] = _refresh_count
+        st.cache_data.clear()
+        st.session_state.data_loaded = False
+        st.session_state.last_refresh = datetime.now()
+
     init_notification_state()
 
     fred_api_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
@@ -823,7 +968,7 @@ def main():
     tabs = st.tabs([
         "📊 Market Overview",           # Step 0 — morning scan
         "🌍 Macro Fundamentals",        # Step 1 — fundamental backdrop
-        "🏛 Macro Dashboard",           # Step 2 — deep FRED macro
+        "🏛 Macro Dashboard",            # Step 2 — deep FRED macro
         "📅 Weekly Swing",              # Step 3 — weekly direction filter
         "🧭 Multi-Timeframe Matrix",    # Step 4 — timeframe alignment
         "📈 Technical Chart",           # Step 5 — chart analysis per pair
