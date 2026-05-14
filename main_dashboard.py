@@ -190,7 +190,10 @@ def send_email_alert(new_ideas: List[Dict]) -> None:
         logger.error("Email send failed: %s", exc)
 
 
-
+# ============================================================================
+# NOTIFICATION SYSTEM
+# ============================================================================
+def init_notification_state() -> None:
     if 'data_loaded' not in st.session_state:
         st.session_state.data_loaded = False
     if 'notified_keys' not in st.session_state:
