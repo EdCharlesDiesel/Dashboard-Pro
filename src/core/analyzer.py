@@ -187,6 +187,75 @@ class TechnicalAnalyzer:
         }
 
     @staticmethod
+    def get_sessions(date):
+        import pandas as pd
+        base = pd.Timestamp(date)
+        sessions = {
+            "Asian": (base.replace(hour=0, minute=0), base.replace(hour=8, minute=59)),
+            "London": (base.replace(hour=7, minute=0), base.replace(hour=15, minute=59)),
+            "NY": (base.replace(hour=13, minute=0), base.replace(hour=21, minute=59)),
+        }
+        return sessions
+
+    @staticmethod
+    def session_analysis(df_day) -> dict:
+        results = {}
+        if df_day.empty:
+            return results
+        for name, (s, e) in TechnicalAnalyzer.get_sessions(df_day["datetime"].dt.date.iloc[0]).items():
+            seg = df_day[(df_day["datetime"] >= s) & (df_day["datetime"] <= e)]
+            if len(seg) == 0:
+                results[name] = None
+                continue
+            o = seg["Open"].iloc[0]
+            c = seg["Close"].iloc[-1]
+            h = seg["High"].max()
+            l = seg["Low"].min()
+            direction = "🟢 Bull" if c > o else ("🔴 Bear" if c < o else "⚪ Flat")
+            results[name] = {
+                "open": o, "close": c, "high": h, "low": l,
+                "range_pips": round((h - l) * 10000, 1),
+                "direction": direction,
+            }
+        return results
+
+    @staticmethod
+    def compute_daily_bias(df_day) -> tuple:
+        if len(df_day) < 5:
+            return "Neutral", 50.0
+
+        opens = df_day["Open"].iloc[0]
+        closes = df_day["Close"].iloc[-1]
+        highs = df_day["High"].max()
+        lows = df_day["Low"].min()
+        mid = (highs + lows) / 2
+        pct_change = (closes - opens) / opens * 100
+
+        # Check higher highs / lower lows structure
+        h4 = df_day.set_index("datetime").resample("4h").agg(
+            Open=("Open", "first"), High=("High", "max"),
+            Low=("Low", "min"), Close=("Close", "last")
+        ).dropna()
+
+        bull_score = 0
+        if closes > opens: bull_score += 2
+        if closes > mid: bull_score += 1
+        if len(h4) >= 2:
+            if h4["Close"].iloc[-1] > h4["Close"].iloc[0]: bull_score += 2
+            if h4["High"].iloc[-1] > h4["High"].iloc[-2]: bull_score += 1
+            if h4["Low"].iloc[-1] > h4["Low"].iloc[-2]: bull_score += 1
+        if pct_change > 0.1: bull_score += 1
+
+        total = 8
+        bull_pct = (bull_score / total) * 100
+        if bull_pct >= 62:
+            return "Bullish", bull_pct
+        elif bull_pct <= 38:
+            return "Bearish", 100 - bull_pct
+        else:
+            return "Neutral", 50.0
+
+    @staticmethod
     def generate_pro_signals(df: pd.DataFrame, pivots: dict) -> pd.DataFrame:
         """Generates QuantConnect-style signals based on pivots, MAs, and RSI."""
         if df.empty: return df

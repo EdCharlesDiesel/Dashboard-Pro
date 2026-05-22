@@ -407,3 +407,149 @@ def generate_trading_ideas(data_by_timeframe: Dict) -> Tuple[List[Dict], List[st
 
     ideas.sort(key=lambda x: (x['conviction'] == 'High', x['strength_score']), reverse=True)
     return ideas, skipped
+
+
+def generate_weekly_swing_ideas(data_by_timeframe: Dict) -> List[Dict]:
+    weekly_data = data_by_timeframe.get("Weekly", {})
+    daily_data = data_by_timeframe.get("Daily", {})
+
+    if not weekly_data:
+        return []
+
+    ideas = []
+
+    for pair in config.assets:
+        df_w = weekly_data.get(pair, pd.DataFrame())
+        df_d = daily_data.get(pair, pd.DataFrame())
+
+        if df_w.empty or len(df_w) < 20:
+            continue
+
+        df_w = analyzer.add_indicators(df_w.copy())
+        last = df_w.iloc[-1]
+
+        price = float(last["Close"])
+        ema20 = float(last.get("EMA_20", price))
+        ema50 = float(last.get("EMA_50", price))
+        rsi = float(last.get("RSI", 50.0))
+        adx = float(last.get("ADX", 0.0))
+        atr = float(last.get("ATR", price * 0.01))
+
+        # ── Weekly pivots (based on previous completed weekly candle) ─────────
+        pivots = analyzer.calculate_pivots(df_w)
+        if not pivots:
+            continue
+        pp = pivots["Pivot"]
+        r1 = pivots["R1"]
+        r2 = pivots["R2"]
+        r3 = pivots["R3"]
+        s1 = pivots["S1"]
+        s2 = pivots["S2"]
+        s3 = pivots["S3"]
+
+        # ── Fibonacci levels over the last 12 weeks ───────────────────────────
+        fibs = analyzer.calculate_fibonacci(df_w.tail(12))
+
+        # ── Bias scoring ──────────────────────────────────────────────────────
+        bull_s = bear_s = 0
+        reasons: List[str] = []
+
+        if price > ema20:
+            bull_s += 2
+        else:
+            bear_s += 2
+
+        if ema20 > ema50:
+            bull_s += 2
+            reasons.append("EMA20 > EMA50 — weekly uptrend")
+        else:
+            bear_s += 2
+            reasons.append("EMA20 < EMA50 — weekly downtrend")
+
+        if rsi > 55:
+            bull_s += 1
+            reasons.append(f"RSI {rsi:.0f} — bullish momentum")
+        elif rsi < 45:
+            bear_s += 1
+            reasons.append(f"RSI {rsi:.0f} — bearish momentum")
+
+        if price > pp:
+            bull_s += 1
+            reasons.append(f"Price above weekly pivot ({pp:.5f})")
+        else:
+            bear_s += 1
+            reasons.append(f"Price below weekly pivot ({pp:.5f})")
+
+        if adx > 20:
+            if bull_s > bear_s:
+                bull_s += 1
+                reasons.append(f"ADX {adx:.0f} — trend is strong")
+            else:
+                bear_s += 1
+                reasons.append(f"ADX {adx:.0f} — trend is strong")
+
+        if bull_s == bear_s or adx < 15:
+            continue  # skip flat / trendless markets
+
+        bias = "Long" if bull_s > bear_s else "Short"
+
+        # ── Entry / SL / TP ───────────────────────────────────────────────────
+        fib_382 = fibs.get("38.2%", price)
+        fib_500 = fibs.get("50.0%", price)
+        fib_618 = fibs.get("61.8%", price)
+
+        if bias == "Long":
+            # Entry: current price (or tighten to S1 pullback zone)
+            entry = price
+            # SL: below S1 or below 61.8% fib — whichever is lower
+            sl = min(s1, fib_618) - atr * 0.3
+            tp1 = r1
+            tp2 = r2
+            tp3 = r3
+        else:
+            entry = price
+            # SL: above R1 or above 38.2% fib — whichever is higher
+            sl = max(r1, fib_382) + atr * 0.3
+            tp1 = s1
+            tp2 = s2
+            tp3 = s3
+
+        stop_dist = abs(entry - sl)
+        if stop_dist == 0:
+            continue
+
+        rr1 = round(abs(tp1 - entry) / stop_dist, 2)
+        rr2 = round(abs(tp2 - entry) / stop_dist, 2)
+        rr3 = round(abs(tp3 - entry) / stop_dist, 2)
+
+        if rr1 < 1.5:
+            continue  # reject low-quality setups
+
+        # ── Daily confirmation ────────────────────────────────────────────────
+        daily_conf = "—"
+        if not df_d.empty:
+            df_d_ind = analyzer.add_indicators(df_d.copy())
+            daily_sent = analyzer.get_sentiment(df_d_ind)
+            if (bias == "Long" and daily_sent == "Bullish") or \
+                    (bias == "Short" and daily_sent == "Bearish"):
+                daily_conf = "✅ Aligned"
+            elif daily_sent == "Neutral":
+                daily_conf = "⚪ Neutral"
+            else:
+                daily_conf = "⚠️ Conflicting"
+
+        ideas.append({
+            "pair": pair, "bias": bias, "price": price,
+            "entry": entry, "sl": sl,
+            "tp1": tp1, "tp2": tp2, "tp3": tp3,
+            "rr1": rr1, "rr2": rr2, "rr3": rr3,
+            "rsi": rsi, "adx": adx, "atr": atr,
+            "pivots": pivots, "fibs": fibs,
+            "reasons": reasons, "daily_conf": daily_conf,
+            "score": bull_s if bias == "Long" else bear_s,
+            "df_w": df_w,
+        })
+
+    # Best R:R first, then highest score
+    ideas.sort(key=lambda x: (x["rr1"], x["score"]), reverse=True)
+    return ideas
