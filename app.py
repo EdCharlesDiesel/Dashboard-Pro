@@ -12,12 +12,13 @@ import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Dict, Tuple, List, Optional
+from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
 
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
-from src.core.signals import generate_trading_ideas, safe_get, entry_generator
+from src.core.signals import generate_trading_ideas, safe_get, entry_generator, generate_weekly_swing_ideas
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -388,7 +389,7 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
         if val == "Bearish": return "background-color: #ca2427; color: white;"
         return ""
 
-    st.table(mtf_df.style.map(color_sentiment))
+    st.table(mtf_df.style.applymap(color_sentiment))
 
 
 def render_technical_chart_tab(data_by_timeframe: Dict):
@@ -530,11 +531,18 @@ def render_signal_pro_tab(data_by_timeframe: Dict):
                                          name="Price", **CANDLE_STYLE), row=1, col=1)
 
             # Add Pivot Lines
-            colors = {"R": "rgba(239,83,80,0.3)", "S": "rgba(38,166,154,0.3)", "P": "rgba(200,200,200,0.3)"}
-            for level, val in pivots.items():
-                if level in ["PP", "R1", "S1", "R2", "S2", "R3", "S3"]:
-                    color = colors.get(level[0], "rgba(200,200,200,0.3)")
-                    fig.add_hline(y=val, line_dash="dot", line_color=color, annotation_text=level, row=1, col=1)
+            pivot_style = {
+                "R3": ("#c0392b", "dash"), "M4": ("#e74c3c", "dot"), "R2": ("#e74c3c", "dash"),
+                "M3": ("#e74c3c", "dot"), "R1": ("#c0392b", "dashdot"), "M2": ("#e74c3c", "dot"),
+                "PP": ("#e0e8ff", "solid"), "M1": ("#27ae60", "dot"), "S1": ("#27ae60", "dashdot"),
+                "M0": ("#27ae60", "dot"), "S2": ("#1e8449", "dash"), "S3": ("#1e8449", "dash"),
+            }
+            for level, (color, dash) in pivot_style.items():
+                val = pivots.get(level)
+                if val is None: continue
+                lw = 1.8 if level in ("PP", "R3", "S3") else 1.2
+                fig.add_hline(y=val, line_dash=dash, line_color=color, line_width=lw,
+                              annotation_text=level, row=1, col=1)
 
             # Add Signal markers
             for sig, color, sym in [("STRONG BUY", "#26a69a", "triangle-up"), ("BUY", "#66bb6a", "triangle-up"),
@@ -583,12 +591,30 @@ def render_macro_pro_tab(fred_key: str):
     valid_data = {k: v for k, v in loaded_data.items() if v is not None and not v.empty}
 
     if valid_data:
-        fig = make_subplots(rows=2, cols=4, subplot_titles=list(valid_data.keys()))
+        fig = make_subplots(rows=2, cols=4, subplot_titles=list(valid_data.keys()),
+                            vertical_spacing=0.18, horizontal_spacing=0.08)
+        colors = ["#4af0c4", "#f04a6a", "#f0a030", "#5090e0", "#c878e0", "#e05050", "#50c878", "#e0d050"]
+
         for i, (name, df) in enumerate(valid_data.items()):
             row, col = divmod(i, 4)
-            fig.add_trace(go.Scatter(x=df["date"], y=df["value"], name=name, fill="tozeroy"), row=row + 1, col=col + 1)
+            hex_c = colors[i % len(colors)].lstrip('#')
+            r_c, g_c, b_c = int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
+            fig.add_trace(go.Scatter(
+                x=df["date"], y=df["value"], name=name,
+                line=dict(color=colors[i % len(colors)], width=1.5),
+                fill="tozeroy", fillcolor=f"rgba({r_c},{g_c},{b_c},0.08)",
+            ), row=row + 1, col=col + 1)
 
-        fig.update_layout(height=400, showlegend=False, template="plotly_dark")
+        fig.update_layout(
+            template="plotly_dark", paper_bgcolor="#0a0e17", plot_bgcolor="#0a0e17",
+            font=dict(family="JetBrains Mono", size=9, color="#8899bb"),
+            showlegend=False, height=400, margin=dict(l=10, r=10, t=35, b=10),
+        )
+        for ann in fig.layout.annotations:
+            ann.font = dict(size=9, color="#8899bb", family="JetBrains Mono")
+        fig.update_xaxes(gridcolor="#1e2d45")
+        fig.update_yaxes(gridcolor="#1e2d45")
+
         st.plotly_chart(fig, use_container_width=True)
 
         # Macro Regime
@@ -602,9 +628,18 @@ def render_macro_pro_tab(fred_key: str):
             else:
                 notes.append("🟢 Moderate Rates"); score += 1
 
+        if "10Y Treasury" in valid_data and "2Y Treasury" in valid_data:
+            t10 = valid_data["10Y Treasury"]["value"].iloc[-1]
+            t2 = valid_data["2Y Treasury"]["value"].iloc[-1]
+            if t10 - t2 < 0:
+                notes.append("🔴 Inverted yield curve — recession signal"); score -= 1
+            else:
+                notes.append("🟢 Normal yield curve"); score += 1
+
         regime = "BULLISH 🟢" if score > 0 else ("BEARISH 🔴" if score < 0 else "NEUTRAL ⚪")
         st.metric("Overall Macro Regime", regime)
-        for n in notes: st.write(n)
+        for n in notes:
+            st.markdown(f"<div style='font-size:11px;font-family:JetBrains Mono,monospace;color:#8899bb;margin:3px 0'>{n}</div>", unsafe_allow_html=True)
     else:
         st.error("Could not fetch FRED data. Please check your API key.")
 
@@ -685,131 +720,174 @@ def render_trading_ideas_tab():
         st.divider()
 
 
+def render_backtest_lab_tab():
+    st.subheader("🧪 Modular Backtest Lab")
+
+    c1, c2 = st.columns([1, 3])
+    with c1:
+        st.markdown("### 📁 Data Source")
+        data_file = st.text_input("Path to CSV (M1, semi-colon separated)", "DAT_NT_EURUSD_M1_2025.csv")
+
+        if not Path(data_file).exists():
+            st.warning("Please provide a valid path to the data file.")
+            return
+
+        try:
+            df_raw = pd.read_csv(
+                data_file,
+                sep=";",
+                header=None,
+                names=["datetime", "open", "high", "low", "close", "volume"],
+                parse_dates=["datetime"],
+                date_format="%Y%m%d %H%M%S",
+            )
+            df_raw = df_raw.dropna(subset=["datetime"])
+            df_raw = df_raw.sort_values("datetime").reset_index(drop=True)
+            df_raw["date"] = df_raw["datetime"].dt.date
+            # Rename columns to standard OHLC for the modular analyzer
+            df_raw.columns = [col.capitalize() if col != 'datetime' and col != 'date' else col for col in df_raw.columns]
+        except Exception as e:
+            st.error(f"Error loading file: {e}")
+            return
+
+        all_dates = sorted(df_raw["date"].unique())
+        date_options = [str(d) for d in all_dates]
+
+        st.markdown("### ⚙️ Controls")
+        selected_str = st.selectbox("📅 Select Trading Day", date_options, index=0)
+        selected_date = pd.Timestamp(selected_str).date()
+        tf_choice = st.selectbox("⏱ Timeframe", ["M5", "M15", "M30", "H1", "M1"], index=1)
+        show_ema = st.checkbox("EMA (20 / 50)", value=True)
+        show_bb = st.checkbox("Bollinger Bands", value=False)
+        show_sessions = st.checkbox("Session Shading", value=True)
+
+    df_day = df_raw[df_raw["date"] == selected_date].copy()
+    if df_day.empty:
+        st.warning("No data for selected date.")
+        return
+
+    rules = {"M1": "1min", "M5": "5min", "M15": "15min", "M30": "30min", "H1": "1h"}
+    if tf_choice != "M1":
+        df_tf = df_day.set_index("datetime").resample(rules[tf_choice]).agg(
+            Open=("Open", "first"),
+            High=("High", "max"),
+            Low=("Low", "min"),
+            Close=("Close", "last"),
+            Volume=("Volume", "sum"),
+        ).dropna().reset_index()
+    else:
+        df_tf = df_day.copy()
+
+    df_tf_ind = analyzer.add_indicators(df_tf.copy())
+    bias, confidence = analyzer.compute_daily_bias(df_day)
+    sess = analyzer.session_analysis(df_day)
+
+    # Key Levels for display
+    c_last = df_day["Close"].iloc[-1]
+    h_day = df_day["High"].max()
+    l_day = df_day["Low"].min()
+    rng = h_day - l_day
+    pp = (h_day + l_day + c_last) / 3
+    levels = {
+        "pp": pp,
+        "r1": 2 * pp - l_day,
+        "r2": pp + rng,
+        "s1": 2 * pp - h_day,
+        "s2": pp - rng
+    }
+
+    with c2:
+        st.markdown(f"### {selected_str} | Bias: {bias} ({confidence:.0f}%)")
+        sess_cols = st.columns(3)
+        for i, (name, data) in enumerate(sess.items()):
+            with sess_cols[i]:
+                if data:
+                    st.markdown(f"**{name}** {data['direction']}")
+                    st.caption(f"Range: {data['range_pips']} pips | H: {data['high']:.5f} L: {data['low']:.5f}")
+                else:
+                    st.markdown(f"**{name}** — no data")
+
+        # Build Chart
+        fig = make_subplots(
+            rows=3, cols=1,
+            shared_xaxes=True,
+            row_heights=[0.55, 0.23, 0.22],
+            vertical_spacing=0.04,
+            subplot_titles=[f"Backtest {tf_choice} — {selected_date}", "RSI (14)", "MACD"],
+        )
+
+        fig.add_trace(go.Candlestick(
+            x=df_tf_ind["datetime"],
+            open=df_tf_ind["Open"], high=df_tf_ind["High"],
+            low=df_tf_ind["Low"], close=df_tf_ind["Close"],
+            name="Price", showlegend=False, **CANDLE_STYLE,
+        ), row=1, col=1)
+
+        if show_ema:
+            for col, color in EMA_COLORS.items():
+                if col in df_tf_ind.columns:
+                    fig.add_trace(go.Scatter(x=df_tf_ind["datetime"], y=df_tf_ind[col],
+                                             line=dict(color=color, width=1.4), name=col), row=1, col=1)
+
+        if show_bb:
+            bb_styles = [("BB_Upper", "#4fc3f7", "dot"), ("BB_Middle", "#90a4ae", "solid"), ("BB_Lower", "#4fc3f7", "dot")]
+            for col, color, dash in bb_styles:
+                if col in df_tf_ind.columns:
+                    fig.add_trace(go.Scatter(x=df_tf_ind["datetime"], y=df_tf_ind[col],
+                                             line=dict(color=color, width=1, dash=dash),
+                                             name=col, opacity=0.7), row=1, col=1)
+            if "BB_Upper" in df_tf_ind.columns and "BB_Lower" in df_tf_ind.columns:
+                fig.add_trace(
+                    go.Scatter(x=pd.concat([df_tf_ind["datetime"], df_tf_ind["datetime"][::-1]]),
+                               y=pd.concat([df_tf_ind["BB_Upper"], df_tf_ind["BB_Lower"][::-1]]),
+                               fill="toself", fillcolor="rgba(79,195,247,0.05)",
+                               line=dict(color="rgba(0,0,0,0)"), showlegend=False, name="BB Band"), row=1, col=1)
+
+        level_colors = {"pp": "#9e9e9e", "r1": "#ef5350", "r2": "#e53935", "s1": "#26a69a", "s2": "#00897b"}
+        for key, price in levels.items():
+            fig.add_hline(y=price, line_dash="dot", line_color=level_colors[key], line_width=0.8, row=1, col=1)
+
+        if show_sessions:
+            sess_colors = {"Asian": "rgba(255,193,7,0.06)", "London": "rgba(30,136,229,0.07)", "NY": "rgba(239,83,80,0.06)"}
+            for name, (s, e) in analyzer.get_sessions(selected_date).items():
+                fig.add_vrect(x0=s, x1=e, fillcolor=sess_colors[name], layer="below", line_width=0, annotation_text=name, row=1, col=1)
+
+        if "RSI" in df_tf_ind.columns:
+            fig.add_trace(go.Scatter(x=df_tf_ind["datetime"], y=df_tf_ind["RSI"], line=RSI_LINE, name="RSI"), row=2, col=1)
+            fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
+            fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
+
+        if "MACD_Histogram" in df_tf_ind.columns:
+            fig.add_trace(go.Bar(x=df_tf_ind["datetime"], y=df_tf_ind["MACD_Histogram"], name="MACD Hist", marker_color="#7986cb"), row=3, col=1)
+
+        fig.update_layout(height=720, **CHART_LAYOUT)
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("#### 💡 Backtest Trading Ideas")
+        # Generate ideas logic from original script
+        backtest_ideas = []
+        if bias == "Bullish":
+            backtest_ideas.append({"icon": "🟢", "text": f"BUY on pullback to S1 ({levels['s1']:.5f}) or mid-range ({(h_day+l_day)/2:.5f}). Target R1 ({levels['r1']:.5f})."})
+        elif bias == "Bearish":
+            backtest_ideas.append({"icon": "🔴", "text": f"SELL on bounce to R1 ({levels['r1']:.5f}) or mid-range ({(h_day+l_day)/2:.5f}). Target S1 ({levels['s1']:.5f})."})
+        else:
+            backtest_ideas.append({"icon": "⚪", "text": f"Range day. BUY near lows ({l_day:.5f}) / SELL near highs ({h_day:.5f}). Fade the extremes."})
+
+        last_ind = df_tf_ind.iloc[-1]
+        if "RSI" in last_ind:
+            rv = last_ind["RSI"]
+            if rv > 70: backtest_ideas.append({"icon": "⚠️", "text": f"RSI overbought ({rv:.1f}). Caution on longs."})
+            elif rv < 30: backtest_ideas.append({"icon": "⚠️", "text": f"RSI oversold ({rv:.1f}). Caution on shorts."})
+
+        for idea in backtest_ideas:
+            st.info(f"{idea['icon']} {idea['text']}")
+
+
 def render_weekly_swing_tab(data_by_timeframe: Dict):
     st.subheader("📅 Weekly Swing Trading Ideas")
     st.caption("Pivot-point driven setups anchored to the weekly timeframe, confirmed by the daily chart.")
 
-    weekly_data = data_by_timeframe.get("Weekly", {})
-    daily_data  = data_by_timeframe.get("Daily",  {})
-
-    if not weekly_data:
-        st.warning("No weekly data available — click ↺ Refresh in the sidebar.")
-        return
-
-    ideas = []
-
-    for pair in config.assets:
-        df_w = weekly_data.get(pair, pd.DataFrame())
-        df_d = daily_data.get(pair,  pd.DataFrame())
-
-        if df_w.empty or len(df_w) < 20:
-            continue
-
-        df_w = analyzer.add_indicators(df_w.copy())
-        last = df_w.iloc[-1]
-
-        price  = float(last["Close"])
-        ema20  = float(last.get("EMA_20", price))
-        ema50  = float(last.get("EMA_50", price))
-        rsi    = float(last.get("RSI",   50.0))
-        adx    = float(last.get("ADX",    0.0))
-        atr    = float(last.get("ATR",  price * 0.01))
-
-        # ── Weekly pivots (based on previous completed weekly candle) ─────────
-        pivots = analyzer.calculate_pivots(df_w)
-        if not pivots:
-            continue
-        pp = pivots["Pivot"]
-        r1 = pivots["R1"]; r2 = pivots["R2"]; r3 = pivots["R3"]
-        s1 = pivots["S1"]; s2 = pivots["S2"]; s3 = pivots["S3"]
-
-        # ── Fibonacci levels over the last 12 weeks ───────────────────────────
-        fibs = analyzer.calculate_fibonacci(df_w.tail(12))
-
-        # ── Bias scoring ──────────────────────────────────────────────────────
-        bull_s = bear_s = 0
-        reasons: List[str] = []
-
-        if price > ema20:  bull_s += 2
-        else:              bear_s += 2
-
-        if ema20 > ema50:  bull_s += 2; reasons.append("EMA20 > EMA50 — weekly uptrend")
-        else:              bear_s += 2; reasons.append("EMA20 < EMA50 — weekly downtrend")
-
-        if rsi > 55:       bull_s += 1; reasons.append(f"RSI {rsi:.0f} — bullish momentum")
-        elif rsi < 45:     bear_s += 1; reasons.append(f"RSI {rsi:.0f} — bearish momentum")
-
-        if price > pp:     bull_s += 1; reasons.append(f"Price above weekly pivot ({pp:.5f})")
-        else:              bear_s += 1; reasons.append(f"Price below weekly pivot ({pp:.5f})")
-
-        if adx > 20:
-            if bull_s > bear_s: bull_s += 1; reasons.append(f"ADX {adx:.0f} — trend is strong")
-            else:               bear_s += 1; reasons.append(f"ADX {adx:.0f} — trend is strong")
-
-        if bull_s == bear_s or adx < 15:
-            continue  # skip flat / trendless markets
-
-        bias = "Long" if bull_s > bear_s else "Short"
-
-        # ── Entry / SL / TP ───────────────────────────────────────────────────
-        fib_382 = fibs.get("38.2%", price)
-        fib_500 = fibs.get("50.0%", price)
-        fib_618 = fibs.get("61.8%", price)
-
-        if bias == "Long":
-            # Entry: current price (or tighten to S1 pullback zone)
-            entry    = price
-            # SL: below S1 or below 61.8% fib — whichever is lower
-            sl       = min(s1, fib_618) - atr * 0.3
-            tp1      = r1
-            tp2      = r2
-            tp3      = r3
-        else:
-            entry    = price
-            # SL: above R1 or above 38.2% fib — whichever is higher
-            sl       = max(r1, fib_382) + atr * 0.3
-            tp1      = s1
-            tp2      = s2
-            tp3      = s3
-
-        stop_dist = abs(entry - sl)
-        if stop_dist == 0:
-            continue
-
-        rr1 = round(abs(tp1 - entry) / stop_dist, 2)
-        rr2 = round(abs(tp2 - entry) / stop_dist, 2)
-        rr3 = round(abs(tp3 - entry) / stop_dist, 2)
-
-        if rr1 < 1.5:
-            continue  # reject low-quality setups
-
-        # ── Daily confirmation ────────────────────────────────────────────────
-        daily_conf = "—"
-        if not df_d.empty:
-            df_d_ind     = analyzer.add_indicators(df_d.copy())
-            daily_sent   = analyzer.get_sentiment(df_d_ind)
-            if (bias == "Long"  and daily_sent == "Bullish") or \
-               (bias == "Short" and daily_sent == "Bearish"):
-                daily_conf = "✅ Aligned"
-            elif daily_sent == "Neutral":
-                daily_conf = "⚪ Neutral"
-            else:
-                daily_conf = "⚠️ Conflicting"
-
-        ideas.append({
-            "pair": pair, "bias": bias, "price": price,
-            "entry": entry, "sl": sl,
-            "tp1": tp1, "tp2": tp2, "tp3": tp3,
-            "rr1": rr1, "rr2": rr2, "rr3": rr3,
-            "rsi": rsi, "adx": adx, "atr": atr,
-            "pivots": pivots, "fibs": fibs,
-            "reasons": reasons, "daily_conf": daily_conf,
-            "score": bull_s if bias == "Long" else bear_s,
-            "df_w": df_w,
-        })
-
-    # Best R:R first, then highest score
-    ideas.sort(key=lambda x: (x["rr1"], x["score"]), reverse=True)
+    ideas = generate_weekly_swing_ideas(data_by_timeframe)
 
     if not ideas:
         st.warning("No qualifying swing setups found. Markets may be ranging — ADX threshold is 15.")
@@ -979,6 +1057,7 @@ def main():
         "⚡ Signal Pro",                # Step 7 — signal confirmation
         "🎯 Trading Ideas",             # Step 8 — auto-refreshed setups
         "⏱️ 15-Min Entry",              # Step 9 — execution timing
+        "🧪 Backtest Lab",              # Step 10 — historical testing
     ])
 
     with tabs[0]:
@@ -1001,6 +1080,8 @@ def main():
         render_trading_ideas_tab()
     with tabs[9]:
         render_15m_entry_tab(data_by_timeframe)
+    with tabs[10]:
+        render_backtest_lab_tab()
 
 
 if __name__ == "__main__":
