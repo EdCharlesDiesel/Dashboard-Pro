@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import warnings
 from src.core.analyzer import TechnicalAnalyzer as analyzer
+from src.core.config import CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 warnings.filterwarnings("ignore")
 
 # ─── PAGE CONFIG ──────────────────────────────────────────────────────────────
@@ -172,10 +173,9 @@ def generate_trading_ideas(df_day, bias, indicators):
     s2 = pp - rng
 
     last = indicators.iloc[-1] if len(indicators) > 0 else None
-    rsi_val = last["RSI"] if last is not None and "RSI" in last else None
-    ema9 = last[
-        "EMA_9"] if last is not None and "EMA_9" in last else None  # We can customize analyzer for these or use defaults
-    ema21 = last["EMA_20"] if last is not None and "EMA_20" in last else None
+    rsi_val = last["RSI"] if last is not None and "RSI" in last.index else None
+    ema20_val = last["EMA_20"] if last is not None and "EMA_20" in last.index else None
+    ema50_val = last["EMA_50"] if last is not None and "EMA_50" in last.index else None
 
     # Key levels
     ideas.append({"type": "level", "icon": "📍", "text": f"Pivot Point: {pp:.5f} | R1: {r1:.5f} | R2: {r2:.5f}"})
@@ -220,12 +220,11 @@ def build_chart(df_tf, bias, levels, tf_label, show_ema, show_bb, show_sessions,
         x=df_tf["datetime"],
         open=df_tf["Open"], high=df_tf["High"],
         low=df_tf["Low"], close=df_tf["Close"],
-        increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
-        name="Price", showlegend=False,
+        name="Price", showlegend=False, **CANDLE_STYLE,
     ), row=1, col=1)
 
     if show_ema:
-        for col, color in [("EMA_20", "#ff9800"), ("EMA_50", "#ab47bc")]:
+        for col, color in EMA_COLORS.items():
             if col in df_tf.columns:
                 fig.add_trace(
                     go.Scatter(x=df_tf["datetime"], y=df_tf[col], line=dict(color=color, width=1.2), name=col), row=1,
@@ -248,15 +247,16 @@ def build_chart(df_tf, bias, levels, tf_label, show_ema, show_bb, show_sessions,
     # RSI
     if "RSI" in df_tf.columns:
         fig.add_trace(
-            go.Scatter(x=df_tf["datetime"], y=df_tf["RSI"], line=dict(color="#7986cb", width=1.5), name="RSI"), row=2,
-            col=1)
+            go.Scatter(x=df_tf["datetime"], y=df_tf["RSI"], line=RSI_LINE, name="RSI"), row=2, col=1)
+        fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
+        fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
 
     # MACD
     if "MACD" in df_tf.columns:
-        fig.add_trace(go.Bar(x=df_tf["datetime"], y=df_tf["MACD_Histogram"], name="MACD Hist"), row=3, col=1)
+        fig.add_trace(go.Bar(x=df_tf["datetime"], y=df_tf["MACD_Histogram"], name="MACD Hist",
+                             marker_color="#7986cb"), row=3, col=1)
 
-    fig.update_layout(height=720, plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font=dict(color="#c0c0c0", size=11),
-                      xaxis_rangeslider_visible=False)
+    fig.update_layout(height=720, **CHART_LAYOUT)
     return fig
 
 

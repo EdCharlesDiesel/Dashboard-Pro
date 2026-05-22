@@ -10,3 +10,8 @@ matplotlib
 requests
 tenacity
 requests
+streamlit
+
+
+
+
