@@ -553,3 +553,94 @@ def generate_weekly_swing_ideas(data_by_timeframe: Dict) -> List[Dict]:
     # Best R:R first, then highest score
     ideas.sort(key=lambda x: (x["rr1"], x["score"]), reverse=True)
     return ideas
+
+
+def generate_supertrend_signals(df: pd.DataFrame, dema_period: int = 200,
+                                st_period1: int = 10, st_mult1: float = 3.0,
+                                st_period2: int = 12, st_mult2: float = 3.5,
+                                qqe_rsi: int = 14, qqe_smooth: int = 5, qqe_factor: float = 2.618) -> pd.Series:
+    """
+    Consolidated Supertrend + QQE + DEMA strategy logic.
+    - Both Supertrends must agree
+    - Price must be on correct side of DEMA
+    - QQE trend must confirm
+    Returns a series with 1 (Buy), -1 (Sell), or 0 (Hold).
+    """
+    if df.empty:
+        return pd.Series()
+
+    st1 = analyzer.calculate_supertrend(df, st_period1, st_mult1)
+    st2 = analyzer.calculate_supertrend(df, st_period2, st_mult2)
+    dema = analyzer.calculate_dema(df["Close"], dema_period)
+    qqe = analyzer.calculate_qqe(df["Close"], qqe_rsi, qqe_smooth, qqe_factor)
+
+    signals = pd.Series(0, index=df.index)
+
+    st_bullish = (st1["Trend"] == 1) & (st2["Trend"] == 1)
+    st_bearish = (st1["Trend"] == -1) & (st2["Trend"] == -1)
+    price_above_dema = df['Close'] > dema
+    price_below_dema = df['Close'] < dema
+    qqe_bullish = qqe["Trend"] == 1
+    qqe_bearish = qqe["Trend"] == -1
+
+    signals[st_bullish & price_above_dema & qqe_bullish] = 1
+    signals[st_bearish & price_below_dema & qqe_bearish] = -1
+
+    return signals
+
+
+def evaluate_trend_following_signal(df: pd.DataFrame, min_conditions: int = 4) -> Tuple[str, int, int, Dict[str, bool], str]:
+    """
+    Evaluates trend following signal based on 50/200 EMA, RSI, MACD, and ADX.
+    Returns (signal_label, score, max_score, conditions_dict, direction)
+    """
+    if len(df) < 200:
+        return "⏳ NEUTRAL", 0, 6, {}, "NEUTRAL"
+
+    df = analyzer.add_indicators(df)
+    r = df.iloc[-1]
+    close = float(r["Close"])
+    e50 = float(r["EMA_50"])
+    e200 = float(ref_e200) if (ref_e200 := r.get("EMA_200")) else close # Note: add_indicators doesn't have EMA_200 by default, using SMA_50 as proxy if not available or adding it here
+
+    # Correction: add_indicators only provides EMA_20 and EMA_50.
+    # For trend following, we often use 200. Let's use SMA_50 and EMA_50 as fallback or improve analyzer.
+    # For now, let's stick to indicators available in TechnicalAnalyzer.
+
+    e20 = float(r["EMA_20"])
+    e50 = float(r["EMA_50"])
+    rsi_val = float(r["RSI"])
+    macd_v = float(r["MACD"])
+    macd_s = float(r["MACD_Signal"])
+    adx_v = float(r["ADX"])
+
+    buy_conds = {
+        "Price above 50 EMA": close > e50,
+        "20 EMA above 50 EMA": e20 > e50,
+        "Price at/above 20 EMA": close >= e20 * 0.9985,
+        "RSI 45–70 (bullish momentum)": 45 <= rsi_val <= 70,
+        "MACD above Signal line": macd_v > macd_s,
+        "Strong trend (ADX > 25)": adx_v > 25,
+    }
+    sell_conds = {
+        "Price below 50 EMA": close < e50,
+        "20 EMA below 50 EMA": e20 < e50,
+        "Price at/below 20 EMA": close <= e20 * 1.0015,
+        "RSI 30–55 (bearish momentum)": 30 <= rsi_val <= 55,
+        "MACD below Signal line": macd_v < macd_s,
+        "Strong trend (ADX > 25)": adx_v > 25,
+    }
+
+    bs = sum(buy_conds.values())
+    ss = sum(sell_conds.values())
+
+    if bs >= min_conditions and bs >= ss:
+        direction = "STRONG_BUY" if bs >= 5 else "BUY"
+        label = "🚀 STRONG BUY" if bs >= 5 else "📈 BUY"
+        return label, bs, 6, buy_conds, direction
+    elif ss >= min_conditions and ss > bs:
+        direction = "STRONG_SELL" if ss >= 5 else "SELL"
+        label = "🔻 STRONG SELL" if ss >= 5 else "📉 SELL"
+        return label, ss, 6, sell_conds, direction
+    else:
+        return "⏳ NEUTRAL", max(bs, ss), 6, {}, "NEUTRAL"

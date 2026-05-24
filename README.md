@@ -8,8 +8,7 @@ A modular, professional Forex Macro Dashboard combining technical analysis, macr
 
 ```
 Dashboard-Pro/
-├── main_dashboard.py              # Production dashboard entry point
-├── AnalysisDashboardBackTest.py   # Historical EUR/USD backtesting tool
+├── app.py                         # Production dashboard entry point
 ├── src/
 │   └── core/
 │       ├── analyzer.py            # Technical indicators (via ta library)
@@ -41,7 +40,7 @@ export FRED_API_KEY=your_api_key_here
 
 **3. Run the dashboard**
 ```bash
-streamlit run main_dashboard.py
+streamlit run app.py
 ```
 
 ---
@@ -62,6 +61,10 @@ The tabs are ordered to mirror your daily top-down analysis workflow — open th
 | 7 | ⚡ Signal Pro | QuantConnect-style signal confirmation |
 | 8 | 🎯 Trading Ideas | Auto-generated setups, refreshed every 5 min |
 | 9 | ⏱️ 15-Min Entry | Execution timing — Stoch, RSI, BB triggers |
+| 10 | 🔥 Trend Following | Scanner for strong trending conditions |
+| 11 | 🔊 Volume Profile | Volume distribution (POC, HVN, LVN, VA) |
+| 12 | 🛡️ Supertrend Strategy | Dual Supertrend + QQE + DEMA strategy |
+| 13 | 🧪 Backtest Lab | Historical strategy testing |
 
 ---
 
