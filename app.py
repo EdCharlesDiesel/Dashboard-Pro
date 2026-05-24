@@ -14,15 +14,11 @@ from email.mime.multipart import MIMEMultipart
 from typing import Dict, Tuple, List, Optional
 from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
-
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
 from src.core.signals import generate_trading_ideas, safe_get, entry_generator, generate_weekly_swing_ideas
 
-# ============================================================================
-# PAGE CONFIGURATION
-# ============================================================================
 st.set_page_config(
     page_title="Macro Dashboard Pro",
     page_icon="📊",
@@ -387,7 +383,7 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
         if val == "Bearish": return "background-color: #ca2427; color: white;"
         return ""
 
-    st.table(mtf_df.style.applymap(color_sentiment))
+    st.table(mtf_df.style.map(color_sentiment))
 
 
 def render_technical_chart_tab(data_by_timeframe: Dict):
@@ -885,7 +881,7 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
     st.subheader("📅 Weekly Swing Trading Ideas")
     st.caption("Pivot-point driven setups anchored to the weekly timeframe, confirmed by the daily chart.")
 
-<<<<<<<< HEAD:main_dashboard.py
+
     weekly_data = data_by_timeframe.get("Weekly", {})
     daily_data  = data_by_timeframe.get("Daily",  {})
 
@@ -1007,9 +1003,9 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
 
     # Best R:R first, then highest score
     ideas.sort(key=lambda x: (x["rr1"], x["score"]), reverse=True)
-========
+
     ideas = generate_weekly_swing_ideas(data_by_timeframe)
->>>>>>>> 4201c7cc35e9270b3774ca5c1f10a75538d731bd:app.py
+
 
     if not ideas:
         st.warning("No qualifying swing setups found. Markets may be ranging — ADX threshold is 15.")
@@ -1409,11 +1405,10 @@ def main():
         "⚡ Signal Pro",                # Step 7 — signal confirmation
         "🎯 Trading Ideas",             # Step 8 — auto-refreshed setups
         "⏱️ 15-Min Entry",              # Step 9 — execution timing
-<<<<<<<< HEAD:main_dashboard.py
         "🔥 Trend Following",           # Step 10 — trending pair scanner
-========
+
         "🧪 Backtest Lab",              # Step 10 — historical testing
->>>>>>>> 4201c7cc35e9270b3774ca5c1f10a75538d731bd:app.py
+
     ])
 
     with tabs[0]:
@@ -1437,12 +1432,9 @@ def main():
     with tabs[9]:
         render_15m_entry_tab(data_by_timeframe)
     with tabs[10]:
-<<<<<<<< HEAD:main_dashboard.py
         render_trend_following_tab(data_by_timeframe)
-========
+    with tabs[11]:
         render_backtest_lab_tab()
->>>>>>>> 4201c7cc35e9270b3774ca5c1f10a75538d731bd:app.py
-
 
 if __name__ == "__main__":
     try:
