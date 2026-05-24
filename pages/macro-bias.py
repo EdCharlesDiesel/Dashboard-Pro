@@ -301,9 +301,9 @@ def pair_macro_bias(base: str, quote: str, scores: dict) -> dict:
 with st.sidebar:
     st.markdown("### 🌐 Macro Bias")
     st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/correlations.py", label="Correlations", icon="🔗")
-    st.page_link("pages/macro-bias.py", label="Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="News Filter", icon="📰")
+    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
+    st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
     st.page_link("pages/atr-volatility.py", label="ATR Volatility", icon="📊")
     st.page_link("pages/weekly-ema.py", label="Weekly EMA", icon="📉")
     st.page_link("pages/weekly-rsi.py", label="Weekly RSI", icon="📡")
