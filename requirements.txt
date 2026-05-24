@@ -12,6 +12,7 @@ tenacity
 requests
 streamlit
 scipy
+pytz
 
 
 
