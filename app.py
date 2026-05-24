@@ -14,15 +14,11 @@ from email.mime.multipart import MIMEMultipart
 from typing import Dict, Tuple, List, Optional
 from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
-
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
 from src.core.signals import generate_trading_ideas, safe_get, entry_generator, generate_weekly_swing_ideas
 
-# ============================================================================
-# PAGE CONFIGURATION
-# ============================================================================
 st.set_page_config(
     page_title="Macro Dashboard Pro",
     page_icon="📊",
@@ -271,12 +267,10 @@ def clear_data_cache() -> None:
 # ============================================================================
 # UI COMPONENTS
 # ============================================================================
-def render_sidebar() -> str:
+def render_sidebar(fred_api_key: str = "") -> str:
     with st.sidebar:
         st.header("⚙️ Dashboard Settings")
 
-        # Load key from secrets or environment — never hardcode keys in source
-        fred_api_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
         if fred_api_key:
             st.success("✅ FRED API Key loaded")
         else:
@@ -389,7 +383,7 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
         if val == "Bearish": return "background-color: #ca2427; color: white;"
         return ""
 
-    st.table(mtf_df.style.applymap(color_sentiment))
+    st.table(mtf_df.style.map(color_sentiment))
 
 
 def render_technical_chart_tab(data_by_timeframe: Dict):
@@ -887,7 +881,131 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
     st.subheader("📅 Weekly Swing Trading Ideas")
     st.caption("Pivot-point driven setups anchored to the weekly timeframe, confirmed by the daily chart.")
 
+
+    weekly_data = data_by_timeframe.get("Weekly", {})
+    daily_data  = data_by_timeframe.get("Daily",  {})
+
+    if not weekly_data:
+        st.warning("No weekly data available — click ↺ Refresh in the sidebar.")
+        return
+
+    ideas = []
+
+    for pair in config.assets:
+        df_w = weekly_data.get(pair, pd.DataFrame())
+        df_d = daily_data.get(pair,  pd.DataFrame())
+
+        if df_w.empty or len(df_w) < 20:
+            continue
+
+        df_w = analyzer.add_indicators(df_w.copy())
+        last = df_w.iloc[-1]
+
+        price  = float(last["Close"])
+        ema20  = float(last.get("EMA_20", price))
+        ema50  = float(last.get("EMA_50", price))
+        rsi    = float(last.get("RSI",   50.0))
+        adx    = float(last.get("ADX",    0.0))
+        atr    = float(last.get("ATR",  price * 0.01))
+
+        # ── Weekly pivots (based on previous completed weekly candle) ─────────
+        pivots = analyzer.calculate_pivots(df_w)
+        if not pivots:
+            continue
+        pp = pivots["Pivot"]
+        r1 = pivots["R1"]; r2 = pivots["R2"]; r3 = pivots["R3"]
+        s1 = pivots["S1"]; s2 = pivots["S2"]; s3 = pivots["S3"]
+
+        # ── Fibonacci levels over the last 12 weeks ───────────────────────────
+        fibs = analyzer.calculate_fibonacci(df_w.tail(12))
+
+        # ── Bias scoring ──────────────────────────────────────────────────────
+        bull_s = bear_s = 0
+        reasons: List[str] = []
+
+        if price > ema20:  bull_s += 2
+        else:              bear_s += 2
+
+        if ema20 > ema50:  bull_s += 2; reasons.append("EMA20 > EMA50 — weekly uptrend")
+        else:              bear_s += 2; reasons.append("EMA20 < EMA50 — weekly downtrend")
+
+        if rsi > 55:       bull_s += 1; reasons.append(f"RSI {rsi:.0f} — bullish momentum")
+        elif rsi < 45:     bear_s += 1; reasons.append(f"RSI {rsi:.0f} — bearish momentum")
+
+        if price > pp:     bull_s += 1; reasons.append(f"Price above weekly pivot ({pp:.5f})")
+        else:              bear_s += 1; reasons.append(f"Price below weekly pivot ({pp:.5f})")
+
+        if adx > 20:
+            if bull_s > bear_s: bull_s += 1; reasons.append(f"ADX {adx:.0f} — trend is strong")
+            else:               bear_s += 1; reasons.append(f"ADX {adx:.0f} — trend is strong")
+
+        if bull_s == bear_s or adx < 15:
+            continue  # skip flat / trendless markets
+
+        bias = "Long" if bull_s > bear_s else "Short"
+
+        # ── Entry / SL / TP ───────────────────────────────────────────────────
+        fib_382 = fibs.get("38.2%", price)
+        fib_500 = fibs.get("50.0%", price)
+        fib_618 = fibs.get("61.8%", price)
+
+        if bias == "Long":
+            # Entry: current price (or tighten to S1 pullback zone)
+            entry    = price
+            # SL: below S1 or below 61.8% fib — whichever is lower
+            sl       = min(s1, fib_618) - atr * 0.3
+            tp1      = r1
+            tp2      = r2
+            tp3      = r3
+        else:
+            entry    = price
+            # SL: above R1 or above 38.2% fib — whichever is higher
+            sl       = max(r1, fib_382) + atr * 0.3
+            tp1      = s1
+            tp2      = s2
+            tp3      = s3
+
+        stop_dist = abs(entry - sl)
+        if stop_dist == 0:
+            continue
+
+        rr1 = round(abs(tp1 - entry) / stop_dist, 2)
+        rr2 = round(abs(tp2 - entry) / stop_dist, 2)
+        rr3 = round(abs(tp3 - entry) / stop_dist, 2)
+
+        if rr1 < 1.5:
+            continue  # reject low-quality setups
+
+        # ── Daily confirmation ────────────────────────────────────────────────
+        daily_conf = "—"
+        if not df_d.empty:
+            df_d_ind     = analyzer.add_indicators(df_d.copy())
+            daily_sent   = analyzer.get_sentiment(df_d_ind)
+            if (bias == "Long"  and daily_sent == "Bullish") or \
+                    (bias == "Short" and daily_sent == "Bearish"):
+                daily_conf = "✅ Aligned"
+            elif daily_sent == "Neutral":
+                daily_conf = "⚪ Neutral"
+            else:
+                daily_conf = "⚠️ Conflicting"
+
+        ideas.append({
+            "pair": pair, "bias": bias, "price": price,
+            "entry": entry, "sl": sl,
+            "tp1": tp1, "tp2": tp2, "tp3": tp3,
+            "rr1": rr1, "rr2": rr2, "rr3": rr3,
+            "rsi": rsi, "adx": adx, "atr": atr,
+            "pivots": pivots, "fibs": fibs,
+            "reasons": reasons, "daily_conf": daily_conf,
+            "score": bull_s if bias == "Long" else bear_s,
+            "df_w": df_w,
+        })
+
+    # Best R:R first, then highest score
+    ideas.sort(key=lambda x: (x["rr1"], x["score"]), reverse=True)
+
     ideas = generate_weekly_swing_ideas(data_by_timeframe)
+
 
     if not ideas:
         st.warning("No qualifying swing setups found. Markets may be ranging — ADX threshold is 15.")
@@ -996,6 +1114,236 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
 
 
 # ============================================================================
+# FOREX TREND FOLLOWING TAB
+# ============================================================================
+
+def _trend_score(price: float, ema20: float, ema50: float, adx: float, rsi: float) -> int:
+    """Return an integer 0-10 trend strength score for a single timeframe row."""
+    score = 0
+    if ema20 > ema50:
+        score += 3          # golden cross
+    if price > ema20:
+        score += 2          # price above fast EMA
+    if adx >= 25:
+        score += 3          # strong trend per Wilder
+    elif adx >= 20:
+        score += 1
+    if 45 < rsi < 70:
+        score += 1          # momentum in healthy range (bull)
+    elif 30 < rsi < 55:
+        score += 1          # momentum in healthy range (bear)
+    return min(score, 10)
+
+
+def render_trend_following_tab(data_by_timeframe: Dict) -> None:
+    st.subheader("📈 Forex Trend Following")
+    st.caption(
+        "Scans all pairs for clean trending conditions — ADX strength, EMA alignment, and momentum. "
+        "Use as a pair-selection filter before drilling into the Technical Chart or Signal Pro tabs."
+    )
+
+    # ── Controls ─────────────────────────────────────────────────────────────
+    col_tf, col_adx, col_dir = st.columns(3)
+    scan_tf  = col_tf.selectbox("Scan Timeframe", ["Daily", "4 Hour", "Weekly"], key="trf_tf")
+    adx_min  = col_adx.slider("Min ADX (trend strength)", 15, 40, 20, key="trf_adx")
+    dir_filt = col_dir.radio("Direction", ["All", "Uptrend", "Downtrend"], horizontal=True, key="trf_dir")
+
+    tf_data = data_by_timeframe.get(scan_tf, {})
+    if not tf_data:
+        st.warning(f"No data for {scan_tf}. Try refreshing.")
+        return
+
+    # ── Build scanner rows ────────────────────────────────────────────────────
+    rows = []
+    for pair, df_raw in tf_data.items():
+        if df_raw.empty or len(df_raw) < 55:
+            continue
+        df = analyzer.add_indicators(df_raw.copy())
+        if df.empty:
+            continue
+
+        last = df.iloc[-1]
+        price  = float(last.get("Close",  0.0) or 0.0)
+        ema20  = float(last.get("EMA_20", price) or price)
+        ema50  = float(last.get("EMA_50", price) or price)
+        adx    = float(last.get("ADX",    0.0) or 0.0)
+        adx_p  = float(last.get("ADX_Pos", 0.0) or 0.0)
+        adx_n  = float(last.get("ADX_Neg", 0.0) or 0.0)
+        rsi    = float(last.get("RSI",    50.0) or 50.0)
+        atr    = float(last.get("ATR",    0.0) or 0.0)
+
+        if adx < adx_min:
+            continue
+
+        trend_dir = "Uptrend" if ema20 > ema50 else "Downtrend"
+        if dir_filt != "All" and trend_dir != dir_filt:
+            continue
+
+        # Price change vs previous close
+        change_pct = 0.0
+        if len(df) >= 2:
+            prev = float(df.iloc[-2].get("Close", price) or price)
+            change_pct = (price - prev) / prev * 100 if prev else 0.0
+
+        # EMA alignment: +1 each for price>EMA20, EMA20>EMA50
+        ema_align = int(price > ema20) + int(ema20 > ema50)
+
+        score = _trend_score(price, ema20, ema50, adx, rsi)
+
+        rows.append({
+            "Pair":        pair,
+            "Direction":   trend_dir,
+            "Price":       price,
+            "Change %":    round(change_pct, 3),
+            "ADX":         round(adx, 1),
+            "+DI":         round(adx_p, 1),
+            "-DI":         round(adx_n, 1),
+            "EMA Align":   f"{'✅' * ema_align}{'⬜' * (2 - ema_align)}",
+            "RSI":         round(rsi, 1),
+            "ATR":         round(atr, 5),
+            "Score":       score,
+            "_df":         df,          # hidden, used for chart
+        })
+
+    if not rows:
+        st.info(f"No pairs meet ADX ≥ {adx_min} on the {scan_tf} timeframe. Lower the ADX threshold or try another timeframe.")
+        return
+
+    rows.sort(key=lambda r: r["Score"], reverse=True)
+
+    # ── Summary metrics ───────────────────────────────────────────────────────
+    up_count   = sum(1 for r in rows if r["Direction"] == "Uptrend")
+    down_count = len(rows) - up_count
+    avg_adx    = sum(r["ADX"] for r in rows) / len(rows)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Trending Pairs",  len(rows))
+    m2.metric("Uptrends",        up_count,   delta=f"+{up_count}")
+    m3.metric("Downtrends",      down_count, delta=f"-{down_count}", delta_color="inverse")
+    m4.metric("Avg ADX",         f"{avg_adx:.1f}")
+
+    st.divider()
+
+    # ── Scanner table ─────────────────────────────────────────────────────────
+    display_cols = ["Pair", "Direction", "Price", "Change %", "ADX", "+DI", "-DI", "EMA Align", "RSI", "ATR", "Score"]
+    display_df = pd.DataFrame([{k: r[k] for k in display_cols} for r in rows])
+
+    def _style_row(row):
+        base = [""] * len(row)
+        if row["Direction"] == "Uptrend":
+            base[1] = "background-color:#0d2d1f; color:#4af0c4;"
+        else:
+            base[1] = "background-color:#2d0d0d; color:#f04a6a;"
+        if row["Score"] >= 8:
+            base[-1] = "color:#ffd700; font-weight:700;"
+        elif row["Score"] >= 6:
+            base[-1] = "color:#66bb6a;"
+        return base
+
+    st.dataframe(
+        display_df.style.apply(_style_row, axis=1),
+        use_container_width=True,
+        height=min(38 * len(rows) + 38, 450),
+    )
+
+    st.divider()
+
+    # ── Per-pair chart ────────────────────────────────────────────────────────
+    st.markdown("#### 📊 Trend Chart")
+    pair_names = [r["Pair"] for r in rows]
+    selected_pair = st.selectbox("Select pair to chart", pair_names, key="trf_chart_pair")
+    row_data = next(r for r in rows if r["Pair"] == selected_pair)
+    df_chart  = row_data["_df"]
+
+    fig = make_subplots(
+        rows=3, cols=1, shared_xaxes=True,
+        row_heights=[0.55, 0.25, 0.20],
+        vertical_spacing=0.04,
+        subplot_titles=[
+            f"{selected_pair} — {scan_tf}  |  ADX {row_data['ADX']}  |  {row_data['Direction']}",
+            "ADX / ±DI",
+            "RSI (14)",
+        ],
+    )
+
+    # Candlestick
+    fig.add_trace(go.Candlestick(
+        x=df_chart.index,
+        open=df_chart["Open"], high=df_chart["High"],
+        low=df_chart["Low"],   close=df_chart["Close"],
+        name="Price", showlegend=False, **CANDLE_STYLE,
+    ), row=1, col=1)
+
+    # EMAs
+    for ema_col, color in EMA_COLORS.items():
+        if ema_col in df_chart.columns:
+            fig.add_trace(go.Scatter(
+                x=df_chart.index, y=df_chart[ema_col],
+                line=dict(color=color, width=1.4), name=ema_col,
+            ), row=1, col=1)
+
+    # Bollinger Bands (light shading)
+    if all(c in df_chart.columns for c in ["BB_Upper", "BB_Lower", "BB_Middle"]):
+        for band, color, dash in [("BB_Upper", "#4fc3f7", "dot"), ("BB_Middle", "#90a4ae", "solid"), ("BB_Lower", "#4fc3f7", "dot")]:
+            fig.add_trace(go.Scatter(
+                x=df_chart.index, y=df_chart[band],
+                line=dict(color=color, width=0.8, dash=dash),
+                name=band, opacity=0.5,
+            ), row=1, col=1)
+
+    # ADX panel
+    if "ADX" in df_chart.columns:
+        fig.add_trace(go.Scatter(
+            x=df_chart.index, y=df_chart["ADX"],
+            line=dict(color="#ffa726", width=1.8), name="ADX",
+        ), row=2, col=1)
+    if "ADX_Pos" in df_chart.columns:
+        fig.add_trace(go.Scatter(
+            x=df_chart.index, y=df_chart["ADX_Pos"],
+            line=dict(color="#26a69a", width=1.2, dash="dot"), name="+DI",
+        ), row=2, col=1)
+    if "ADX_Neg" in df_chart.columns:
+        fig.add_trace(go.Scatter(
+            x=df_chart.index, y=df_chart["ADX_Neg"],
+            line=dict(color="#ef5350", width=1.2, dash="dot"), name="-DI",
+        ), row=2, col=1)
+    # Trend-strength reference lines
+    fig.add_hline(y=25, line=dict(color="#ffa726", width=0.7, dash="dash"), row=2, col=1)
+    fig.add_hline(y=adx_min, line=dict(color="#78909c", width=0.7, dash="dot"), row=2, col=1)
+
+    # RSI panel
+    if "RSI" in df_chart.columns:
+        fig.add_trace(go.Scatter(
+            x=df_chart.index, y=df_chart["RSI"],
+            line=RSI_LINE, name="RSI",
+        ), row=3, col=1)
+        fig.add_hline(y=70, line=RSI_OB, row=3, col=1)
+        fig.add_hline(y=50, line=dict(color="#78909c", width=0.6, dash="dot"), row=3, col=1)
+        fig.add_hline(y=30, line=RSI_OS, row=3, col=1)
+
+    fig.update_layout(height=680, **CHART_LAYOUT)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Trend read-out ────────────────────────────────────────────────────────
+    st.markdown("##### Trend Read-out")
+    rd = row_data
+    direction_icon = "📈" if rd["Direction"] == "Uptrend" else "📉"
+    adx_label = (
+        "Very Strong (>35)" if rd["ADX"] > 35 else
+        "Strong (25–35)"    if rd["ADX"] > 25 else
+        "Developing (20–25)" if rd["ADX"] > 20 else
+        "Weak (<20)"
+    )
+    st.markdown(
+        f"{direction_icon} **{rd['Direction']}** &nbsp;|&nbsp; "
+        f"ADX **{rd['ADX']}** — {adx_label} &nbsp;|&nbsp; "
+        f"+DI {rd['+DI']} / −DI {rd['-DI']} &nbsp;|&nbsp; "
+        f"RSI **{rd['RSI']}** &nbsp;|&nbsp; "
+        f"Score **{rd['Score']}/10**"
+    )
+
+
+# ============================================================================
 # MAIN APPLICATION
 # ============================================================================
 def main():
@@ -1016,7 +1364,7 @@ def main():
 
     fred_api_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
 
-    selected_tf = render_sidebar()
+    selected_tf = render_sidebar(fred_api_key)
 
     if not st.session_state.data_loaded:
         bar = st.progress(0, text="Fetching market data…")
@@ -1057,7 +1405,10 @@ def main():
         "⚡ Signal Pro",                # Step 7 — signal confirmation
         "🎯 Trading Ideas",             # Step 8 — auto-refreshed setups
         "⏱️ 15-Min Entry",              # Step 9 — execution timing
+        "🔥 Trend Following",           # Step 10 — trending pair scanner
+
         "🧪 Backtest Lab",              # Step 10 — historical testing
+
     ])
 
     with tabs[0]:
@@ -1081,8 +1432,9 @@ def main():
     with tabs[9]:
         render_15m_entry_tab(data_by_timeframe)
     with tabs[10]:
+        render_trend_following_tab(data_by_timeframe)
+    with tabs[11]:
         render_backtest_lab_tab()
-
 
 if __name__ == "__main__":
     try:
