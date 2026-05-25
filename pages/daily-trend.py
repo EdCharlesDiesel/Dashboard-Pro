@@ -123,7 +123,10 @@ def fetch_daily_trend(ticker: str, pip_size: float, days: int = 300):
         e50         = float(last["ema50"])
         gap_pips    = round((e20 - e50) / pip_size, 1)
         gap_pct     = round((e20 - e50) / e50 * 100, 4)
-        trend_bull  = e20 > e50           # EMA20 above EMA50
+        trend_bull  = e20 > e50
+
+        gap_series   = (df["ema20"] - df["ema50"]) / pip_size
+        gap_hist_p90 = float(np.percentile(gap_series.abs().dropna(), 90)) if len(gap_series) > 10 else 50.0
 
         # Slopes
         s20 = slope_pct(df["ema20"], 5)
@@ -151,6 +154,7 @@ def fetch_daily_trend(ticker: str, pip_size: float, days: int = 300):
             "price_above_20": price_above_20,
             "price_above_50": price_above_50,
             "crossover_bars": xover,
+            "gap_hist_p90": round(gap_hist_p90, 1),
             "history": df,
         }
     except Exception:
@@ -193,19 +197,60 @@ def check_trend(data: dict, direction: str) -> dict:
     return {"status": status, "detail": detail,
             "color": color, "card": card, "badge": badge}
 
+# ── EMA stack alignment ────────────────────────────────────────────────────────
+def ema_stack(data: dict, direction: str) -> dict:
+    close = data["close"]
+    e20   = data["ema20"]
+    e50   = data["ema50"]
+    e100  = data["ema100"]
+    e200  = data["ema200"]
+
+    if direction == "LONG":
+        conds = [close > e20, e20 > e50]
+        if e100 is not None:
+            conds.append(e50 > e100)
+        if e100 is not None and e200 is not None:
+            conds.append(e100 > e200)
+    else:
+        conds = [close < e20, e20 < e50]
+        if e100 is not None:
+            conds.append(e50 < e100)
+        if e100 is not None and e200 is not None:
+            conds.append(e100 < e200)
+
+    n     = len(conds)
+    score = sum(conds)
+    pct   = score / n if n else 0
+
+    if pct == 1.0:    lbl, col = "Full Stack",   "#3fb950"
+    elif pct >= 0.75: lbl, col = "Strong",        "#52cc6b"
+    elif pct >= 0.5:  lbl, col = "Partial",       "#e3b341"
+    elif pct > 0:     lbl, col = "Weak",          "#e07b39"
+    else:             lbl, col = "No Alignment",  "#f85149"
+
+    return {"score": score, "max": n, "pct": pct, "label": lbl, "color": col, "conditions": conds}
+
 # ══════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📈 Daily Trend")
-    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="Weekly RSI", icon="📡")
-    st.page_link("pages/daily-trend.py", label="📈 Daily Trend", icon="📈")
+    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
+    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
     st.divider()
 
     direction = st.radio("🎯 Trade Direction", ["LONG", "SHORT"], horizontal=True)
@@ -238,6 +283,7 @@ prog.empty()
 
 loaded  = {p: d for p, d in all_data.items() if d is not None}
 checks  = {p: check_trend(d, direction) for p, d in loaded.items()}
+stacks  = {p: ema_stack(d, direction)   for p, d in loaded.items()}
 
 intact   = [p for p, c in checks.items() if c["status"].startswith("✅")]
 weak     = [p for p, c in checks.items() if c["status"].startswith("⚠️")]
@@ -327,7 +373,7 @@ def card_sort(pair):
     d = loaded.get(pair); c = checks.get(pair, {})
     if d is None: return (9, 0, pair)
     if sort_by == "Trend Intact First":
-        return (STATUS_ORDER.get(c.get("status","")[:10], 9), 0, pair)
+        return (STATUS_ORDER.get(c.get("status",""), 9), 0, pair)
     elif sort_by == "EMA Gap (pips)":
         return (0, -abs(d["gap_pips"]), pair)
     return (0, 0, pair)
@@ -343,8 +389,9 @@ with left:
     st.markdown("### 🗂️ All Pairs — Daily Trend Status")
 
     for pair in sorted_pairs:
-        d = loaded.get(pair)
-        c = checks.get(pair)
+        d   = loaded.get(pair)
+        c   = checks.get(pair)
+        stk = stacks.get(pair, {})
         cfg = INSTRUMENTS[pair]
 
         if d is None:
@@ -360,8 +407,8 @@ with left:
         gap_abs    = abs(d["gap_pips"])
         gap_col    = "#3fb950" if (direction=="LONG" and d["gap_pips"]>0) or \
                                   (direction=="SHORT" and d["gap_pips"]<0) else "#f85149"
-        # Gap bar: max scale = 100 pips (or proportional)
-        gap_bar    = min(int(gap_abs / max(gap_abs, 100) * 100), 100)
+        gap_scale  = max(d.get("gap_hist_p90", 100.0), gap_abs, 1.0)
+        gap_bar    = min(int(gap_abs / gap_scale * 100), 100)
         s20_col    = "#3fb950" if d["slope20"]>0 else "#f85149"
         s50_col    = "#3fb950" if d["slope50"]>0 else "#f85149"
         s20_icon   = "▲" if d["slope20"]>0.01 else "▼" if d["slope20"]<-0.01 else "➡️"
@@ -375,6 +422,16 @@ with left:
         pa50 = "▲" if d["price_above_50"] else "▼"
         pa20c= "#3fb950" if d["price_above_20"] else "#f85149"
         pa50c= "#3fb950" if d["price_above_50"] else "#f85149"
+
+        # Stack dots
+        dot_cols  = ["#3fb950" if v else "#f85149" for v in stk.get("conditions", [])]
+        while len(dot_cols) < 4:
+            dot_cols.append("#30363d")
+        dots_html = "".join(
+            f'<div style="width:9px;height:9px;border-radius:2px;background:{cl};'
+            f'display:inline-block;margin:0 1px;"></div>'
+            for cl in dot_cols
+        )
 
         st.markdown(f"""
         <div class="pair-card {c['card']}" style="{highlight}">
@@ -418,6 +475,15 @@ with left:
             </div>
           </div>
 
+          <!-- Stack signal -->
+          <div style="display:flex;align-items:center;gap:5px;padding:6px 0 4px;">
+            <span style="font-size:9px;color:#484f58;letter-spacing:.05em;font-weight:500;">STACK</span>
+            {dots_html}
+            <span style="font-size:10px;font-weight:700;color:{stk.get('color','#8b949e')};">
+              {stk.get('score','?')}/{stk.get('max','4')} {stk.get('label','—')}
+            </span>
+          </div>
+
           <div style="font-size:11px;color:{c['color']};font-weight:600;">{c['detail']}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -442,6 +508,9 @@ with right:
         # ── Status banner ──────────────────────────────────────────
         xover_note = (f"Last crossover: {d['crossover_bars']} days ago"
                       if d["crossover_bars"] else "Crossover > 200 days ago")
+        fp_stk    = stacks.get(focus_pair, {})
+        e100_str  = f"{d['ema100']:.5f}" if d["ema100"] else "—"
+        e200_str  = f"{d['ema200']:.5f}" if d["ema200"] else "—"
         st.markdown(f"""
         <div style="background:{ok_bg};border:1px solid {ok_bdr};border-radius:10px;
              padding:14px 18px;margin-bottom:16px;">
@@ -451,19 +520,33 @@ with right:
                 {c.get('status','—')} — {c.get('detail','—')}
               </div>
               <div style="font-size:12px;color:#8b949e;margin-top:5px;">{xover_note}</div>
+              <div style="font-size:12px;margin-top:6px;">
+                <span style="color:#484f58;font-weight:500;">STACK </span>
+                <span style="color:{fp_stk.get('color','#8b949e')};font-weight:700;">
+                  {fp_stk.get('score','?')}/{fp_stk.get('max','4')} — {fp_stk.get('label','—')}
+                </span>
+              </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
                 <div style="font-size:10px;color:#e3b341;">EMA20</div>
-                <div style="font-size:15px;font-weight:700;color:#e3b341;font-family:monospace;">{d['ema20']:.5f}</div>
+                <div style="font-size:14px;font-weight:700;color:#e3b341;font-family:monospace;">{d['ema20']:.5f}</div>
               </div>
               <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
                 <div style="font-size:10px;color:#388bfd;">EMA50</div>
-                <div style="font-size:15px;font-weight:700;color:#388bfd;font-family:monospace;">{d['ema50']:.5f}</div>
+                <div style="font-size:14px;font-weight:700;color:#388bfd;font-family:monospace;">{d['ema50']:.5f}</div>
+              </div>
+              <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
+                <div style="font-size:10px;color:#a371f7;">EMA100</div>
+                <div style="font-size:14px;font-weight:700;color:#a371f7;font-family:monospace;">{e100_str}</div>
+              </div>
+              <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
+                <div style="font-size:10px;color:#f85149;">EMA200</div>
+                <div style="font-size:14px;font-weight:700;color:#f85149;font-family:monospace;">{e200_str}</div>
               </div>
               <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
                 <div style="font-size:10px;color:#8b949e;">Gap</div>
-                <div style="font-size:15px;font-weight:700;color:{ok_col};">{d['gap_pips']:+.1f}p</div>
+                <div style="font-size:14px;font-weight:700;color:{ok_col};">{d['gap_pips']:+.1f}p</div>
               </div>
             </div>
           </div>
@@ -590,6 +673,7 @@ with right:
                              "Gap%":None,"EMA20 Slope":None,"EMA50 Slope":None,
                              "Cross Ago":None,"Status":"No Data"})
                 continue
+            ss = stacks.get(pair, {})
             rows.append({
                 "Pair":       pair,
                 "Close":      dd["close"],
@@ -603,6 +687,7 @@ with right:
                 "EMA50 Slope":dd["slope50"],
                 "Cross Ago":  dd["crossover_bars"],
                 "Status":     cc.get("status","—"),
+                "Stack":      f"{ss.get('score','?')}/{ss.get('max','4')} {ss.get('label','—')}",
             })
         df_out = pd.DataFrame(rows)
         st.dataframe(df_out, use_container_width=True, hide_index=True,
@@ -619,6 +704,7 @@ with right:
                          "EMA50 Slope":st.column_config.NumberColumn("EMA50 Slope", format="%+.4f"),
                          "Cross Ago":  st.column_config.NumberColumn("Cross (days ago)"),
                          "Status":     st.column_config.TextColumn("Status"),
+                         "Stack":      st.column_config.TextColumn("EMA Stack"),
                      })
 
 st.markdown("""
