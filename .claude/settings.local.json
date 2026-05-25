@@ -14,7 +14,18 @@
       "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add pages/atr-volatility.py)",
       "Bash(python -c ' *)",
       "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add daily-trading-checklist.py pages/)",
-      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add daily-trading-checklist.py)"
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add daily-trading-checklist.py)",
+      "Bash(python -m py_compile pages/daily-trend.py)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(python -m py_compile pages/weekly-swing.py)",
+      "Bash(python -m py_compile pages/daily-macd.py)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/confluence-checker.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/confluence-checker.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/15m-rejection.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/15m-entry-signal.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/stop-structure.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/rr-calculator.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")"
     ]
   }
 }
