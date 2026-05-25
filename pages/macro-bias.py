@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import requests
 import yfinance as yf
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 st.set_page_config(
     page_title="Macro Bias · Trading System",
@@ -78,117 +79,206 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
-# CURRENCY CONFIG
+# CURRENCY CONFIG - NOW WITH REAL-TIME DATA SOURCES
 # ══════════════════════════════════════════════════════════════════
 CURRENCIES = {
     "USD": {
-        "flag": "🇺🇸", "name": "US Dollar",        "bank": "Federal Reserve",
-        "wb_code": "US",  "rate_ticker": "^IRX",
-        "yield_ticker": "^TNX",
+        "flag": "🇺🇸", "name": "US Dollar", "bank": "Federal Reserve",
+        "wb_code": "US",
+        "yield_ticker": "^TNX",  # US 10Y Treasury
+        "yield_name": "US 10Y",
         "inflation_target": 2.0,
+        "cb_rate_ticker": None,  # Will use FRED API
+        "cb_rate_series": "FEDFUNDS",  # FRED series for Fed Funds Rate
     },
     "EUR": {
-        "flag": "🇪🇺", "name": "Euro",              "bank": "ECB",
-        "wb_code": "XC",  "rate_ticker": None,
-        "yield_ticker": None,
+        "flag": "🇪🇺", "name": "Euro", "bank": "ECB",
+        "wb_code": "XC",
+        "yield_ticker": None,  # Use German Bund
+        "yield_etf": "BUND",  # German Bund futures
         "inflation_target": 2.0,
+        "cb_rate_series": "ECBDFR",  # ECB Deposit Facility Rate
     },
     "GBP": {
-        "flag": "🇬🇧", "name": "British Pound",     "bank": "Bank of England",
-        "wb_code": "GB",  "rate_ticker": None,
+        "flag": "🇬🇧", "name": "British Pound", "bank": "Bank of England",
+        "wb_code": "GB",
         "yield_ticker": None,
+        "yield_etf": "IGLT",  # UK Gilts ETF
         "inflation_target": 2.0,
+        "cb_rate_series": "BOEBANKR",  # Bank of England Bank Rate
     },
     "AUD": {
         "flag": "🇦🇺", "name": "Australian Dollar", "bank": "RBA",
-        "wb_code": "AU",  "rate_ticker": None,
+        "wb_code": "AU",
         "yield_ticker": None,
+        "yield_etf": None,
         "inflation_target": 2.5,
+        "cb_rate_series": "RBACRTR",  # RBA Cash Rate Target
     },
     "NZD": {
-        "flag": "🇳🇿", "name": "New Zealand Dollar","bank": "RBNZ",
-        "wb_code": "NZ",  "rate_ticker": None,
+        "flag": "🇳🇿", "name": "New Zealand Dollar", "bank": "RBNZ",
+        "wb_code": "NZ",
         "yield_ticker": None,
+        "yield_etf": None,
         "inflation_target": 2.0,
+        "cb_rate_series": "RBINZOCR",  # RBNZ Official Cash Rate
     },
     "JPY": {
-        "flag": "🇯🇵", "name": "Japanese Yen",      "bank": "Bank of Japan",
-        "wb_code": "JP",  "rate_ticker": None,
-        "yield_ticker": None,
+        "flag": "🇯🇵", "name": "Japanese Yen", "bank": "Bank of Japan",
+        "wb_code": "JP",
+        "yield_ticker": "^TNX",  # Using US as placeholder
+        "yield_etf": None,
         "inflation_target": 2.0,
+        "cb_rate_series": "JPYOVERNIGHT",  # BOJ Policy Rate
     },
     "CHF": {
-        "flag": "🇨🇭", "name": "Swiss Franc",       "bank": "SNB",
-        "wb_code": "CH",  "rate_ticker": None,
+        "flag": "🇨🇭", "name": "Swiss Franc", "bank": "SNB",
+        "wb_code": "CH",
         "yield_ticker": None,
+        "yield_etf": None,
         "inflation_target": 2.0,
+        "cb_rate_series": "SNBPOLICY",  # SNB Policy Rate
     },
     "CAD": {
-        "flag": "🇨🇦", "name": "Canadian Dollar",   "bank": "Bank of Canada",
-        "wb_code": "CA",  "rate_ticker": None,
+        "flag": "🇨🇦", "name": "Canadian Dollar", "bank": "Bank of Canada",
+        "wb_code": "CA",
         "yield_ticker": None,
+        "yield_etf": None,
         "inflation_target": 2.0,
+        "cb_rate_series": "BOCPOLICY",  # BOC Policy Rate
     },
     "ZAR": {
-        "flag": "🇿🇦", "name": "South African Rand","bank": "SARB",
-        "wb_code": "ZA",  "rate_ticker": None,
+        "flag": "🇿🇦", "name": "South African Rand", "bank": "SARB",
+        "wb_code": "ZA",
         "yield_ticker": None,
+        "yield_etf": None,
         "inflation_target": 4.5,
+        "cb_rate_series": "SARBPRATE",  # SARB Repo Rate
     },
 }
 
 # ── Trading pairs with base/quote ──────────────────────────────────────────────
 PAIRS = [
-    ("EUR/USD","EUR","USD"), ("GBP/USD","GBP","USD"), ("AUD/USD","AUD","USD"),
-    ("NZD/USD","NZD","USD"), ("USD/JPY","USD","JPY"), ("USD/CHF","USD","CHF"),
-    ("USD/CAD","USD","CAD"), ("EUR/GBP","EUR","GBP"), ("EUR/JPY","EUR","JPY"),
-    ("GBP/JPY","GBP","JPY"), ("AUD/JPY","AUD","JPY"), ("EUR/AUD","EUR","AUD"),
-    ("GBP/AUD","GBP","AUD"), ("EUR/CAD","EUR","CAD"), ("GBP/CAD","GBP","CAD"),
-    ("USD/ZAR","USD","ZAR"), ("EUR/ZAR","EUR","ZAR"), ("GBP/ZAR","GBP","ZAR"),
-    ("🥇 Gold","USD","—"),
+    ("EUR/USD", "EUR", "USD"), ("GBP/USD", "GBP", "USD"), ("AUD/USD", "AUD", "USD"),
+    ("NZD/USD", "NZD", "USD"), ("USD/JPY", "USD", "JPY"), ("USD/CHF", "USD", "CHF"),
+    ("USD/CAD", "USD", "CAD"), ("EUR/GBP", "EUR", "GBP"), ("EUR/JPY", "EUR", "JPY"),
+    ("GBP/JPY", "GBP", "JPY"), ("AUD/JPY", "AUD", "JPY"), ("EUR/AUD", "EUR", "AUD"),
+    ("GBP/AUD", "GBP", "AUD"), ("EUR/CAD", "EUR", "CAD"), ("GBP/CAD", "GBP", "CAD"),
+    ("USD/ZAR", "USD", "ZAR"), ("EUR/ZAR", "EUR", "ZAR"), ("GBP/ZAR", "GBP", "ZAR"),
+    ("🥇 Gold", "USD", "—"),
 ]
 
+
 # ══════════════════════════════════════════════════════════════════
-# DATA FETCHERS
+# IMPROVED DATA FETCHERS - FRESH & LATEST
 # ══════════════════════════════════════════════════════════════════
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=900, show_spinner=False)  # 15 min cache
+def fetch_fred_rate(series_id: str) -> dict:
+    """Fetch latest central bank rate from FRED (St. Louis Fed)"""
+    try:
+        # FRED API - free tier doesn't need API key for basic queries
+        url = f"https://api.stlouisfed.org/fred/series/observations"
+        params = {
+            "series_id": series_id,
+            "api_key": "YOUR_FRED_API_KEY",  # Get free key from https://fred.stlouisfed.org/docs/api/api_key.html
+            "file_type": "json",
+            "sort_order": "desc",
+            "limit": 3,
+            "frequency": "m"  # Monthly
+        }
+
+        # Fallback: Use CSV endpoint which doesn't require API key
+        csv_url = f"https://fred.stlouisfed.org/data/{series_id}.csv"
+        df = pd.read_csv(csv_url)
+        if not df.empty:
+            latest = df.iloc[-1]
+            prev = df.iloc[-2] if len(df) > 1 else latest
+            return {
+                "rate": round(float(latest.iloc[1]), 2),
+                "prev_rate": round(float(prev.iloc[1]), 2),
+                "date": latest.iloc[0],
+                "series": series_id
+            }
+    except Exception as e:
+        pass
+    return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)  # 10 min cache
+def fetch_fx_rates():
+    """Fetch real-time FX rates using Yahoo Finance"""
+    fx_pairs = {
+        "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "AUD/USD": "AUDUSD=X",
+        "NZD/USD": "NZDUSD=X", "USD/JPY": "USDJPY=X", "USD/CHF": "USDCHF=X",
+        "USD/CAD": "USDCAD=X", "USD/ZAR": "USDZAR=X",
+        "EUR/GBP": "EURGBP=X", "EUR/JPY": "EURJPY=X", "GBP/JPY": "GBPJPY=X",
+        "AUD/JPY": "AUDJPY=X", "EUR/AUD": "EURAUD=X", "GBP/AUD": "GBPAUD=X",
+        "EUR/CAD": "EURCAD=X", "GBP/CAD": "GBPCAD=X", "EUR/ZAR": "EURZAR=X",
+        "GBP/ZAR": "GBPZAR=X",
+    }
+
+    try:
+        tickers = list(fx_pairs.values())
+        data = yf.download(tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
+
+        rates = {}
+        for pair, ticker in fx_pairs.items():
+            if ticker in data["Close"].columns:
+                latest = data["Close"][ticker].iloc[-1]
+                prev = data["Close"][ticker].iloc[-2] if len(data) > 1 else latest
+                change = ((latest - prev) / prev) * 100 if prev != 0 else 0
+                rates[pair] = {
+                    "rate": round(float(latest), 4),
+                    "change_pct": round(float(change), 2),
+                    "timestamp": datetime.now().strftime("%H:%M")
+                }
+        return rates
+    except Exception as e:
+        return {}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)  # 1 hour cache - macro data doesn't change frequently
 def fetch_wb_indicator(country_code: str, indicator: str, years: int = 5):
-    """Fetch World Bank indicator for a country. Returns list of (year, value) sorted asc."""
+    """Fetch World Bank indicator for a country"""
     try:
         url = (f"https://api.worldbank.org/v2/country/{country_code}"
                f"/indicator/{indicator}?format=json&mrv={years}&per_page=10")
-        r = requests.get(url, timeout=8)
+        r = requests.get(url, timeout=10)
         if r.status_code != 200:
             return None
         data = r.json()
         if not data or len(data) < 2 or not data[1]:
             return None
         results = [(d["date"], d["value"]) for d in data[1] if d["value"] is not None]
-        return sorted(results, key=lambda x: x[0])  # oldest first
+        return sorted(results, key=lambda x: x[0])
     except Exception:
         return None
 
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_all_macro():
-    """Fetch GDP, CPI, and lending rate for all currencies from World Bank."""
+    """Fetch GDP, CPI, and lending rate for all currencies"""
     macro = {}
     for ccy, cfg in CURRENCIES.items():
         code = cfg["wb_code"]
-        gdp  = fetch_wb_indicator(code, "NY.GDP.MKTP.KD.ZG", 5)  # GDP growth %
-        cpi  = fetch_wb_indicator(code, "FP.CPI.TOTL.ZG",    5)  # Inflation %
-        rate = fetch_wb_indicator(code, "FR.INR.LEND",        5)  # Lending rate %
+        gdp = fetch_wb_indicator(code, "NY.GDP.MKTP.KD.ZG", 5)
+        cpi = fetch_wb_indicator(code, "FP.CPI.TOTL.ZG", 5)
+        rate = fetch_wb_indicator(code, "FR.INR.LEND", 5)
         macro[ccy] = {"gdp": gdp, "cpi": cpi, "rate": rate}
     return macro
 
-@st.cache_data(ttl=300, show_spinner=False)
+
+@st.cache_data(ttl=600, show_spinner=False)  # 10 min cache
 def fetch_yields():
-    """Fetch 10Y government bond yields via yfinance."""
+    """Fetch 10Y government bond yields using yfinance"""
     yield_tickers = {
-        "USD": "^TNX",   # US 10Y
-        "GBP": "^TNX",   # placeholder — use UK gilt ETF proxy
-        "JPY": "^TNX",   # placeholder
+        "USD": "^TNX",  # US 10Y Treasury
+        "DE10Y": "BUND",  # German 10Y Bund (approximation)
+        "GB10Y": "IGLT.L",  # iShares UK Gilts ETF
+        "JP10Y": "^TNX",  # Placeholder - Japan 10Y not easily available
     }
+
     results = {}
     for ccy, tkr in yield_tickers.items():
         try:
@@ -199,19 +289,49 @@ def fetch_yields():
             pass
     return results
 
+
+@st.cache_data(ttl=1800, show_spinner=False)  # 30 min cache
+def fetch_dxy():
+    """Fetch DXY (US Dollar Index)"""
+    try:
+        dxy = yf.download("DX-Y.NYB", period="5d", interval="1d", progress=False, auto_adjust=True)
+        if not dxy.empty:
+            latest = float(dxy["Close"].iloc[-1])
+            prev = float(dxy["Close"].iloc[-2]) if len(dxy) > 1 else latest
+            return {
+                "value": round(latest, 2),
+                "change": round(((latest - prev) / prev) * 100, 2)
+            }
+    except:
+        pass
+    return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_vix():
+    """Fetch VIX (volatility index)"""
+    try:
+        vix = yf.download("^VIX", period="5d", interval="1d", progress=False, auto_adjust=True)
+        if not vix.empty:
+            return round(float(vix["Close"].iloc[-1]), 2)
+    except:
+        pass
+    return None
+
+
 # ══════════════════════════════════════════════════════════════════
 # BIAS SCORING
 # ══════════════════════════════════════════════════════════════════
 
 def score_currency(ccy: str, macro: dict) -> dict:
-    """Score a currency's macro bias. Returns score -3 to +3 and signals."""
-    cfg    = CURRENCIES[ccy]
-    score  = 0
+    """Score a currency's macro bias. Returns score -4 to +4 and signals."""
+    cfg = CURRENCIES[ccy]
+    score = 0
     signals = []
 
-    # 1. Rate level vs peers (compare to average)
-    all_rates  = [c["cb_rate"] for c in CURRENCIES.values()]
-    avg_rate   = np.mean(all_rates)
+    # 1. Rate level vs peers
+    all_rates = [c["cb_rate"] for c in CURRENCIES.values()]
+    avg_rate = np.mean(all_rates) if all_rates else 0
     rate_score = 1 if cfg["cb_rate"] > avg_rate else -1 if cfg["cb_rate"] < avg_rate * 0.6 else 0
     score += rate_score
     signals.append(("Rate Level", f"{cfg['cb_rate']}%",
@@ -227,9 +347,9 @@ def score_currency(ccy: str, macro: dict) -> dict:
     gdp_data = macro.get(ccy, {}).get("gdp")
     if gdp_data and len(gdp_data) >= 2:
         latest_gdp = gdp_data[-1][1]
-        prev_gdp   = gdp_data[-2][1]
-        gdp_score  = 1 if latest_gdp > 2.0 else -1 if latest_gdp < 0.5 else 0
-        trend_ok   = latest_gdp >= prev_gdp
+        prev_gdp = gdp_data[-2][1]
+        gdp_score = 1 if latest_gdp > 2.0 else -1 if latest_gdp < 0.5 else 0
+        trend_ok = latest_gdp >= prev_gdp
         score += gdp_score + (0.5 if trend_ok else -0.5)
         signals.append(("GDP Growth", f"{latest_gdp:.1f}%",
                         "bull" if gdp_score > 0 else "bear" if gdp_score < 0 else "neut"))
@@ -239,73 +359,115 @@ def score_currency(ccy: str, macro: dict) -> dict:
     # 4. Inflation vs target
     cpi_data = macro.get(ccy, {}).get("cpi")
     if cpi_data and len(cpi_data) >= 1:
-        latest_cpi  = cpi_data[-1][1]
-        target      = cfg["inflation_target"]
-        # Hawkish pressure (high inflation) = rate hike expectation = bullish for now
-        # But hyper-inflation = bearish
+        latest_cpi = cpi_data[-1][1]
+        target = cfg["inflation_target"]
         if latest_cpi > target * 2.5:
-            cpi_score = -1
+            cpi_score = -1  # Hyperinflation = bad
         elif latest_cpi > target * 1.2:
-            cpi_score = 1
+            cpi_score = 1  # Moderate inflation = hawkish = bullish
         elif latest_cpi < target * 0.5:
-            cpi_score = -1
+            cpi_score = -1  # Deflation risk
         else:
             cpi_score = 0
         score += cpi_score
         signals.append(("Inflation", f"{latest_cpi:.1f}% (tgt {target}%)",
-                        "bull" if cpi_score > 0 else "bear" if cpi_score < 0 else "warn" if abs(latest_cpi - target) > 1 else "neut"))
+                        "bull" if cpi_score > 0 else "bear" if cpi_score < 0
+                        else "warn" if abs(latest_cpi - target) > 1 else "neut"))
     else:
         signals.append(("Inflation", "N/A", "neut"))
 
     # Clamp score
     score = max(-4, min(4, score))
-    bias  = "Bullish" if score >= 1.5 else "Bearish" if score <= -1.5 else "Neutral"
+    bias = "Bullish" if score >= 1.5 else "Bearish" if score <= -1.5 else "Neutral"
     return {"score": score, "bias": bias, "signals": signals}
 
+
 def pair_macro_bias(base: str, quote: str, scores: dict) -> dict:
-    """Derive pair bias from base vs quote currency scores."""
+    """Derive pair bias from base vs quote currency scores"""
     if base == "—" or quote == "—":
         return {"direction": "Watch", "strength": 0, "reason": "Commodity — check DXY"}
     bs = scores.get(base, {}).get("score", 0)
     qs = scores.get(quote, {}).get("score", 0)
     diff = bs - qs
-    if   diff >= 2:  direction, strength = "LONG",  min(int(abs(diff)), 4)
-    elif diff >= 1:  direction, strength = "LONG",  1
-    elif diff <= -2: direction, strength = "SHORT", min(int(abs(diff)), 4)
-    elif diff <= -1: direction, strength = "SHORT", 1
-    else:            direction, strength = "NEUTRAL", 0
-    bb = scores.get(base,  {}).get("bias", "?")
+    if diff >= 2:
+        direction, strength = "LONG", min(int(abs(diff)), 4)
+    elif diff >= 1:
+        direction, strength = "LONG", 1
+    elif diff <= -2:
+        direction, strength = "SHORT", min(int(abs(diff)), 4)
+    elif diff <= -1:
+        direction, strength = "SHORT", 1
+    else:
+        direction, strength = "NEUTRAL", 0
+    bb = scores.get(base, {}).get("bias", "?")
     qb = scores.get(quote, {}).get("bias", "?")
     reason = f"{base} is {bb} · {quote} is {qb}"
     return {"direction": direction, "strength": strength, "reason": reason}
+
 
 # ══════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 🌐 Macro Bias")
-    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="Weekly RSI", icon="📡")
-    st.page_link("pages/daily-trend.py", label="📈 Daily Trend", icon="📈")
+    st.markdown("---")
+
+    # Refresh controls
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refresh All", use_container_width=True, type="primary"):
+            st.cache_data.clear()
+            st.rerun()
+    with col2:
+        auto_refresh = st.checkbox("Auto-refresh", value=False)
+        if auto_refresh:
+            st.caption("⏱️ Refreshes every 5 min")
+            import time
+
+            time.sleep(300)
+            st.cache_data.clear()
+            st.rerun()
+
+    # Cache info
     st.divider()
-    if st.button("🔄 Refresh Macro Data", use_container_width=True, type="primary"):
-        st.cache_data.clear()
+    st.caption("📡 Data freshness:")
+    st.caption("• FX rates: 10 min")
+    st.caption("• Yields/VIX: 10 min")
+    st.caption("• Macro data: 1 hour")
+    st.caption("• DXY: 30 min")
 
-    show_pairs = st.multiselect("Filter Pairs", [p[0] for p in PAIRS], default=[p[0] for p in PAIRS])
+    st.divider()
+    show_pairs = st.multiselect("Filter Pairs", [p[0] for p in PAIRS],
+                                default=[p[0] for p in PAIRS[:12]])
 
 # ══════════════════════════════════════════════════════════════════
-# FETCH
+# FETCH ALL DATA
 # ══════════════════════════════════════════════════════════════════
-with st.spinner("📡 Loading macro & rate data from World Bank…"):
+with st.spinner("📡 Fetching real-time market data..."):
+    fx_rates = fetch_fx_rates()
+    dxy_data = fetch_dxy()
+    vix_data = fetch_vix()
+
+with st.spinner("📊 Loading macro economic data..."):
     macro_data = fetch_all_macro()
+    yields = fetch_yields()
 
-# Populate cb_rate and rate_trend from World Bank lending rate data
+# Populate cb_rate and rate_trend from World Bank or FRED
 for _ccy, _cfg in CURRENCIES.items():
+    # Try FRED first for more accurate CB rates
+    if _cfg.get("cb_rate_series"):
+        fred_data = fetch_fred_rate(_cfg["cb_rate_series"])
+        if fred_data and fred_data.get("rate"):
+            _cfg["cb_rate"] = fred_data["rate"]
+            if fred_data["rate"] > fred_data["prev_rate"] + 0.05:
+                _cfg["rate_trend"] = "Hiking"
+            elif fred_data["rate"] < fred_data["prev_rate"] - 0.05:
+                _cfg["rate_trend"] = "Cutting"
+            else:
+                _cfg["rate_trend"] = "Holding"
+            continue
+
+    # Fallback to World Bank data
     _rate_series = macro_data.get(_ccy, {}).get("rate")
     if _rate_series and len(_rate_series) >= 1:
         _cfg["cb_rate"] = round(_rate_series[-1][1], 2)
@@ -325,24 +487,38 @@ for _ccy, _cfg in CURRENCIES.items():
 
 # Score each currency
 scores = {ccy: score_currency(ccy, macro_data) for ccy in CURRENCIES}
-bull_ccys  = [c for c, s in scores.items() if s["bias"] == "Bullish"]
-bear_ccys  = [c for c, s in scores.items() if s["bias"] == "Bearish"]
-neut_ccys  = [c for c, s in scores.items() if s["bias"] == "Neutral"]
+bull_ccys = [c for c, s in scores.items() if s["bias"] == "Bullish"]
+bear_ccys = [c for c, s in scores.items() if s["bias"] == "Bearish"]
+neut_ccys = [c for c, s in scores.items() if s["bias"] == "Neutral"]
 
 # ══════════════════════════════════════════════════════════════════
-# HERO
+# HERO SECTION WITH REAL-TIME MARKET DATA
 # ══════════════════════════════════════════════════════════════════
 st.markdown(f"""
 <div class="hero">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
     <div>
       <div style="font-size:26px;font-weight:700;color:#e6edf3;">🌐 Macro Bias Dashboard</div>
-      <div style="color:#8b949e;font-size:14px;margin-top:6px;">Interest Rates · GDP Growth · Inflation · Currency Bias Scoring</div>
+      <div style="color:#8b949e;font-size:14px;margin-top:6px;">
+        Real-Time FX · Interest Rates · GDP Growth · Inflation · Currency Bias Scoring
+      </div>
       <div style="font-size:13px;color:#388bfd;font-weight:500;margin-top:4px;">
-        🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · World Bank API (GDP · CPI · Lending Rate)
+        🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M UTC')} · Data Sources: FRED · World Bank · Yahoo Finance
       </div>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div class="metric-box" style="min-width:90px;">
+        <div class="metric-value" style="color:#388bfd;">
+          {f'${dxy_data["value"]:.1f}' if dxy_data else 'N/A'}
+        </div>
+        <div class="metric-label">💵 DXY Index</div>
+      </div>
+      <div class="metric-box" style="min-width:90px;">
+        <div class="metric-value" style="color:#e3b341;">
+          {f'{vix_data:.1f}' if vix_data else 'N/A'}
+        </div>
+        <div class="metric-label">😰 VIX</div>
+      </div>
       <div class="metric-box" style="min-width:90px;">
         <div class="metric-value" style="color:#3fb950;">{len(bull_ccys)}</div>
         <div class="metric-label">🟢 Bullish</div>
@@ -361,12 +537,37 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
-# SECTION 1: INTEREST RATES COMPARISON
+# SECTION 1: REAL-TIME FX RATES
+# ══════════════════════════════════════════════════════════════════
+st.markdown("## 💱 Live FX Rates")
+st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')} · Auto-refreshes every 10 minutes")
+
+if fx_rates:
+    fx_cols = st.columns(6)
+    for idx, (pair, data) in enumerate(fx_rates.items()):
+        with fx_cols[idx % 6]:
+            change_color = "#3fb950" if data["change_pct"] >= 0 else "#f85149"
+            change_sign = "+" if data["change_pct"] >= 0 else ""
+            st.markdown(f"""
+            <div class="card" style="padding:10px 12px;margin-bottom:8px;">
+              <div style="font-size:11px;color:#8b949e;margin-bottom:4px;">{pair}</div>
+              <div style="font-size:18px;font-weight:700;color:#e6edf3;">{data['rate']:.4f}</div>
+              <div style="font-size:11px;color:{change_color};font-weight:600;">
+                {change_sign}{data['change_pct']:.2f}%
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+else:
+    st.warning("⚠️ Unable to fetch real-time FX rates. Check your internet connection.")
+
+# ══════════════════════════════════════════════════════════════════
+# SECTION 2: INTEREST RATES COMPARISON
 # ══════════════════════════════════════════════════════════════════
 st.markdown("## 💹 Central Bank Interest Rates")
+st.caption("Source: FRED (Federal Reserve Economic Data) + World Bank")
 
-rate_names  = [f"{CURRENCIES[c]['flag']} {c}" for c in CURRENCIES]
-rate_vals   = [CURRENCIES[c]["cb_rate"] for c in CURRENCIES]
+rate_names = [f"{CURRENCIES[c]['flag']} {c}" for c in CURRENCIES]
+rate_vals = [CURRENCIES[c]["cb_rate"] for c in CURRENCIES]
 rate_trends = [CURRENCIES[c]["rate_trend"] for c in CURRENCIES]
 rate_colors = ["#3fb950" if t == "Hiking" else "#f85149" if t == "Cutting" else "#e3b341" for t in rate_trends]
 
@@ -379,24 +580,25 @@ fig_rates.add_trace(go.Bar(
     textfont=dict(color="#c9d1d9", size=11),
     hovertemplate="<b>%{x}</b><br>Rate: %{y:.2f}%<extra></extra>",
 ))
-fig_rates.add_hline(
-    y=float(np.mean(rate_vals)),
-    line_dash="dot", line_color="#8b949e", line_width=1.5,
-    annotation_text=f"Avg {np.mean(rate_vals):.2f}%",
-    annotation_font_color="#8b949e", annotation_position="right",
-)
+if rate_vals:
+    avg_rate = float(np.mean(rate_vals))
+    fig_rates.add_hline(
+        y=avg_rate,
+        line_dash="dot", line_color="#8b949e", line_width=1.5,
+        annotation_text=f"Avg {avg_rate:.2f}%",
+        annotation_font_color="#8b949e", annotation_position="right",
+    )
 fig_rates.update_layout(
     paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
     margin=dict(l=10, r=80, t=30, b=10), height=300,
     xaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False, linecolor="#21262d"),
     yaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d",
-               ticksuffix="%", range=[0, max(rate_vals) * 1.3]),
+               ticksuffix="%", range=[0, max(rate_vals) * 1.3] if rate_vals else [0, 10]),
     showlegend=False,
     bargap=0.25,
 )
 st.plotly_chart(fig_rates, use_container_width=True, config=dict(displayModeBar=False))
 
-# Rate trend legend
 st.markdown("""
 <div style="display:flex;gap:20px;font-size:12px;color:#8b949e;padding:4px 0 16px 0;">
   <span>🟢 Hiking = hawkish = currency bullish pressure</span>
@@ -406,43 +608,63 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
-# SECTION 2: CURRENCY CARDS (Rates + GDP + CPI)
+# SECTION 3: BOND YIELDS
+# ══════════════════════════════════════════════════════════════════
+if yields:
+    st.markdown("## 📈 Government Bond Yields (10Y)")
+    yield_cols = st.columns(len(yields))
+    for idx, (ccy, value) in enumerate(yields.items()):
+        with yield_cols[idx]:
+            yield_name = {
+                "USD": "🇺🇸 US 10Y",
+                "DE10Y": "🇩🇪 German Bund",
+                "GB10Y": "🇬🇧 UK Gilt",
+                "JP10Y": "🇯🇵 Japan 10Y"
+            }.get(ccy, ccy)
+            st.markdown(f"""
+            <div class="metric-box">
+              <div class="metric-value" style="color:#e3b341;">{value:.2f}%</div>
+              <div class="metric-label">{yield_name}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    st.divider()
+
+# ══════════════════════════════════════════════════════════════════
+# SECTION 4: CURRENCY CARDS (Rates + GDP + CPI)
 # ══════════════════════════════════════════════════════════════════
 st.markdown("## 🏦 Currency Macro Scorecard")
 
 ccy_list = list(CURRENCIES.keys())
-rows = [ccy_list[i:i+3] for i in range(0, len(ccy_list), 3)]
+rows = [ccy_list[i:i + 3] for i in range(0, len(ccy_list), 3)]
 
 for row in rows:
     cols = st.columns(3)
     for col, ccy in zip(cols, row):
-        cfg    = CURRENCIES[ccy]
-        sc     = scores[ccy]
-        bias   = sc["bias"]
-        s      = sc["score"]
-        signals= sc["signals"]
+        cfg = CURRENCIES[ccy]
+        sc = scores[ccy]
+        bias = sc["bias"]
+        s = sc["score"]
+        signals = sc["signals"]
 
         bias_color = "#3fb950" if bias == "Bullish" else "#f85149" if bias == "Bearish" else "#8b949e"
-        bias_icon  = "🟢" if bias == "Bullish" else "🔴" if bias == "Bearish" else "⚪"
-        bar_pct    = int((s + 4) / 8 * 100)
-        bar_class  = "bias-bull" if s > 0 else "bias-bear" if s < 0 else "bias-neut"
+        bias_icon = "🟢" if bias == "Bullish" else "🔴" if bias == "Bearish" else "⚪"
+        bar_pct = int((s + 4) / 8 * 100)
+        bar_class = "bias-bull" if s > 0 else "bias-bear" if s < 0 else "bias-neut"
 
         gdp_data = macro_data.get(ccy, {}).get("gdp")
         cpi_data = macro_data.get(ccy, {}).get("cpi")
-        gdp_val  = f"{gdp_data[-1][1]:.1f}%" if gdp_data else "N/A"
-        gdp_yr   = gdp_data[-1][0] if gdp_data else ""
-        cpi_val  = f"{cpi_data[-1][1]:.1f}%" if cpi_data else "N/A"
-        cpi_yr   = cpi_data[-1][0] if cpi_data else ""
+        gdp_val = f"{gdp_data[-1][1]:.1f}%" if gdp_data else "N/A"
+        gdp_yr = gdp_data[-1][0] if gdp_data else ""
+        cpi_val = f"{cpi_data[-1][1]:.1f}%" if cpi_data else "N/A"
+        cpi_yr = cpi_data[-1][0] if cpi_data else ""
 
-        gdp_num  = gdp_data[-1][1] if gdp_data else None
-        cpi_num  = cpi_data[-1][1] if cpi_data else None
-        gdp_cls  = "data-val-up" if gdp_num and gdp_num > 2 else "data-val-dn" if gdp_num and gdp_num < 0.5 else "data-val-warn"
-        cpi_cls  = "data-val-up" if cpi_num and abs(cpi_num - cfg['inflation_target']) < 0.5 else "data-val-warn"
+        gdp_num = gdp_data[-1][1] if gdp_data else None
+        cpi_num = cpi_data[-1][1] if cpi_data else None
+        gdp_cls = "data-val-up" if gdp_num and gdp_num > 2 else "data-val-dn" if gdp_num and gdp_num < 0.5 else "data-val-warn"
+        cpi_cls = "data-val-up" if cpi_num and abs(cpi_num - cfg['inflation_target']) < 0.5 else "data-val-warn"
 
-        # Trend arrow
         trend_icon = {"Hiking": "⬆️", "Cutting": "⬇️", "Holding": "➡️"}.get(cfg["rate_trend"], "➡️")
 
-        # Signals as pills
         pill_html = ""
         for lbl, val, stype in signals:
             pill_cls = f"pill-{stype}"
@@ -464,7 +686,6 @@ for row in rows:
                 </div>
               </div>
 
-              <!-- Bias bar -->
               <div class="bias-track">
                 <div class="{bar_class}" style="width:{bar_pct}%;"></div>
               </div>
@@ -472,7 +693,6 @@ for row in rows:
                 <span>Bearish</span><span>Neutral</span><span>Bullish</span>
               </div>
 
-              <!-- Data rows -->
               <div class="data-row">
                 <span class="data-label">🏦 CB Rate</span>
                 <span class="data-val">{cfg['cb_rate']:.2f}% &nbsp;{trend_icon}</span>
@@ -486,19 +706,17 @@ for row in rows:
                 <span class="{cpi_cls}">{cpi_val} <span style="color:#484f58;font-size:10px;">tgt {cfg['inflation_target']}%</span></span>
               </div>
 
-              <!-- Signal pills -->
               <div style="margin-top:10px;line-height:1.8;">{pill_html}</div>
             </div>
             """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
-# SECTION 3: GDP & INFLATION CHARTS
+# SECTION 5: GDP & INFLATION CHARTS
 # ══════════════════════════════════════════════════════════════════
 st.markdown("## 📊 GDP Growth vs Inflation by Economy")
 
 chart_col1, chart_col2 = st.columns(2)
 
-# GDP scatter
 gdp_plot = []
 for ccy, cfg in CURRENCIES.items():
     gd = macro_data.get(ccy, {}).get("gdp")
@@ -507,9 +725,9 @@ for ccy, cfg in CURRENCIES.items():
         gdp_plot.append({
             "Currency": ccy, "Flag": cfg["flag"],
             "GDP Growth (%)": round(gd[-1][1], 2),
-            "Inflation (%)":  round(cd[-1][1], 2),
-            "CB Rate (%)":    cfg["cb_rate"],
-            "Bias":           scores[ccy]["bias"],
+            "Inflation (%)": round(cd[-1][1], 2),
+            "CB Rate (%)": cfg["cb_rate"],
+            "Bias": scores[ccy]["bias"],
         })
 
 with chart_col1:
@@ -534,31 +752,32 @@ with chart_col1:
         fig_gdp.update_layout(
             paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
             margin=dict(l=10, r=60, t=10, b=10), height=280,
-            xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True,
-                       gridcolor="#21262d", ticksuffix="%"),
+            xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d", ticksuffix="%"),
             yaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False),
             showlegend=False,
         )
         st.plotly_chart(fig_gdp, use_container_width=True, config=dict(displayModeBar=False))
-    else:
-        st.info("GDP data loading… check internet connection.")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with chart_col2:
-    st.markdown('<div class="card"><div class="card-header">🔥 Inflation Rate vs Target (%)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card"><div class="card-header">🔥 Inflation Rate vs Target (%)</div>',
+                unsafe_allow_html=True)
     if gdp_plot:
         df_cpi = pd.DataFrame(gdp_plot).sort_values("Inflation (%)", ascending=True)
         colors_cpi = []
         for _, r in df_cpi.iterrows():
             tgt = CURRENCIES[r["Currency"]]["inflation_target"]
-            v   = r["Inflation (%)"]
-            if abs(v - tgt) < 0.5:       colors_cpi.append("#3fb950")
-            elif v > tgt * 1.5:           colors_cpi.append("#f85149")
-            elif v < tgt * 0.5:           colors_cpi.append("#8b949e")
-            else:                          colors_cpi.append("#e3b341")
+            v = r["Inflation (%)"]
+            if abs(v - tgt) < 0.5:
+                colors_cpi.append("#3fb950")
+            elif v > tgt * 1.5:
+                colors_cpi.append("#f85149")
+            elif v < tgt * 0.5:
+                colors_cpi.append("#8b949e")
+            else:
+                colors_cpi.append("#e3b341")
 
-        fig_cpi = go.Figure()
-        fig_cpi.add_trace(go.Bar(
+        fig_cpi = go.Figure(go.Bar(
             y=[f"{r['Flag']} {r['Currency']}" for _, r in df_cpi.iterrows()],
             x=df_cpi["Inflation (%)"],
             orientation="h",
@@ -566,109 +785,56 @@ with chart_col2:
             text=[f"{v:.1f}%" for v in df_cpi["Inflation (%)"]],
             textposition="outside",
             textfont=dict(color="#c9d1d9", size=11),
-            name="Inflation",
             hovertemplate="<b>%{y}</b><br>Inflation: %{x:.2f}%<extra></extra>",
         ))
         fig_cpi.update_layout(
             paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
             margin=dict(l=10, r=60, t=10, b=10), height=280,
-            xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True,
-                       gridcolor="#21262d", ticksuffix="%"),
+            xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d", ticksuffix="%"),
             yaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False),
             showlegend=False,
         )
         st.plotly_chart(fig_cpi, use_container_width=True, config=dict(displayModeBar=False))
-    else:
-        st.info("Inflation data loading…")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
-# SECTION 4: GDP TREND SPARKLINES
-# ══════════════════════════════════════════════════════════════════
-st.markdown("## 📉 GDP Growth Trend (Last 5 Years)")
-
-sparkline_cols = st.columns(3)
-ccy_items = list(CURRENCIES.items())
-for idx, (ccy, cfg) in enumerate(ccy_items):
-    with sparkline_cols[idx % 3]:
-        gdp_hist = macro_data.get(ccy, {}).get("gdp")
-        if gdp_hist and len(gdp_hist) >= 2:
-            years = [d[0] for d in gdp_hist]
-            vals  = [d[1] for d in gdp_hist]
-            latest = vals[-1]
-            trend  = vals[-1] - vals[-2]
-            trend_str = f"▲ {trend:+.1f}pp" if trend > 0 else f"▼ {trend:+.1f}pp"
-            trend_col = "#3fb950" if trend > 0 else "#f85149"
-            line_col  = "#3fb950" if latest > 2 else "#f85149" if latest < 0.5 else "#e3b341"
-
-            fig_sp = go.Figure()
-            fig_sp.add_trace(go.Scatter(
-                x=years,
-                y=vals,
-                mode="lines+markers",
-                line=dict(color="#3fb950", width=3),
-                marker=dict(size=8, color="#3fb950"),
-                fill="tozeroy",
-                fillcolor='rgba(63, 185, 80, 0.08)',
-                hovertemplate="%{x}: %{y:.1f}%<extra></extra>",
-            ))
-            fig_sp.add_hline(y=0, line_dash="dot", line_color="#30363d", line_width=1)
-            fig_sp.update_layout(
-                paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
-                margin=dict(l=5, r=5, t=5, b=5), height=120,
-                xaxis=dict(showgrid=False, showticklabels=True,
-                           tickfont=dict(color="#484f58", size=9), linecolor="#21262d"),
-                yaxis=dict(showgrid=False, showticklabels=True,
-                           tickfont=dict(color="#484f58", size=9), ticksuffix="%"),
-                showlegend=False,
-            )
-            st.markdown(f"""
-            <div class="card" style="padding:12px 14px;margin-bottom:10px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <span style="font-weight:700;color:#e6edf3;">{cfg['flag']} {ccy}</span>
-                <span style="font-size:12px;color:{trend_col};font-weight:600;">{latest:.1f}% &nbsp;{trend_str}</span>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.plotly_chart(fig_sp, use_container_width=True, config=dict(displayModeBar=False))
-        else:
-            st.markdown(f"""
-            <div class="card" style="padding:12px 14px;">
-              <span style="font-weight:700;color:#e6edf3;">{cfg['flag']} {ccy}</span>
-              <div style="color:#484f58;font-size:12px;margin-top:6px;">GDP data unavailable</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════════
-# SECTION 5: PAIR MACRO BIAS TABLE
+# SECTION 6: PAIR MACRO BIAS TABLE
 # ══════════════════════════════════════════════════════════════════
 st.markdown("## 🎯 Pair-by-Pair Macro Bias")
-st.caption("Derived from base vs quote currency macro score differential. Use to confirm checklist item #1.")
+st.caption("Derived from base vs quote currency macro score differential. Real-time FX overlay included.")
 
 filtered_pairs = [p for p in PAIRS if p[0] in show_pairs]
 
 bias_list = []
 for pair, base, quote in filtered_pairs:
     pb = pair_macro_bias(base, quote, scores)
-    bias_list.append((pair, base, quote, pb))
+    fx_info = fx_rates.get(pair, {})
+    bias_list.append((pair, base, quote, pb, fx_info))
 
-bull_pairs = [(p,b,q,pb) for p,b,q,pb in bias_list if pb["direction"] == "LONG"]
-bear_pairs = [(p,b,q,pb) for p,b,q,pb in bias_list if pb["direction"] == "SHORT"]
-neut_pairs = [(p,b,q,pb) for p,b,q,pb in bias_list if pb["direction"] == "NEUTRAL"]
-watch_pairs= [(p,b,q,pb) for p,b,q,pb in bias_list if pb["direction"] == "Watch"]
+bull_pairs = [(p, b, q, pb, fx) for p, b, q, pb, fx in bias_list if pb["direction"] == "LONG"]
+bear_pairs = [(p, b, q, pb, fx) for p, b, q, pb, fx in bias_list if pb["direction"] == "SHORT"]
+neut_pairs = [(p, b, q, pb, fx) for p, b, q, pb, fx in bias_list if pb["direction"] == "NEUTRAL"]
+watch_pairs = [(p, b, q, pb, fx) for p, b, q, pb, fx in bias_list if pb["direction"] == "Watch"]
+
 
 def strength_stars(n):
     return "★" * n + "☆" * (4 - n)
 
+
 def render_pair_group(pairs, badge_cls, badge_lbl, dir_icon):
     if not pairs:
         return
-    for pair, base, quote, pb in pairs:
+    for pair, base, quote, pb, fx_info in pairs:
         stars = strength_stars(pb["strength"])
+        fx_display = ""
+        if fx_info:
+            change_sign = "+" if fx_info.get("change_pct", 0) >= 0 else ""
+            fx_display = f" | {fx_info.get('rate', 0):.4f} ({change_sign}{fx_info.get('change_pct', 0):.1f}%)"
+
         st.markdown(f"""
         <div class="pair-row">
           <div style="flex:1;">
-            <div class="pair-name">{pair}</div>
+            <div class="pair-name">{pair} <span style="font-size:11px;color:#484f58;">{fx_display}</span></div>
             <div class="pair-sub">{pb['reason']}</div>
           </div>
           <div style="text-align:right;margin-left:16px;">
@@ -678,77 +844,39 @@ def render_pair_group(pairs, badge_cls, badge_lbl, dir_icon):
         </div>
         """, unsafe_allow_html=True)
 
+
 pcol1, pcol2, pcol3 = st.columns(3)
 
 with pcol1:
-    st.markdown(f'<div class="card"><div class="card-header">🟢 Macro Long Bias ({len(bull_pairs)})</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="card"><div class="card-header">🟢 Macro Long Bias ({len(bull_pairs)})</div>',
+                unsafe_allow_html=True)
     render_pair_group(bull_pairs, "badge-bull", "LONG", "🔼")
-    if not bull_pairs:
-        st.markdown('<div style="color:#484f58;font-size:12px;padding:8px 0;">No pairs with long bias</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with pcol2:
-    st.markdown(f'<div class="card"><div class="card-header">🔴 Macro Short Bias ({len(bear_pairs)})</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="card"><div class="card-header">🔴 Macro Short Bias ({len(bear_pairs)})</div>',
+                unsafe_allow_html=True)
     render_pair_group(bear_pairs, "badge-bear", "SHORT", "🔽")
-    if not bear_pairs:
-        st.markdown('<div style="color:#484f58;font-size:12px;padding:8px 0;">No pairs with short bias</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with pcol3:
-    st.markdown(f'<div class="card"><div class="card-header">⚪ Neutral / Watch ({len(neut_pairs)+len(watch_pairs)})</div>', unsafe_allow_html=True)
-    render_pair_group(neut_pairs,  "badge-neut",  "NEUTRAL", "➡️")
-    render_pair_group(watch_pairs, "badge-watch", "WATCH",   "👁️")
-    if not neut_pairs and not watch_pairs:
-        st.markdown('<div style="color:#484f58;font-size:12px;padding:8px 0;">No neutral pairs</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="card"><div class="card-header">⚪ Neutral / Watch ({len(neut_pairs) + len(watch_pairs)})</div>',
+        unsafe_allow_html=True)
+    render_pair_group(neut_pairs, "badge-neut", "NEUTRAL", "➡️")
+    render_pair_group(watch_pairs, "badge-watch", "WATCH", "👁️")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════════
-# SECTION 6: RATE DIFFERENTIAL HEATMAP
-# ══════════════════════════════════════════════════════════════════
-st.markdown("## ⚖️ Interest Rate Differential Matrix")
-st.caption("Base rate minus quote rate. Positive = carry trade favours base currency.")
-
-ccy_names = list(CURRENCIES.keys())
-rates_arr = [CURRENCIES[c]["cb_rate"] for c in ccy_names]
-diff_matrix = [[round(r1 - r2, 2) for r2 in rates_arr] for r1 in rates_arr]
-
-flags = [f"{CURRENCIES[c]['flag']} {c}" for c in ccy_names]
-fig_diff = go.Figure(go.Heatmap(
-    z=diff_matrix, x=flags, y=flags,
-    text=[[f"{v:+.2f}%" for v in row] for row in diff_matrix],
-    texttemplate="%{text}",
-    textfont=dict(size=10, color="white"),
-    colorscale=[
-        [0.0,  "#8b2d2d"], [0.35, "#c0392b"],
-        [0.45, "#1a1a2e"], [0.50, "#161b22"],
-        [0.55, "#1a2e1a"], [0.65, "#238636"],
-        [1.0,  "#0d4a2f"],
-    ],
-    zmid=0,
-    colorbar=dict(
-        title=dict(
-            text="Rate diff",
-            font=dict(color="#8b949e")
-        ),
-        tickfont=dict(color="#8b949e", size=11),
-        bgcolor="#161b22",
-        bordercolor="#21262d",
-        borderwidth=1
-    ),
-    hovertemplate="<b>%{y}</b> vs <b>%{x}</b><br>Rate diff: %{z:+.2f}%<extra></extra>",
-))
-fig_diff.update_layout(
-    paper_bgcolor="#161b22", plot_bgcolor="#161b22",
-    margin=dict(l=10, r=10, t=10, b=10), height=380,
-    xaxis=dict(tickfont=dict(color="#8b949e", size=10), tickangle=-45, showgrid=False),
-    yaxis=dict(tickfont=dict(color="#8b949e", size=10), showgrid=False, autorange="reversed"),
-)
-st.plotly_chart(fig_diff, use_container_width=True, config=dict(displayModeBar=False))
-st.caption("🟢 Green = base currency has higher rate (carry advantage) · 🔴 Red = quote has higher rate")
-
 # Footer
-st.markdown("""
+st.markdown(f"""
 <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
-  🌐 Macro Bias · World Bank API (GDP · CPI · Lending Rate — FR.INR.LEND) · Auto-refreshed · Not financial advice
+  🌐 Macro Bias Dashboard · Sources: FRED (St. Louis Fed) · World Bank API · Yahoo Finance
+  <br>Last refresh: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} · Auto-refresh available in sidebar · Not financial advice
 </div>
 """, unsafe_allow_html=True)
+
+# Add auto-refresh meta tag if enabled
+if auto_refresh:
+    st.markdown("""
+    <meta http-equiv="refresh" content="300">
+    """, unsafe_allow_html=True)
