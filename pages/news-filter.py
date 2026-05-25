@@ -309,13 +309,15 @@ with st.sidebar:
     show_week = st.radio("Calendar Range", ["This Week", "Next Week", "Both"], index=0)
 
     st.markdown("---")
-    st.markdown("**🔑 Free API Keys (optional fallbacks)**")
+    st.markdown("**🔑 API Keys**")
+    fmp_key = st.secrets.get("database", {}).get("FMP_API-KEY", "")
+    if fmp_key:
+        st.success("FMP ✓ loaded from secrets", icon="🔑")
+    else:
+        st.caption("FMP key not found in secrets.toml")
     finnhub_key = st.text_input("Finnhub Key",
                                 placeholder="Free at finnhub.io",
                                 type="password")
-    fmp_key = st.text_input("FMP Key",
-                            placeholder="Free at financialmodelingprep.com",
-                            type="password")
 
     if st.button("🔄 Refresh Calendar", use_container_width=True, type="primary"):
         st.cache_data.clear()
