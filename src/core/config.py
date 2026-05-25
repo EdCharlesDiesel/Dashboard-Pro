@@ -6,7 +6,7 @@ from typing import Dict
 class AppConfig:
     """Application configuration — all tuneable parameters in one place."""
     version: str = "2.0.1"
-    last_updated: str = "2026-09-05"
+    last_updated: str = "2026-05-25"
 
     assets: Dict[str, str] = field(default_factory=lambda: {
         "EUR/USD": "EURUSD=X",
