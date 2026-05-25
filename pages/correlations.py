@@ -61,9 +61,11 @@ ALL_INSTRUMENTS = {
     "USD/ZAR": "USDZAR=X",
     "EUR/ZAR": "EURZAR=X",
     "GBP/ZAR": "GBPZAR=X",
-    "🥇 Gold":  "GC=F",
+    "🥇 Gold":    "GC=F",
     "🥈 Silver":  "SI=F",
     "🪙 Platinum":"PL=F",
+    "💵 DXY":     "DX-Y.NYB",
+    "📈 S&P 500": "^GSPC",
 }
 
 KNOWN_RELATIONSHIPS = [
@@ -79,6 +81,12 @@ KNOWN_RELATIONSHIPS = [
     ("USD/ZAR", "🥇 Gold",   "Negative",  "ZAR strengthens with Gold; USD/ZAR falls when Gold rises."),
     ("EUR/ZAR", "USD/ZAR",  "Positive",  "Both ZAR pairs — correlated through shared EM/risk-off dynamics."),
     ("GBP/JPY", "AUD/JPY",  "Positive",  "JPY crosses move together in risk-on/off regimes."),
+    ("💵 DXY",  "EUR/USD",  "Negative",  "EUR makes up 57% of the DXY basket — almost a perfect inverse."),
+    ("💵 DXY",  "🥇 Gold",  "Negative",  "Gold is USD-priced; dollar strength directly suppresses Gold."),
+    ("💵 DXY",  "AUD/USD",  "Negative",  "Commodity currencies weaken when the dollar strengthens."),
+    ("📈 S&P 500","AUD/USD","Positive",  "Risk-on flows lift equities and commodity currencies simultaneously."),
+    ("📈 S&P 500","USD/JPY","Positive",  "JPY weakens in risk-on environments as safe-haven demand fades."),
+    ("📈 S&P 500","🥇 Gold","Negative",  "Gold competes with equities for safe-haven capital — often inverse."),
 ]
 
 def corr_badge(val):
@@ -99,13 +107,14 @@ def fetch_prices(tickers: tuple, period: str, interval: str):
         if raw.empty:
             return None
         if isinstance(raw.columns, pd.MultiIndex):
+            # Multiple tickers: raw["Close"] gives DataFrame with ticker names as columns
             close = raw["Close"]
         else:
-            close = raw[["Close"]]
-        close.columns = [c[0] if isinstance(c, tuple) else c for c in close.columns]
+            # Single ticker: flat columns — rename "Close" to the ticker symbol
+            close = raw[["Close"]].rename(columns={"Close": tickers[0]})
         returns = close.pct_change().dropna()
         return returns
-    except Exception as e:
+    except Exception:
         return None
 
 # ── Sidebar controls ───────────────────────────────────────────────────────────
