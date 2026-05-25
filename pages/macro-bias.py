@@ -72,6 +72,7 @@ st.markdown("""
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1420px;}
 </style>
 """, unsafe_allow_html=True)

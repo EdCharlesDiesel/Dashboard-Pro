@@ -118,6 +118,7 @@ st.markdown("""
     .forex-tag { background:#74b9ff; color:#2d3436; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:700; display:inline-block; margin-top:4px; }
 
     #MainMenu,footer,header{visibility:hidden;}
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{display:none;}
     .block-container{padding-top:1.5rem;max-width:1380px;}
 </style>

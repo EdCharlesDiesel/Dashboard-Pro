@@ -38,6 +38,7 @@ st.markdown("""
                  margin:6px 0 2px 0; overflow:hidden; }
     [data-testid="stSidebarNav"]{ display:none; }
     #MainMenu,footer,header{ visibility:hidden; }
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
     /* Element confirmation cards */
