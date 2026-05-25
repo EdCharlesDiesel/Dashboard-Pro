@@ -118,6 +118,11 @@ st.markdown("""
     .forex-tag { background:#74b9ff; color:#2d3436; padding:2px 8px; border-radius:12px; font-size:0.7rem; font-weight:700; display:inline-block; margin-top:4px; }
 
     #MainMenu,footer,header{visibility:hidden;}
+    /* Keep sidebar toggle visible regardless of header being hidden */
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;display:flex !important;}
+    [data-testid="stSidebarCollapseButton"]{visibility:visible !important;display:flex !important;}
+    /* Force sidebar to always be present in layout */
+    section[data-testid="stSidebar"]{display:block !important;background:#161b22 !important;border-right:1px solid #21262d;}
     [data-testid="stSidebarNav"]{display:none;}
     .block-container{padding-top:1.5rem;max-width:1380px;}
 </style>
@@ -527,8 +532,8 @@ with st.sidebar:
         st.page_link("pages/confluence-checker.py",   label="11. 2/3 Confluence Check", icon="🔀")
         st.page_link("pages/15m-rejection.py",        label="12. 15M Rejection",        icon="🕯️")
         st.page_link("pages/15m-entry-signal.py",     label="13. 15M Entry Signal",     icon="⚡")
-        st.page_link("pages/stop-structure.py",       label="14. Stop Structure",        icon="🛡️")
-        st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",        icon="⚖️")
+        st.page_link("pages/stop-structure.py",       label="14. Stop Structure",       icon="🛡️")
+        st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",       icon="⚖️")
         st.divider()
 
         # Instrument selection

@@ -22,6 +22,7 @@ st.markdown("""
     .stApp{ background:#0d1117; }
     section[data-testid="stSidebar"]{ background:#161b22!important; border-right:1px solid #21262d; }
     #MainMenu,footer,header{ visibility:hidden; }
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
@@ -412,14 +413,22 @@ def build_chart(df: pd.DataFrame, pair: str,
 
 with st.sidebar:
     st.markdown("### 🛡️ Stop Below/Above Structure")
-    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
     st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
     st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
     st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
     st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
     st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
@@ -454,7 +463,7 @@ with st.sidebar:
     show_n   = st.slider("Candles on chart", 40, 200, 80, step=10)
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -481,207 +490,311 @@ st.markdown(f"""
     SL = {atr_mult}× ATR({int(atr_period)}) placed beyond the nearest swing structure · {selected_pair}
   </div>
   <div style="font-size:12px; color:#388bfd; margin-top:6px;">
-    Check #15 — Stop placement · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
+    Check #14 — Stop placement · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
 """, unsafe_allow_html=True)
-
-with st.spinner(f"Loading data for {selected_pair}…"):
-    df = fetch_data(ticker)
-
-if df.empty or len(df) < int(atr_period) + 10:
-    st.error(f"⚠️ Not enough data for **{selected_pair}**.")
-    st.stop()
-
-struct = find_structure_levels(df, pivot_lb=int(pivot_lb))
-calc   = compute_stops(df, atr_mult=float(atr_mult),
-                       pip_size=pip_size, pip_val=pip_val,
-                       account_bal=account_bal, risk_pct=risk_pct,
-                       struct=struct, atr_period=int(atr_period))
-
-# ── KPI strip ──────────────────────────────────────────────────────
-k1, k2, k3, k4, k5, k6 = st.columns(6)
-for col, val, lbl, c in [
-    (k1, f"{calc['price']:.5f}",     "Current Price",          "#c9d1d9"),
-    (k2, f"{calc['atr14']:.5f}",     f"ATR ({int(atr_period)})", "#388bfd"),
-    (k3, f"{calc['sl_pips']:.1f}",   f"SL Pips ({atr_mult}×ATR)","#f85149"),
-    (k4, f"{calc['tp1_pips']:.1f}",  "TP1 Pips (2:1)",         "#3fb950"),
-    (k5, f"{calc['tp2_pips']:.1f}",  "TP2 Pips (3:1)",         "#56d364"),
-    (k6, f"${calc['risk_amount']:.2f}","Risk Amount",           "#e3b341"),
-]:
-    with col:
-        st.markdown(
-            f'<div class="metric-box">'
-            f'<div class="metric-value" style="color:{c};font-size:17px;">{val}</div>'
-            f'<div class="metric-label">{lbl}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-st.markdown("---")
-
-# ── SL level cards ─────────────────────────────────────────────────
-st.markdown('<div class="section-title">🎯 Stop Loss Levels</div>',
-            unsafe_allow_html=True)
-
-col_l, col_r = st.columns(2)
 
 def level_row(label, value, extra=""):
     return (f'<div class="str-row"><span class="str-label">{label}</span>'
             f'<span class="str-val">{value}&nbsp;&nbsp;<span style="color:#8b949e;'
             f'font-size:11px;">{extra}</span></span></div>')
 
-# LONG card
-if direction in ("LONG", "BOTH"):
-    struct_note = "📐 Structure-based" if calc["use_struct_long"] else "📐 ATR-based"
-    rr1_col = "#3fb950" if calc["rr_tp1_long"] >= 2 else "#f85149"
-    with col_l:
+
+# ─────────────────────────────────────────────
+#  Tabs
+# ─────────────────────────────────────────────
+tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
+
+# ══════════════════════════════════════════════
+#  TAB 1 — All-Pairs Scanner
+# ══════════════════════════════════════════════
+with tab_scan:
+    st.markdown(
+        f"Scanning all 21 instruments · ATR({int(atr_period)}) × {atr_mult} · "
+        f"pivot lookback {int(pivot_lb)} bars …"
+    )
+    prog = st.progress(0)
+    all_instruments = list(INSTRUMENTS.items())
+    n_inst = len(all_instruments)
+    scan_results: list[dict] = []
+
+    for idx, (pair_name, info) in enumerate(all_instruments):
+        prog.progress((idx + 1) / n_inst, text=f"Scanning {pair_name} …")
+        try:
+            df_s = fetch_data(info["ticker"])
+            if df_s.empty or len(df_s) < int(atr_period) + 10:
+                scan_results.append({"pair": pair_name, "ok": False})
+                continue
+            struct_s = find_structure_levels(df_s, pivot_lb=int(pivot_lb))
+            calc_s   = compute_stops(
+                df_s, atr_mult=float(atr_mult),
+                pip_size=info["pip_size"], pip_val=info["pip"],
+                account_bal=account_bal, risk_pct=risk_pct,
+                struct=struct_s, atr_period=int(atr_period),
+            )
+            scan_results.append({
+                "pair":         pair_name,
+                "ok":           True,
+                "price":        calc_s["price"],
+                "atr14":        calc_s["atr14"],
+                "sl_long_pips": calc_s["sl_long_pips"],
+                "sl_short_pips":calc_s["sl_short_pips"],
+                "use_struct_l": calc_s["use_struct_long"],
+                "use_struct_s": calc_s["use_struct_short"],
+                "rr_tp1_long":  calc_s["rr_tp1_long"],
+                "rr_tp1_short": calc_s["rr_tp1_short"],
+            })
+        except Exception:
+            scan_results.append({"pair": pair_name, "ok": False})
+
+    prog.empty()
+
+    # ── Summary counts ──────────────────────────
+    cnt_both    = sum(1 for r in scan_results if r.get("ok") and r.get("use_struct_l") and r.get("use_struct_s"))
+    cnt_long_s  = sum(1 for r in scan_results if r.get("ok") and r.get("use_struct_l") and not r.get("use_struct_s"))
+    cnt_short_s = sum(1 for r in scan_results if r.get("ok") and not r.get("use_struct_l") and r.get("use_struct_s"))
+    cnt_atr     = sum(1 for r in scan_results if r.get("ok") and not r.get("use_struct_l") and not r.get("use_struct_s"))
+
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    for col_, val_, lbl_, c_ in [
+        (sc1, cnt_both,    "Both Structures",  "#3fb950"),
+        (sc2, cnt_long_s,  "Long Struct Only",  "#56d364"),
+        (sc3, cnt_short_s, "Short Struct Only", "#f85149"),
+        (sc4, cnt_atr,     "ATR Fallback",      "#484f58"),
+    ]:
+        with col_:
+            st.markdown(
+                f'<div class="metric-box">'
+                f'<div class="metric-value" style="color:{c_};font-size:28px;">{val_}</div>'
+                f'<div class="metric-label">{lbl_}</div>'
+                f'</div>',
+                unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Card grid ───────────────────────────────
+    cols3 = st.columns(3)
+    for i, r in enumerate(scan_results):
+        pair_name = r["pair"]
+        is_sel    = pair_name == selected_pair
+        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
+
+        if not r.get("ok"):
+            card_body = '<span style="font-size:11px;color:#f85149;">No data</span>'
+        else:
+            l_note = "struct" if r["use_struct_l"] else "ATR"
+            s_note = "struct" if r["use_struct_s"] else "ATR"
+            l_col  = "#3fb950" if r["use_struct_l"] else "#484f58"
+            s_col  = "#f85149" if r["use_struct_s"] else "#484f58"
+            rr_l   = r["rr_tp1_long"]
+            rr_s   = r["rr_tp1_short"]
+            rr_l_c = "#3fb950" if rr_l >= 2 else "#e3b341"
+            rr_s_c = "#3fb950" if rr_s >= 2 else "#e3b341"
+            card_body = (
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="font-size:11px;color:#8b949e;font-family:monospace;">{r["price"]:,.4f}</span>'
+                f'</div>'
+                f'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+                f'<span style="font-size:11px;color:#8b949e;">🔼 SL <span style="color:{l_col};font-family:monospace;">{r["sl_long_pips"]:.0f}p</span> '
+                f'<span style="font-size:10px;color:#484f58;">({l_note})</span> '
+                f'<span style="color:{rr_l_c};font-size:10px;">R:{rr_l:.1f}</span></span>'
+                f'<span style="font-size:11px;color:#8b949e;">🔽 SL <span style="color:{s_col};font-family:monospace;">{r["sl_short_pips"]:.0f}p</span> '
+                f'<span style="font-size:10px;color:#484f58;">({s_note})</span> '
+                f'<span style="color:{rr_s_c};font-size:10px;">R:{rr_s:.1f}</span></span>'
+                f'</div>'
+                f'<div style="font-size:10px;color:#484f58;margin-top:4px;">ATR {r["atr14"]:.5f}</div>'
+            )
+
+        with cols3[i % 3]:
+            st.markdown(
+                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'padding:12px 14px;margin-bottom:8px;">{card_body}</div>',
+                unsafe_allow_html=True)
+
+    # ── Expander table ───────────────────────────
+    with st.expander("📋 Full Scanner Results"):
+        table_rows = []
+        for r in scan_results:
+            table_rows.append({
+                "Pair":          r["pair"],
+                "Price":         f'{r["price"]:,.5f}'      if r.get("ok") else "—",
+                f"ATR({int(atr_period)})": f'{r["atr14"]:.5f}' if r.get("ok") else "—",
+                "SL Long (pips)":  f'{r["sl_long_pips"]:.1f}'  if r.get("ok") else "—",
+                "SL Short (pips)": f'{r["sl_short_pips"]:.1f}' if r.get("ok") else "—",
+                "Long Struct":   "✅" if r.get("use_struct_l") else "ATR" if r.get("ok") else "—",
+                "Short Struct":  "✅" if r.get("use_struct_s") else "ATR" if r.get("ok") else "—",
+                "R:R TP1 L":     f'{r["rr_tp1_long"]:.2f}'  if r.get("ok") else "—",
+                "R:R TP1 S":     f'{r["rr_tp1_short"]:.2f}' if r.get("ok") else "—",
+            })
+        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+
+# ══════════════════════════════════════════════
+#  TAB 2 — Pair Detail
+# ══════════════════════════════════════════════
+with tab_detail:
+    detail_ok = True
+
+    with st.spinner(f"Loading data for {selected_pair}…"):
+        df = fetch_data(ticker)
+
+    if df.empty or len(df) < int(atr_period) + 10:
+        st.error(f"⚠️ Not enough data for **{selected_pair}**.")
+        detail_ok = False
+
+    if detail_ok:
+        struct = find_structure_levels(df, pivot_lb=int(pivot_lb))
+        calc   = compute_stops(df, atr_mult=float(atr_mult),
+                               pip_size=pip_size, pip_val=pip_val,
+                               account_bal=account_bal, risk_pct=risk_pct,
+                               struct=struct, atr_period=int(atr_period))
+
+        # ── KPI strip ────────────────────────────────
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        for col_, val_, lbl_, c_ in [
+            (k1, f"{calc['price']:.5f}",      "Current Price",           "#c9d1d9"),
+            (k2, f"{calc['atr14']:.5f}",      f"ATR ({int(atr_period)})", "#388bfd"),
+            (k3, f"{calc['sl_pips']:.1f}",    f"SL Pips ({atr_mult}×ATR)","#f85149"),
+            (k4, f"{calc['tp1_pips']:.1f}",   "TP1 Pips (2:1)",          "#3fb950"),
+            (k5, f"{calc['tp2_pips']:.1f}",   "TP2 Pips (3:1)",          "#56d364"),
+            (k6, f"${calc['risk_amount']:.2f}","Risk Amount",             "#e3b341"),
+        ]:
+            with col_:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-value" style="color:{c_};font-size:17px;">{val_}</div>'
+                    f'<div class="metric-label">{lbl_}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ── SL level cards ───────────────────────────
+        st.markdown('<div class="section-title">🎯 Stop Loss Levels</div>', unsafe_allow_html=True)
+        col_l, col_r = st.columns(2)
+
+        if direction in ("LONG", "BOTH"):
+            struct_note = "📐 Structure-based" if calc["use_struct_long"] else "📐 ATR-based"
+            with col_l:
+                st.markdown(f"""
+                <div class="sl-card sl-card-long">
+                  <div style="font-size:15px;font-weight:700;color:#3fb950;margin-bottom:14px;">🔼 LONG Setup</div>
+                  {level_row("Entry (current price)", f"{calc['price']:.5f}")}
+                  {level_row("Nearest swing low", f"{calc['struct_sl']:.5f}" if calc['struct_sl'] else "—", "structural anchor")}
+                  {level_row(f"Stop Loss  ({calc['sl_long_pips']:.0f} pips)", f"{calc['sl_long']:.5f}", struct_note + " + buffer")}
+                  {level_row(f"TP1  ({calc['tp1_pips']:.0f} pips)", f"{calc['tp1_long']:.5f}", f"R:R {calc['rr_tp1_long']:.1f}:1")}
+                  {level_row(f"TP2  ({calc['tp2_pips']:.0f} pips)", f"{calc['tp2_long']:.5f}", f"R:R {calc['rr_tp2_long']:.1f}:1")}
+                  {level_row("Position size", f"{calc['lot_long']:.2f} lots", f"${calc['risk_amount']:.2f} risk at {risk_pct}%")}
+                </div>
+                """, unsafe_allow_html=True)
+
+        if direction in ("SHORT", "BOTH"):
+            struct_note = "📐 Structure-based" if calc["use_struct_short"] else "📐 ATR-based"
+            with col_r if direction == "BOTH" else col_l:
+                st.markdown(f"""
+                <div class="sl-card sl-card-short">
+                  <div style="font-size:15px;font-weight:700;color:#f85149;margin-bottom:14px;">🔽 SHORT Setup</div>
+                  {level_row("Entry (current price)", f"{calc['price']:.5f}")}
+                  {level_row("Nearest swing high", f"{calc['struct_sh']:.5f}" if calc['struct_sh'] else "—", "structural anchor")}
+                  {level_row(f"Stop Loss  ({calc['sl_short_pips']:.0f} pips)", f"{calc['sl_short']:.5f}", struct_note + " + buffer")}
+                  {level_row(f"TP1  ({calc['tp1_pips']:.0f} pips)", f"{calc['tp1_short']:.5f}", f"R:R {calc['rr_tp1_short']:.1f}:1")}
+                  {level_row(f"TP2  ({calc['tp2_pips']:.0f} pips)", f"{calc['tp2_short']:.5f}", f"R:R {calc['rr_tp2_short']:.1f}:1")}
+                  {level_row("Position size", f"{calc['lot_short']:.2f} lots", f"${calc['risk_amount']:.2f} risk at {risk_pct}%")}
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ── Chart ────────────────────────────────────
+        st.markdown('<div class="section-title">📈 Daily Chart — Structure · SL · TP Levels</div>',
+                    unsafe_allow_html=True)
+        fig = build_chart(df, selected_pair, calc, struct, direction, show_n=show_n)
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+
+        # ── ATR history table ────────────────────────
+        with st.expander("📋 ATR History — Last 15 Sessions"):
+            atr_hist = calc["atr_series"].tail(15).copy()[::-1]
+            atr_df   = pd.DataFrame({
+                "Date":               atr_hist.index.strftime("%Y-%m-%d"),
+                f"ATR({int(atr_period)})": atr_hist.values.round(5),
+                "SL Dist (price)":    (atr_hist.values * float(atr_mult)).round(5),
+                "SL Pips":            (atr_hist.values * float(atr_mult) / pip_size).round(1),
+                "TP1 Pips":           (atr_hist.values * float(atr_mult) / pip_size * 2).round(1),
+                "TP2 Pips":           (atr_hist.values * float(atr_mult) / pip_size * 3).round(1),
+            })
+            st.dataframe(atr_df, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # ── Explainer ────────────────────────────────
+        st.markdown('<div class="section-title">📖 Stop Placement Logic</div>', unsafe_allow_html=True)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown(f"""
+            <div class="explainer">
+            <b style="color:#3fb950;">🔼 LONG — SL below structure</b><br><br>
+            <b>Step 1 — Identify swing low</b><br>
+            Find the most recent confirmed swing low on the daily chart.
+            This is the structural level the market has already rejected — it acts as natural support.<br><br>
+            <b>Step 2 — Add ATR buffer</b><br>
+            Place the SL <em>below</em> the swing low by 20% of ATR({int(atr_period)}).
+            This prevents a wick through the level from stopping you out prematurely.<br><br>
+            <b>Step 3 — Verify R:R</b><br>
+            TP1 = 2× SL distance. TP2 = 3× SL distance.
+            If R:R to TP1 is below 2:1, the zone is too far — skip the trade.
+            </div>
+            """, unsafe_allow_html=True)
+        with col_b:
+            st.markdown(f"""
+            <div class="explainer">
+            <b style="color:#f85149;">🔽 SHORT — SL above structure</b><br><br>
+            <b>Step 1 — Identify swing high</b><br>
+            Find the most recent confirmed swing high on the daily chart.
+            This is where the market rejected higher prices — it acts as natural resistance.<br><br>
+            <b>Step 2 — Add ATR buffer</b><br>
+            Place the SL <em>above</em> the swing high by 20% of ATR({int(atr_period)}).
+            Gives the trade room to breathe without being clipped by a false breakout wick.<br><br>
+            <b>Step 3 — Verify R:R</b><br>
+            TP1 = 2× SL distance. TP2 = 3× SL distance.
+            A valid short trade needs TP1 R:R ≥ 2:1 before entry.
+            </div>
+            """, unsafe_allow_html=True)
+
         st.markdown(f"""
-        <div class="sl-card sl-card-long">
-          <div style="font-size:15px;font-weight:700;color:#3fb950;margin-bottom:14px;">
-            🔼 LONG Setup
-          </div>
-          {level_row("Entry (current price)", f"{calc['price']:.5f}")}
-          {level_row("Nearest swing low",
-                     f"{calc['struct_sl']:.5f}" if calc['struct_sl'] else "—",
-                     "structural anchor")}
-          {level_row(f"Stop Loss  ({calc['sl_long_pips']:.0f} pips)",
-                     f"{calc['sl_long']:.5f}",
-                     struct_note + " + buffer")}
-          {level_row(f"TP1  ({calc['tp1_pips']:.0f} pips)",
-                     f"{calc['tp1_long']:.5f}",
-                     f"R:R {calc['rr_tp1_long']:.1f}:1")}
-          {level_row(f"TP2  ({calc['tp2_pips']:.0f} pips)",
-                     f"{calc['tp2_long']:.5f}",
-                     f"R:R {calc['rr_tp2_long']:.1f}:1")}
-          {level_row("Position size", f"{calc['lot_long']:.2f} lots",
-                     f"${calc['risk_amount']:.2f} risk at {risk_pct}%")}
+        <div class="formula-box">
+        ATR SL distance &nbsp;= &nbsp;ATR({int(atr_period)}) &nbsp;×&nbsp; {atr_mult} &nbsp;= &nbsp;
+        {calc['atr14']:.5f} × {atr_mult} &nbsp;= &nbsp;
+        <b style="color:#f85149;">{calc['atr14'] * float(atr_mult):.5f} &nbsp; ({calc['sl_pips']:.1f} pips)</b>
+        <br>
+        SL LONG  &nbsp;= &nbsp;Entry &nbsp;−&nbsp; ATR SL distance
+        &nbsp;=&nbsp; {calc['price']:.5f} − {calc['atr14'] * float(atr_mult):.5f}
+        &nbsp;=&nbsp; <b style="color:#f85149;">{calc['sl_long']:.5f}</b>
+        <br>
+        SL SHORT &nbsp;= &nbsp;Entry &nbsp;+&nbsp; ATR SL distance
+        &nbsp;=&nbsp; {calc['price']:.5f} + {calc['atr14'] * float(atr_mult):.5f}
+        &nbsp;=&nbsp; <b style="color:#f85149;">{calc['sl_short']:.5f}</b>
+        <br>
+        TP1 &nbsp;= &nbsp;SL distance × 2.0 &nbsp;= &nbsp;
+        <b style="color:#3fb950;">{calc['tp1_pips']:.1f} pips</b> &nbsp;&nbsp;
+        TP2 &nbsp;= &nbsp;SL distance × 3.0 &nbsp;= &nbsp;
+        <b style="color:#56d364;">{calc['tp2_pips']:.1f} pips</b>
+        <br>
+        Lot size &nbsp;= &nbsp;Risk $ ÷ (SL pips × pip value)
+        &nbsp;= &nbsp;${calc['risk_amount']:.2f} ÷ ({calc['sl_pips']:.1f} × {pip_val})
+        &nbsp;= &nbsp;<b style="color:#388bfd;">{calc['lot_long']:.2f} lots</b>
+        </div>
+        <div style="font-size:11px;color:#484f58;margin-top:6px;">
+          ⚠️ If structure-based SL is more than 3× ATR away from price the calculator falls back to
+          the pure ATR-based distance. Adjust the pivot lookback in the sidebar if needed.
         </div>
         """, unsafe_allow_html=True)
 
-# SHORT card
-if direction in ("SHORT", "BOTH"):
-    struct_note = "📐 Structure-based" if calc["use_struct_short"] else "📐 ATR-based"
-    with col_r if direction == "BOTH" else col_l:
-        st.markdown(f"""
-        <div class="sl-card sl-card-short">
-          <div style="font-size:15px;font-weight:700;color:#f85149;margin-bottom:14px;">
-            🔽 SHORT Setup
-          </div>
-          {level_row("Entry (current price)", f"{calc['price']:.5f}")}
-          {level_row("Nearest swing high",
-                     f"{calc['struct_sh']:.5f}" if calc['struct_sh'] else "—",
-                     "structural anchor")}
-          {level_row(f"Stop Loss  ({calc['sl_short_pips']:.0f} pips)",
-                     f"{calc['sl_short']:.5f}",
-                     struct_note + " + buffer")}
-          {level_row(f"TP1  ({calc['tp1_pips']:.0f} pips)",
-                     f"{calc['tp1_short']:.5f}",
-                     f"R:R {calc['rr_tp1_short']:.1f}:1")}
-          {level_row(f"TP2  ({calc['tp2_pips']:.0f} pips)",
-                     f"{calc['tp2_short']:.5f}",
-                     f"R:R {calc['rr_tp2_short']:.1f}:1")}
-          {level_row("Position size", f"{calc['lot_short']:.2f} lots",
-                     f"${calc['risk_amount']:.2f} risk at {risk_pct}%")}
+        st.markdown("""
+        <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
+                    padding-top:16px;border-top:1px solid #21262d;">
+          🛡️ Stop Below/Above Structure · Check #14 · ATR-based SL beyond swing structure · For educational purposes only
         </div>
         """, unsafe_allow_html=True)
-
-st.markdown("---")
-
-# ── Chart ──────────────────────────────────────────────────────────
-st.markdown('<div class="section-title">📈 Daily Chart — Structure · SL · TP Levels</div>',
-            unsafe_allow_html=True)
-
-fig = build_chart(df, selected_pair, calc, struct, direction, show_n=show_n)
-st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
-
-# ── ATR history table ──────────────────────────────────────────────
-with st.expander("📋 ATR History — Last 15 Sessions"):
-    atr_hist = calc["atr_series"].tail(15).copy()[::-1]
-    atr_df   = pd.DataFrame({
-        "Date":        atr_hist.index.strftime("%Y-%m-%d"),
-        f"ATR({int(atr_period)})": atr_hist.values.round(5),
-        "SL Dist (price)": (atr_hist.values * float(atr_mult)).round(5),
-        "SL Pips":     (atr_hist.values * float(atr_mult) / pip_size).round(1),
-        "TP1 Pips":    (atr_hist.values * float(atr_mult) / pip_size * 2).round(1),
-        "TP2 Pips":    (atr_hist.values * float(atr_mult) / pip_size * 3).round(1),
-    })
-    st.dataframe(atr_df, use_container_width=True, hide_index=True)
-
-st.markdown("---")
-
-# ── Explainer ──────────────────────────────────────────────────────
-st.markdown('<div class="section-title">📖 Stop Placement Logic</div>',
-            unsafe_allow_html=True)
-
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown(f"""
-    <div class="explainer">
-    <b style="color:#3fb950;">🔼 LONG — SL below structure</b><br><br>
-    <b>Step 1 — Identify swing low</b><br>
-    Find the most recent confirmed swing low on the daily chart.
-    This is the structural level the market has already rejected — it acts as natural support.<br><br>
-    <b>Step 2 — Add ATR buffer</b><br>
-    Place the SL <em>below</em> the swing low by 20% of ATR({int(atr_period)}).
-    This prevents a wick through the level from stopping you out prematurely.<br><br>
-    <b>Step 3 — Verify R:R</b><br>
-    TP1 = 2× SL distance. TP2 = 3× SL distance.
-    If R:R to TP1 is below 2:1, the zone is too far — skip the trade.
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_b:
-    st.markdown(f"""
-    <div class="explainer">
-    <b style="color:#f85149;">🔽 SHORT — SL above structure</b><br><br>
-    <b>Step 1 — Identify swing high</b><br>
-    Find the most recent confirmed swing high on the daily chart.
-    This is where the market rejected higher prices — it acts as natural resistance.<br><br>
-    <b>Step 2 — Add ATR buffer</b><br>
-    Place the SL <em>above</em> the swing high by 20% of ATR({int(atr_period)}).
-    Gives the trade room to breathe without being clipped by a false breakout wick.<br><br>
-    <b>Step 3 — Verify R:R</b><br>
-    TP1 = 2× SL distance. TP2 = 3× SL distance.
-    A valid short trade needs TP1 R:R ≥ 2:1 before entry.
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown(f"""
-<div class="formula-box">
-ATR SL distance &nbsp;= &nbsp;ATR({int(atr_period)}) &nbsp;×&nbsp; {atr_mult} &nbsp;= &nbsp;
-{calc['atr14']:.5f} × {atr_mult} &nbsp;= &nbsp;
-<b style="color:#f85149;">{calc['atr14'] * float(atr_mult):.5f} &nbsp; ({calc['sl_pips']:.1f} pips)</b>
-<br>
-SL LONG  &nbsp;= &nbsp;Entry &nbsp;−&nbsp; ATR SL distance
-&nbsp;=&nbsp; {calc['price']:.5f} − {calc['atr14'] * float(atr_mult):.5f}
-&nbsp;=&nbsp; <b style="color:#f85149;">{calc['sl_long']:.5f}</b>
-<br>
-SL SHORT &nbsp;= &nbsp;Entry &nbsp;+&nbsp; ATR SL distance
-&nbsp;=&nbsp; {calc['price']:.5f} + {calc['atr14'] * float(atr_mult):.5f}
-&nbsp;=&nbsp; <b style="color:#f85149;">{calc['sl_short']:.5f}</b>
-<br>
-TP1 &nbsp;= &nbsp;SL distance × 2.0 &nbsp;= &nbsp;
-<b style="color:#3fb950;">{calc['tp1_pips']:.1f} pips</b> &nbsp;&nbsp;
-TP2 &nbsp;= &nbsp;SL distance × 3.0 &nbsp;= &nbsp;
-<b style="color:#56d364;">{calc['tp2_pips']:.1f} pips</b>
-<br>
-Lot size &nbsp;= &nbsp;Risk $ ÷ (SL pips × pip value)
-&nbsp;= &nbsp;${calc['risk_amount']:.2f} ÷ ({calc['sl_pips']:.1f} × {pip_val})
-&nbsp;= &nbsp;<b style="color:#388bfd;">{calc['lot_long']:.2f} lots</b>
-</div>
-<div style="font-size:11px;color:#484f58;margin-top:6px;">
-  ⚠️ If structure-based SL is more than 3× ATR away from price the calculator falls back to
-  the pure ATR-based distance. Adjust the pivot lookback in the sidebar if needed.
-</div>
-""", unsafe_allow_html=True)
-
-# Footer
-st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-            padding-top:16px;border-top:1px solid #21262d;">
-  🛡️ Stop Below/Above Structure · Check #15 · ATR-based SL beyond swing structure · For educational purposes only
-</div>
-""", unsafe_allow_html=True)

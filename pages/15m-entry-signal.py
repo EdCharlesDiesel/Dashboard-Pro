@@ -31,6 +31,7 @@ st.markdown("""
                     padding-left:4px; border-left:3px solid #388bfd; }
     .prog-track{ background:#21262d; border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
     /* Signal verdict banners */
@@ -60,7 +61,7 @@ st.markdown("""
     /* Explanation box */
     .explainer{ background:#0d1117; border:1px solid #1e3a5f; border-left:3px solid #388bfd;
                 border-radius:8px; padding:14px 18px; margin:8px 0; font-size:13px; color:#8b949e; line-height:1.7; }
-                    [data-testid="stSidebarNav"]{display:none;}
+    [data-testid="stSidebarNav"]{ display:none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -464,14 +465,22 @@ def build_chart(df: pd.DataFrame, pair: str,
 
 with st.sidebar:
     st.markdown("### ⚡ 15M Entry Signal")
-    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
     st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
     st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
     st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
     st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
     st.divider()
 
     inst_keys = list(INSTRUMENTS.keys())
@@ -500,7 +509,7 @@ with st.sidebar:
     rsi_reset_band = st.slider("RSI reset band (pts)", 1, 15, 5)
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -538,255 +547,363 @@ st.markdown(f"""
     Stochastic %K/%D crossover + RSI reset · 15-minute chart · {selected_pair}
   </div>
   <div style="font-size:12px; color:#388bfd; margin-top:6px;">
-    Check #14 — 15M entry signal fired · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
+    Check #13 — 15M entry signal fired · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Fetch data
-with st.spinner(f"Loading 15M data for {selected_pair}…"):
-    df_raw = fetch_15m(ticker, lookback_days)
-
-if df_raw.empty or len(df_raw) < 30:
-    st.error(f"⚠️ Could not load enough 15M data for **{selected_pair}**. "
-             "Try reducing lookback or a different instrument.")
-    st.stop()
-
-# Compute indicators & signals
-df = detect_signals(
-    df_raw,
-    stoch_os=stoch_os, stoch_ob=stoch_ob,
-    rsi_os=rsi_os, rsi_ob=rsi_ob,
-    rsi_reset_band=rsi_reset_band,
-)
-
-status = latest_signal_status(df, stoch_os, stoch_ob, rsi_os, rsi_ob)
-
-# ── Verdict banner ─────────────────────────────────────────────────
 VERDICT_CFG = {
-    "LONG": (
-        "verdict-long", "⚡ LONG ENTRY SIGNAL FIRED", "#3fb950",
-        "All 3 conditions met — Stochastic crossover ↑ + RSI reset from oversold",
-    ),
-    "SHORT": (
-        "verdict-short", "⚡ SHORT ENTRY SIGNAL FIRED", "#f85149",
-        "All 3 conditions met — Stochastic crossover ↓ + RSI reset from overbought",
-    ),
-    "WAIT_LONG": (
-        "verdict-wait", "🟡 LONG SETUP FORMING", "#e3b341",
-        "2 of 3 long conditions met — wait for stochastic crossover confirmation",
-    ),
-    "WAIT_SHORT": (
-        "verdict-wait", "🟡 SHORT SETUP FORMING", "#e3b341",
-        "2 of 3 short conditions met — wait for stochastic crossover confirmation",
-    ),
-    "NONE": (
-        "verdict-none", "⏳ NO ENTRY SIGNAL", "#8b949e",
-        "Conditions not yet aligned — monitor for stochastic crossover + RSI reset",
-    ),
+    "LONG":       ("verdict-long",  "⚡ LONG ENTRY SIGNAL FIRED", "#3fb950",
+                   "All 3 conditions met — Stochastic crossover ↑ + RSI reset from oversold"),
+    "SHORT":      ("verdict-short", "⚡ SHORT ENTRY SIGNAL FIRED", "#f85149",
+                   "All 3 conditions met — Stochastic crossover ↓ + RSI reset from overbought"),
+    "WAIT_LONG":  ("verdict-wait",  "🟡 LONG SETUP FORMING",      "#e3b341",
+                   "2 of 3 long conditions met — wait for stochastic crossover confirmation"),
+    "WAIT_SHORT": ("verdict-wait",  "🟡 SHORT SETUP FORMING",     "#e3b341",
+                   "2 of 3 short conditions met — wait for stochastic crossover confirmation"),
+    "NONE":       ("verdict-none",  "⏳ NO ENTRY SIGNAL",          "#8b949e",
+                   "Conditions not yet aligned — monitor for stochastic crossover + RSI reset"),
 }
 
-vcls, vtitle, vcolor, vdesc = VERDICT_CFG[status["verdict"]]
-st.markdown(f"""
-<div class="{vcls}">
-  <div style="font-size:22px; font-weight:800; color:{vcolor}; letter-spacing:1px;">{vtitle}</div>
-  <div style="font-size:13px; color:#8b949e; margin:6px 0 10px 0;">{vdesc}</div>
-  <div style="display:flex; gap:24px; justify-content:center; flex-wrap:wrap;
-              font-size:13px; color:#c9d1d9; margin-top:10px;">
-    <div>%K &nbsp;<code style="color:#00d4ff;">{status['k_now']:.1f}</code></div>
-    <div>%D &nbsp;<code style="color:#fdcb6e;">{status['d_now']:.1f}</code></div>
-    <div>RSI &nbsp;<code style="color:#a29bfe;">{status['rsi_now']:.1f}</code></div>
-    <div>Close &nbsp;<code style="color:#e6edf3;">{status['close']:.5f}</code></div>
-    <div>⏰ &nbsp;<code style="color:#8b949e;">{status['last_time'].strftime('%H:%M')}</code></div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── KPI row ────────────────────────────────────────────────────────
-total_long = int(df["signal_long"].sum())
-total_short = int(df["signal_short"].sum())
-total_cross_up = int(df["stoch_cross_up"].sum())
-total_cross_dn = int(df["stoch_cross_down"].sum())
-total_rsi_reset = int(df["rsi_reset_up"].sum() + df["rsi_reset_down"].sum())
-
-k1, k2, k3, k4, k5 = st.columns(5)
-for col, val, lbl, color in [
-    (k1, total_long, "LONG Signals", "#3fb950"),
-    (k2, total_short, "SHORT Signals", "#f85149"),
-    (k3, total_cross_up, "Stoch Cross ↑", "#00d4ff"),
-    (k4, total_cross_dn, "Stoch Cross ↓", "#fdcb6e"),
-    (k5, total_rsi_reset, "RSI Resets", "#a29bfe"),
-]:
-    with col:
-        st.markdown(
-            f'<div class="metric-box">'
-            f'<div class="metric-value" style="color:{color};">{val}</div>'
-            f'<div class="metric-label">{lbl}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-st.markdown("---")
-
-# ── Condition breakdown ────────────────────────────────────────────
-col_left, col_right = st.columns(2)
+SCAN_COLOR = {
+    "LONG": "#3fb950", "SHORT": "#f85149",
+    "WAIT_LONG": "#e3b341", "WAIT_SHORT": "#e3b341", "NONE": "#484f58",
+}
+SCAN_LABEL = {
+    "LONG": "LONG", "SHORT": "SHORT",
+    "WAIT_LONG": "WAIT ↑", "WAIT_SHORT": "WAIT ↓", "NONE": "NONE",
+}
 
 
 def render_conditions(title, color, conds, score):
     items_html = ""
     for cond_text, met in conds.items():
-        icon = "✅" if met else "❌"
+        icon  = "✅" if met else "❌"
         shade = "#c9d1d9" if met else "#484f58"
-        items_html += f"""
-        <div class="cond-row">
-            <div class="cond-icon">{icon}</div>
-            <div><div class="cond-text" style="color:{shade};">{cond_text}</div></div>
-        </div>"""
+        items_html += (
+            f'<div class="cond-row">'
+            f'<div class="cond-icon">{icon}</div>'
+            f'<div><div class="cond-text" style="color:{shade};">{cond_text}</div></div>'
+            f'</div>'
+        )
     prog_pct = int(score / 3 * 100)
     prog_col = color if score == 3 else "#e3b341" if score == 2 else "#484f58"
-    return f"""
-    <div class="card">
-        <div class="card-header" style="color:{color};">{title}</div>
-        {items_html}
-        <div style="margin-top:12px;">
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                <span style="font-size:11px;color:#8b949e;">Conditions met</span>
-                <span style="font-size:11px;font-weight:700;color:{prog_col};">{score}/3</span>
-            </div>
-            <div class="prog-track">
-                <div style="background:{prog_col};width:{prog_pct}%;height:100%;border-radius:8px;"></div>
-            </div>
+    return (
+        f'<div class="card">'
+        f'<div class="card-header" style="color:{color};">{title}</div>'
+        f'{items_html}'
+        f'<div style="margin-top:12px;">'
+        f'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+        f'<span style="font-size:11px;color:#8b949e;">Conditions met</span>'
+        f'<span style="font-size:11px;font-weight:700;color:{prog_col};">{score}/3</span>'
+        f'</div>'
+        f'<div class="prog-track">'
+        f'<div style="background:{prog_col};width:{prog_pct}%;height:100%;border-radius:8px;"></div>'
+        f'</div></div></div>'
+    )
+
+
+# ─────────────────────────────────────────────
+#  Tabs
+# ─────────────────────────────────────────────
+tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
+
+# ══════════════════════════════════════════════
+#  TAB 1 — All-Pairs Scanner
+# ══════════════════════════════════════════════
+with tab_scan:
+    st.markdown(
+        f"Scanning all 21 instruments for 15M entry signals "
+        f"(Stoch {stoch_os}/{stoch_ob} · RSI {rsi_os}/{rsi_ob}) …"
+    )
+    prog = st.progress(0)
+    all_instruments = list(INSTRUMENTS.items())
+    n_inst = len(all_instruments)
+    scan_results: list[dict] = []
+
+    for idx, (pair_name, info) in enumerate(all_instruments):
+        prog.progress((idx + 1) / n_inst, text=f"Scanning {pair_name} …")
+        try:
+            df_s = fetch_15m(info["ticker"], 3)
+            if df_s.empty or len(df_s) < 30:
+                scan_results.append({"pair": pair_name, "ok": False})
+                continue
+            df_s = detect_signals(
+                df_s,
+                stoch_os=stoch_os, stoch_ob=stoch_ob,
+                rsi_os=rsi_os, rsi_ob=rsi_ob,
+                rsi_reset_band=rsi_reset_band,
+            )
+            st_s = latest_signal_status(df_s, stoch_os, stoch_ob, rsi_os, rsi_ob)
+            scan_results.append({
+                "pair":    pair_name,
+                "ok":      True,
+                "verdict": st_s["verdict"],
+                "k_now":   st_s["k_now"],
+                "rsi_now": st_s["rsi_now"],
+                "close":   st_s["close"],
+                "l_score": st_s["long_score"],
+                "s_score": st_s["short_score"],
+            })
+        except Exception:
+            scan_results.append({"pair": pair_name, "ok": False})
+
+    prog.empty()
+
+    # ── Summary counts ──────────────────────────
+    cnt_long  = sum(1 for r in scan_results if r.get("verdict") == "LONG")
+    cnt_short = sum(1 for r in scan_results if r.get("verdict") == "SHORT")
+    cnt_wait  = sum(1 for r in scan_results if r.get("verdict") in ("WAIT_LONG", "WAIT_SHORT"))
+    cnt_none  = sum(1 for r in scan_results if r.get("ok") and r.get("verdict") == "NONE")
+
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    for col_, val_, lbl_, c_ in [
+        (sc1, cnt_long,  "LONG Signal",   "#3fb950"),
+        (sc2, cnt_short, "SHORT Signal",  "#f85149"),
+        (sc3, cnt_wait,  "Setup Forming", "#e3b341"),
+        (sc4, cnt_none,  "No Signal",     "#484f58"),
+    ]:
+        with col_:
+            st.markdown(
+                f'<div class="metric-box">'
+                f'<div class="metric-value" style="color:{c_};font-size:28px;">{val_}</div>'
+                f'<div class="metric-label">{lbl_}</div>'
+                f'</div>',
+                unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Card grid ───────────────────────────────
+    cols3 = st.columns(3)
+    for i, r in enumerate(scan_results):
+        pair_name = r["pair"]
+        is_sel    = pair_name == selected_pair
+        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
+
+        if not r.get("ok"):
+            card_body = '<span style="font-size:11px;color:#f85149;">No data</span>'
+        else:
+            vrd   = r["verdict"]
+            color = SCAN_COLOR.get(vrd, "#484f58")
+            label = SCAN_LABEL.get(vrd, vrd)
+            card_body = (
+                f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="background:{color}18;border:1px solid {color}55;border-radius:4px;'
+                f'padding:2px 8px;font-size:11px;color:{color};font-weight:700;">{label}</span>'
+                f'</div>'
+                f'<div style="display:flex;gap:14px;margin-top:6px;">'
+                f'<span style="font-size:11px;color:#8b949e;">%K <span style="color:#00d4ff;font-family:monospace;">{r["k_now"]:.1f}</span></span>'
+                f'<span style="font-size:11px;color:#8b949e;">RSI <span style="color:#a29bfe;font-family:monospace;">{r["rsi_now"]:.1f}</span></span>'
+                f'<span style="font-size:11px;color:#8b949e;font-family:monospace;">{r["close"]:,.5f}</span>'
+                f'</div>'
+            )
+
+        with cols3[i % 3]:
+            st.markdown(
+                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'padding:12px 14px;margin-bottom:8px;">{card_body}</div>',
+                unsafe_allow_html=True)
+
+    # ── Expander table ───────────────────────────
+    with st.expander("📋 Full Scanner Results"):
+        table_rows = []
+        for r in scan_results:
+            table_rows.append({
+                "Pair":    r["pair"],
+                "Signal":  SCAN_LABEL.get(r.get("verdict",""), "Error") if r.get("ok") else "Error",
+                "%K":      f'{r["k_now"]:.1f}'   if r.get("ok") else "—",
+                "RSI":     f'{r["rsi_now"]:.1f}' if r.get("ok") else "—",
+                "L-Score": r.get("l_score", "—") if r.get("ok") else "—",
+                "S-Score": r.get("s_score", "—") if r.get("ok") else "—",
+                "Price":   f'{r["close"]:,.5f}'  if r.get("ok") else "—",
+            })
+        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+
+# ══════════════════════════════════════════════
+#  TAB 2 — Pair Detail
+# ══════════════════════════════════════════════
+with tab_detail:
+    detail_ok = True
+
+    with st.spinner(f"Loading 15M data for {selected_pair}…"):
+        df_raw = fetch_15m(ticker, lookback_days)
+
+    if df_raw.empty or len(df_raw) < 30:
+        st.error(f"⚠️ Could not load enough 15M data for **{selected_pair}**. "
+                 "Try reducing lookback or a different instrument.")
+        detail_ok = False
+
+    if detail_ok:
+        df = detect_signals(
+            df_raw,
+            stoch_os=stoch_os, stoch_ob=stoch_ob,
+            rsi_os=rsi_os, rsi_ob=rsi_ob,
+            rsi_reset_band=rsi_reset_band,
+        )
+        status = latest_signal_status(df, stoch_os, stoch_ob, rsi_os, rsi_ob)
+
+        # ── Verdict banner ───────────────────────────
+        vcls, vtitle, vcolor, vdesc = VERDICT_CFG[status["verdict"]]
+        st.markdown(f"""
+        <div class="{vcls}">
+          <div style="font-size:22px; font-weight:800; color:{vcolor}; letter-spacing:1px;">{vtitle}</div>
+          <div style="font-size:13px; color:#8b949e; margin:6px 0 10px 0;">{vdesc}</div>
+          <div style="display:flex; gap:24px; justify-content:center; flex-wrap:wrap;
+                      font-size:13px; color:#c9d1d9; margin-top:10px;">
+            <div>%K &nbsp;<code style="color:#00d4ff;">{status['k_now']:.1f}</code></div>
+            <div>%D &nbsp;<code style="color:#fdcb6e;">{status['d_now']:.1f}</code></div>
+            <div>RSI &nbsp;<code style="color:#a29bfe;">{status['rsi_now']:.1f}</code></div>
+            <div>Close &nbsp;<code style="color:#e6edf3;">{status['close']:.5f}</code></div>
+            <div>⏰ &nbsp;<code style="color:#8b949e;">{status['last_time'].strftime('%H:%M')}</code></div>
+          </div>
         </div>
-    </div>"""
+        """, unsafe_allow_html=True)
 
+        # ── KPI row ──────────────────────────────────
+        total_long      = int(df["signal_long"].sum())
+        total_short     = int(df["signal_short"].sum())
+        total_cross_up  = int(df["stoch_cross_up"].sum())
+        total_cross_dn  = int(df["stoch_cross_down"].sum())
+        total_rsi_reset = int(df["rsi_reset_up"].sum() + df["rsi_reset_down"].sum())
 
-with col_left:
-    st.markdown(render_conditions(
-        "🟢 LONG Entry Conditions", "#3fb950",
-        status["cond_long"], status["long_score"],
-    ), unsafe_allow_html=True)
+        k1, k2, k3, k4, k5 = st.columns(5)
+        for col_, val_, lbl_, color_ in [
+            (k1, total_long,      "LONG Signals",  "#3fb950"),
+            (k2, total_short,     "SHORT Signals", "#f85149"),
+            (k3, total_cross_up,  "Stoch Cross ↑", "#00d4ff"),
+            (k4, total_cross_dn,  "Stoch Cross ↓", "#fdcb6e"),
+            (k5, total_rsi_reset, "RSI Resets",    "#a29bfe"),
+        ]:
+            with col_:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-value" style="color:{color_};">{val_}</div>'
+                    f'<div class="metric-label">{lbl_}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
 
-with col_right:
-    st.markdown(render_conditions(
-        "🔴 SHORT Entry Conditions", "#f85149",
-        status["cond_short"], status["short_score"],
-    ), unsafe_allow_html=True)
+        st.markdown("---")
 
-# ── Chart ──────────────────────────────────────────────────────────
-st.markdown('<div class="section-title">📊 15M Chart — Stochastic + RSI</div>',
-            unsafe_allow_html=True)
+        # ── Condition breakdown ──────────────────────
+        col_left, col_right = st.columns(2)
+        with col_left:
+            st.markdown(render_conditions(
+                "🟢 LONG Entry Conditions", "#3fb950",
+                status["cond_long"], status["long_score"],
+            ), unsafe_allow_html=True)
+        with col_right:
+            st.markdown(render_conditions(
+                "🔴 SHORT Entry Conditions", "#f85149",
+                status["cond_short"], status["short_score"],
+            ), unsafe_allow_html=True)
 
-fig = build_chart(
-    df, selected_pair,
-    stoch_os=stoch_os, stoch_ob=stoch_ob,
-    rsi_os=rsi_os, rsi_ob=rsi_ob,
-    show_n=show_candles,
-)
-st.plotly_chart(fig, use_container_width=True)
+        # ── Chart ────────────────────────────────────
+        st.markdown('<div class="section-title">📊 15M Chart — Stochastic + RSI</div>',
+                    unsafe_allow_html=True)
+        fig = build_chart(
+            df, selected_pair,
+            stoch_os=stoch_os, stoch_ob=stoch_ob,
+            rsi_os=rsi_os, rsi_ob=rsi_ob,
+            show_n=show_candles,
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("---")
+        st.markdown("---")
 
-# ── Signal log ─────────────────────────────────────────────────────
-st.markdown('<div class="section-title">🗂️ Signal Log — All Fired Signals</div>',
-            unsafe_allow_html=True)
+        # ── Signal log ───────────────────────────────
+        st.markdown('<div class="section-title">🗂️ Signal Log — All Fired Signals</div>',
+                    unsafe_allow_html=True)
+        sig_rows = []
+        for ts, row in df.iterrows():
+            if row["signal_long"]:
+                sig_rows.append({
+                    "Time": ts.strftime("%m-%d %H:%M"), "Direction": "LONG",
+                    "Close": round(float(row["Close"]), 5),
+                    "Stoch %K": round(float(row["stoch_k"]), 1),
+                    "Stoch %D": round(float(row["stoch_d"]), 1),
+                    "RSI": round(float(row["rsi"]), 1),
+                    "Stoch Cross": "↑ Up", "RSI Reset": "↑ From Low",
+                })
+            if row["signal_short"]:
+                sig_rows.append({
+                    "Time": ts.strftime("%m-%d %H:%M"), "Direction": "SHORT",
+                    "Close": round(float(row["Close"]), 5),
+                    "Stoch %K": round(float(row["stoch_k"]), 1),
+                    "Stoch %D": round(float(row["stoch_d"]), 1),
+                    "RSI": round(float(row["rsi"]), 1),
+                    "Stoch Cross": "↓ Down", "RSI Reset": "↓ From High",
+                })
 
-sig_rows = []
-for ts, row in df.iterrows():
-    if row["signal_long"]:
-        sig_rows.append({
-            "Time": ts.strftime("%m-%d %H:%M"),
-            "Direction": "LONG",
-            "Close": round(float(row["Close"]), 5),
-            "Stoch %K": round(float(row["stoch_k"]), 1),
-            "Stoch %D": round(float(row["stoch_d"]), 1),
-            "RSI": round(float(row["rsi"]), 1),
-            "Stoch Cross": "↑ Up",
-            "RSI Reset": "↑ From Low",
-        })
-    if row["signal_short"]:
-        sig_rows.append({
-            "Time": ts.strftime("%m-%d %H:%M"),
-            "Direction": "SHORT",
-            "Close": round(float(row["Close"]), 5),
-            "Stoch %K": round(float(row["stoch_k"]), 1),
-            "Stoch %D": round(float(row["stoch_d"]), 1),
-            "RSI": round(float(row["rsi"]), 1),
-            "Stoch Cross": "↓ Down",
-            "RSI Reset": "↓ From High",
-        })
+        if sig_rows:
+            st.dataframe(
+                pd.DataFrame(sig_rows[::-1]),
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "Direction": st.column_config.TextColumn("Dir",   width="small"),
+                    "Stoch %K":  st.column_config.NumberColumn("%K",  format="%.1f"),
+                    "Stoch %D":  st.column_config.NumberColumn("%D",  format="%.1f"),
+                    "RSI":       st.column_config.NumberColumn("RSI", format="%.1f"),
+                })
+        else:
+            st.info("No complete entry signals detected in the loaded data window. "
+                    "Try extending the lookback or adjusting the sensitivity thresholds in the sidebar.")
 
-if sig_rows:
-    sig_df = pd.DataFrame(sig_rows[::-1])
-    st.dataframe(sig_df, use_container_width=True, hide_index=True,
-                 column_config={
-                     "Direction": st.column_config.TextColumn("Dir", width="small"),
-                     "Stoch %K": st.column_config.NumberColumn("%K", format="%.1f"),
-                     "Stoch %D": st.column_config.NumberColumn("%D", format="%.1f"),
-                     "RSI": st.column_config.NumberColumn("RSI", format="%.1f"),
-                 })
-else:
-    st.info("No complete entry signals detected in the loaded data window. "
-            "Try extending the lookback or adjusting the sensitivity thresholds in the sidebar.")
+        st.markdown("---")
 
-st.markdown("---")
+        # ── Strategy explainer ───────────────────────
+        st.markdown('<div class="section-title">📖 Entry Signal Logic</div>', unsafe_allow_html=True)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("""
+            <div class="explainer">
+            <b style="color:#3fb950;">🟢 LONG Entry — all 3 required</b><br><br>
+            <b>1. Stochastic Crossover ↑</b><br>
+            &nbsp;&nbsp;%K line crosses <em>above</em> %D signal line.<br>
+            &nbsp;&nbsp;Momentum is shifting from bearish to bullish.<br><br>
+            <b>2. In / Near Oversold Zone</b><br>
+            &nbsp;&nbsp;%K is below the OS threshold + 20 pts.<br>
+            &nbsp;&nbsp;Confirms the crossover happens from a low base,<br>
+            &nbsp;&nbsp;not from a mid-range noise cross.<br><br>
+            <b>3. RSI Reset from Oversold</b><br>
+            &nbsp;&nbsp;RSI was below the oversold level within the last 4 candles<br>
+            &nbsp;&nbsp;and is now recovering back toward neutral.<br>
+            &nbsp;&nbsp;Confirms momentum behind the stochastic cross.
+            </div>
+            """, unsafe_allow_html=True)
+        with col_b:
+            st.markdown("""
+            <div class="explainer">
+            <b style="color:#f85149;">🔴 SHORT Entry — all 3 required</b><br><br>
+            <b>1. Stochastic Crossover ↓</b><br>
+            &nbsp;&nbsp;%K line crosses <em>below</em> %D signal line.<br>
+            &nbsp;&nbsp;Momentum is shifting from bullish to bearish.<br><br>
+            <b>2. In / Near Overbought Zone</b><br>
+            &nbsp;&nbsp;%K is above the OB threshold − 20 pts.<br>
+            &nbsp;&nbsp;Confirms the cross happens at elevated levels,<br>
+            &nbsp;&nbsp;not a mid-range false signal.<br><br>
+            <b>3. RSI Reset from Overbought</b><br>
+            &nbsp;&nbsp;RSI was above the overbought level within the last 4 candles<br>
+            &nbsp;&nbsp;and is now retreating back toward neutral.<br>
+            &nbsp;&nbsp;Confirms exhaustion of the prior move.
+            </div>
+            """, unsafe_allow_html=True)
 
-# ── Strategy explainer ─────────────────────────────────────────────
-st.markdown('<div class="section-title">📖 Entry Signal Logic</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="explainer" style="margin-top:12px;">
+        <b style="color:#388bfd;">⚙️ Indicator Parameters</b><br><br>
+        <b>Stochastic:</b> %K Period {int(k_period)} · Smooth %K {int(smooth_k)} · %D Signal {int(d_period)} &nbsp;
+        (adjustable in sidebar)<br>
+        <b>RSI:</b> Period 14 · Oversold &lt; {rsi_os} · Overbought &gt; {rsi_ob} &nbsp;
+        (use 30/70 for stricter signals)<br>
+        <b>Best used with:</b> 4H confluence zone confirmed + candlestick rejection on 15M already identified.<br>
+        This is <em>Check #13</em> — the final entry trigger after all higher-timeframe confluences align.
+        </div>
+        """, unsafe_allow_html=True)
 
-col_a, col_b = st.columns(2)
-
-with col_a:
-    st.markdown("""
-    <div class="explainer">
-    <b style="color:#3fb950;">🟢 LONG Entry — all 3 required</b><br><br>
-    <b>1. Stochastic Crossover ↑</b><br>
-    &nbsp;&nbsp;%K line crosses <em>above</em> %D signal line.<br>
-    &nbsp;&nbsp;Momentum is shifting from bearish to bullish.<br><br>
-    <b>2. In / Near Oversold Zone</b><br>
-    &nbsp;&nbsp;%K is below the OS threshold + 20 pts.<br>
-    &nbsp;&nbsp;Confirms the crossover happens from a low base,<br>
-    &nbsp;&nbsp;not from a mid-range noise cross.<br><br>
-    <b>3. RSI Reset from Oversold</b><br>
-    &nbsp;&nbsp;RSI was below the oversold level within the last 4 candles<br>
-    &nbsp;&nbsp;and is now recovering back toward neutral.<br>
-    &nbsp;&nbsp;Confirms momentum behind the stochastic cross.
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_b:
-    st.markdown("""
-    <div class="explainer">
-    <b style="color:#f85149;">🔴 SHORT Entry — all 3 required</b><br><br>
-    <b>1. Stochastic Crossover ↓</b><br>
-    &nbsp;&nbsp;%K line crosses <em>below</em> %D signal line.<br>
-    &nbsp;&nbsp;Momentum is shifting from bullish to bearish.<br><br>
-    <b>2. In / Near Overbought Zone</b><br>
-    &nbsp;&nbsp;%K is above the OB threshold − 20 pts.<br>
-    &nbsp;&nbsp;Confirms the cross happens at elevated levels,<br>
-    &nbsp;&nbsp;not a mid-range false signal.<br><br>
-    <b>3. RSI Reset from Overbought</b><br>
-    &nbsp;&nbsp;RSI was above the overbought level within the last 4 candles<br>
-    &nbsp;&nbsp;and is now retreating back toward neutral.<br>
-    &nbsp;&nbsp;Confirms exhaustion of the prior move.
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("""
-<div class="explainer" style="margin-top:12px;">
-<b style="color:#388bfd;">⚙️ Indicator Parameters</b><br><br>
-<b>Stochastic:</b> %K Period 14 · Smooth %K 3 · %D Signal 3 &nbsp;
-(adjustable in sidebar)<br>
-<b>RSI:</b> Period 14 · Oversold &lt; 40 · Overbought &gt; 60 &nbsp;
-(use 30/70 for stricter signals)<br>
-<b>Best used with:</b> 4H confluence zone confirmed + candlestick rejection on 15M already identified.<br>
-This is <em>Check #14</em> — the final entry trigger after all higher-timeframe confluences align.
-</div>
-""", unsafe_allow_html=True)
-
-# Footer
-st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-            padding-top:16px;border-top:1px solid #21262d;">
-  ⚡ 15M Entry Signal Scanner · Check #14 · Stochastic + RSI · For educational purposes only
-</div>
-""", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
+                    padding-top:16px;border-top:1px solid #21262d;">
+          ⚡ 15M Entry Signal Scanner · Check #13 · Stochastic + RSI · For educational purposes only
+        </div>
+        """, unsafe_allow_html=True)
