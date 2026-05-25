@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 import yfinance as yf
 from datetime import datetime, timedelta
 
@@ -36,6 +35,7 @@ st.markdown("""
     .badge-neg-strong{background:#4a0d0d;color:#f85149;border:1px solid #8b2d2d;}
     .badge-neg-mod   {background:#3a1a1a;color:#ffa198;border:1px solid #8b2d2d;}
     .badge-neutral   {background:#21262d;color:#8b949e;border:1px solid #30363d;}
+    [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -62,6 +62,8 @@ ALL_INSTRUMENTS = {
     "EUR/ZAR": "EURZAR=X",
     "GBP/ZAR": "GBPZAR=X",
     "🥇 Gold":  "GC=F",
+    "🥈 Silver":  "SI=F",
+    "🪙 Platinum":"PL=F",
 }
 
 KNOWN_RELATIONSHIPS = [
@@ -109,7 +111,7 @@ def fetch_prices(tickers: tuple, period: str, interval: str):
 # ── Sidebar controls ───────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### 🔗 Correlation Settings")
-    st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
     st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")

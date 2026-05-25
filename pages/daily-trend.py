@@ -42,6 +42,7 @@ st.markdown("""
     /* EMA gap bar */
     .gap-track{background:#21262d;border-radius:6px;height:8px;margin:6px 0;overflow:hidden;position:relative;}
 
+    [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -68,6 +69,8 @@ INSTRUMENTS = {
     "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001},
     "🥇 Gold":  {"ticker": "GC=F",    "pip_size": 0.10},
+    "🥈 Silver":  {"ticker": "SI=F",  "pip_size": 0.01},
+    "🪙 Platinum":{"ticker": "PL=F",  "pip_size": 0.10},
 }
 
 ALL_EMAS = [20, 50, 100, 200]
@@ -194,7 +197,7 @@ def check_trend(data: dict, direction: str) -> dict:
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📈 Daily Trend")
-    st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
     st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")

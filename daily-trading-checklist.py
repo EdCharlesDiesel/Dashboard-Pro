@@ -513,7 +513,7 @@ with st.sidebar:
     # Conditional sidebar content based on page
     if st.session_state.current_page == "checklist":
         # Original checklist sidebar
-        st.page_link("daliy-trading-checklist.py",    label="00. Checklist",           icon="📋")
+        st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
         st.page_link("pages/macro-bias.py",           label="01. Macro Bias",           icon="🌐")
         st.page_link("pages/news-filter.py",          label="02. News Filter",          icon="📰")
         st.page_link("pages/correlations.py",         label="03. Correlations",         icon="🔗")
