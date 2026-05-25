@@ -81,76 +81,58 @@ st.markdown("""
 # ══════════════════════════════════════════════════════════════════
 CURRENCIES = {
     "USD": {
-        "flag": "🇺🇸", "name": "US Dollar",       "bank": "Federal Reserve",
+        "flag": "🇺🇸", "name": "US Dollar",        "bank": "Federal Reserve",
         "wb_code": "US",  "rate_ticker": "^IRX",
         "yield_ticker": "^TNX",
         "inflation_target": 2.0,
-        "cb_rate": 5.25,   # manually maintained — update as needed
-        "rate_trend": "Holding",  # Hiking / Cutting / Holding
     },
     "EUR": {
-        "flag": "🇪🇺", "name": "Euro",             "bank": "ECB",
+        "flag": "🇪🇺", "name": "Euro",              "bank": "ECB",
         "wb_code": "XC",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 2.0,
-        "cb_rate": 3.65,
-        "rate_trend": "Cutting",
     },
     "GBP": {
-        "flag": "🇬🇧", "name": "British Pound",    "bank": "Bank of England",
+        "flag": "🇬🇧", "name": "British Pound",     "bank": "Bank of England",
         "wb_code": "GB",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 2.0,
-        "cb_rate": 5.00,
-        "rate_trend": "Cutting",
     },
     "AUD": {
-        "flag": "🇦🇺", "name": "Australian Dollar","bank": "RBA",
+        "flag": "🇦🇺", "name": "Australian Dollar", "bank": "RBA",
         "wb_code": "AU",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 2.5,
-        "cb_rate": 4.35,
-        "rate_trend": "Holding",
     },
     "NZD": {
         "flag": "🇳🇿", "name": "New Zealand Dollar","bank": "RBNZ",
         "wb_code": "NZ",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 2.0,
-        "cb_rate": 4.75,
-        "rate_trend": "Cutting",
     },
     "JPY": {
-        "flag": "🇯🇵", "name": "Japanese Yen",     "bank": "Bank of Japan",
+        "flag": "🇯🇵", "name": "Japanese Yen",      "bank": "Bank of Japan",
         "wb_code": "JP",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 2.0,
-        "cb_rate": 0.25,
-        "rate_trend": "Hiking",
     },
     "CHF": {
-        "flag": "🇨🇭", "name": "Swiss Franc",      "bank": "SNB",
+        "flag": "🇨🇭", "name": "Swiss Franc",       "bank": "SNB",
         "wb_code": "CH",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 2.0,
-        "cb_rate": 1.00,
-        "rate_trend": "Cutting",
     },
     "CAD": {
-        "flag": "🇨🇦", "name": "Canadian Dollar",  "bank": "Bank of Canada",
+        "flag": "🇨🇦", "name": "Canadian Dollar",   "bank": "Bank of Canada",
         "wb_code": "CA",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 2.0,
-        "cb_rate": 4.25,
-        "rate_trend": "Cutting",
     },
     "ZAR": {
         "flag": "🇿🇦", "name": "South African Rand","bank": "SARB",
         "wb_code": "ZA",  "rate_ticker": None,
         "yield_ticker": None,
         "inflation_target": 4.5,
-        "cb_rate": 8.25,
-        "rate_trend": "Cutting",
     },
 }
 
@@ -188,13 +170,14 @@ def fetch_wb_indicator(country_code: str, indicator: str, years: int = 5):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_all_macro():
-    """Fetch GDP and CPI for all currencies from World Bank."""
+    """Fetch GDP, CPI, and lending rate for all currencies from World Bank."""
     macro = {}
     for ccy, cfg in CURRENCIES.items():
         code = cfg["wb_code"]
         gdp  = fetch_wb_indicator(code, "NY.GDP.MKTP.KD.ZG", 5)  # GDP growth %
         cpi  = fetch_wb_indicator(code, "FP.CPI.TOTL.ZG",    5)  # Inflation %
-        macro[ccy] = {"gdp": gdp, "cpi": cpi}
+        rate = fetch_wb_indicator(code, "FR.INR.LEND",        5)  # Lending rate %
+        macro[ccy] = {"gdp": gdp, "cpi": cpi, "rate": rate}
     return macro
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -309,23 +292,6 @@ with st.sidebar:
     st.page_link("pages/weekly-rsi.py", label="Weekly RSI", icon="📡")
     st.page_link("pages/daily-trend.py", label="📈 Daily Trend", icon="📈")
     st.divider()
-
-    st.markdown("**⚡ Manual Rate Override**")
-    st.caption("Update if CB rates have changed since last release.")
-    with st.expander("Edit Central Bank Rates", expanded=False):
-        for ccy in CURRENCIES:
-            CURRENCIES[ccy]["cb_rate"] = st.number_input(
-                f"{CURRENCIES[ccy]['flag']} {ccy} rate (%)",
-                value=float(CURRENCIES[ccy]["cb_rate"]),
-                step=0.25, format="%.2f", key=f"rate_{ccy}"
-            )
-            CURRENCIES[ccy]["rate_trend"] = st.selectbox(
-                f"{ccy} trend", ["Hiking","Holding","Cutting"],
-                index=["Hiking","Holding","Cutting"].index(CURRENCIES[ccy]["rate_trend"]),
-                key=f"trend_{ccy}"
-            )
-
-    st.divider()
     if st.button("🔄 Refresh Macro Data", use_container_width=True, type="primary"):
         st.cache_data.clear()
 
@@ -334,8 +300,27 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════
 # FETCH
 # ══════════════════════════════════════════════════════════════════
-with st.spinner("📡 Loading macro data from World Bank…"):
+with st.spinner("📡 Loading macro & rate data from World Bank…"):
     macro_data = fetch_all_macro()
+
+# Populate cb_rate and rate_trend from World Bank lending rate data
+for _ccy, _cfg in CURRENCIES.items():
+    _rate_series = macro_data.get(_ccy, {}).get("rate")
+    if _rate_series and len(_rate_series) >= 1:
+        _cfg["cb_rate"] = round(_rate_series[-1][1], 2)
+        if len(_rate_series) >= 2:
+            _r_latest, _r_prev = _rate_series[-1][1], _rate_series[-2][1]
+            if _r_latest > _r_prev + 0.05:
+                _cfg["rate_trend"] = "Hiking"
+            elif _r_latest < _r_prev - 0.05:
+                _cfg["rate_trend"] = "Cutting"
+            else:
+                _cfg["rate_trend"] = "Holding"
+        else:
+            _cfg["rate_trend"] = "Holding"
+    else:
+        _cfg.setdefault("cb_rate", 0.0)
+        _cfg.setdefault("rate_trend", "Holding")
 
 # Score each currency
 scores = {ccy: score_currency(ccy, macro_data) for ccy in CURRENCIES}
@@ -353,7 +338,7 @@ st.markdown(f"""
       <div style="font-size:26px;font-weight:700;color:#e6edf3;">🌐 Macro Bias Dashboard</div>
       <div style="color:#8b949e;font-size:14px;margin-top:6px;">Interest Rates · GDP Growth · Inflation · Currency Bias Scoring</div>
       <div style="font-size:13px;color:#388bfd;font-weight:500;margin-top:4px;">
-        🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · World Bank API + CB Rates
+        🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · World Bank API (GDP · CPI · Lending Rate)
       </div>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
@@ -763,6 +748,6 @@ st.caption("🟢 Green = base currency has higher rate (carry advantage) · 🔴
 # Footer
 st.markdown("""
 <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
-  🌐 Macro Bias · World Bank API (GDP & CPI) · CB Rates manually maintained · Not financial advice
+  🌐 Macro Bias · World Bank API (GDP · CPI · Lending Rate — FR.INR.LEND) · Auto-refreshed · Not financial advice
 </div>
 """, unsafe_allow_html=True)
