@@ -17,7 +17,10 @@ from streamlit_autorefresh import st_autorefresh
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
-from src.core.signals import generate_trading_ideas, safe_get, entry_generator, generate_weekly_swing_ideas
+from src.core.signals import (
+    generate_trading_ideas, safe_get, entry_generator,
+    generate_weekly_swing_ideas, generate_supertrend_signals, evaluate_trend_following_signal
+)
 
 st.set_page_config(
     page_title="Macro Dashboard Pro",
@@ -53,8 +56,36 @@ h1, h2, h3 { font-family: 'Syne', sans-serif !important; }
 .stTabs [data-baseweb="tab"] { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 .sig-buy  { background:#0d3b2a; border:1px solid #1a7a55; color:#4af0c4; padding:4px 12px; border-radius:3px; font-size:11px; font-family:'JetBrains Mono',monospace; display:inline-block; }
 .sig-sell { background:#3b0d16; border:1px solid #7a1a2a; color:#f04a6a; padding:4px 12px; border-radius:3px; font-size:11px; font-family:'JetBrains Mono',monospace; display:inline-block; }
+.alert-buy  { background:#0d3b2a; border-left:5px solid #4af0c4; padding:12px 18px; border-radius:8px; margin:8px 0; color:#e0e0e0; }
+.alert-sell { background:#3b0d16; border-left:5px solid #f04a6a; padding:12px 18px; border-radius:8px; margin:8px 0; color:#e0e0e0; }
 </style>
 """, unsafe_allow_html=True)
+
+def play_alert_sound(bias: str):
+    """Browser-based audio alert via Web Audio API."""
+    if bias == "Long":
+        tones = [(600, 0.0, 0.25), (900, 0.3, 0.25)]
+    else:
+        tones = [(900, 0.0, 0.25), (600, 0.3, 0.25)]
+
+    tone_js = "\n".join(
+        f"""
+        var o{i}=ctx.createOscillator(), g{i}=ctx.createGain();
+        o{i}.connect(g{i}); g{i}.connect(ctx.destination);
+        o{i}.frequency.value={freq}; o{i}.type='sine';
+        g{i}.gain.setValueAtTime(0.35, ctx.currentTime+{start});
+        g{i}.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+{start}+{dur});
+        o{i}.start(ctx.currentTime+{start}); o{i}.stop(ctx.currentTime+{start}+{dur}+0.05);
+        """
+        for i, (freq, start, dur) in enumerate(tones)
+    )
+    st.components.v1.html(f"""
+    <script>
+    (function(){{
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        {tone_js}
+    }})();
+    </script>""", height=0)
 
 # ============================================================================
 # NOTIFICATION PERSISTENCE
@@ -222,14 +253,26 @@ def check_and_notify(ideas: List[Dict]) -> List[Dict]:
     if new_alerts:
         save_notified_keys(st.session_state.notified_keys)
         send_email_alert(new_alerts)   # ← email fired once per unique signal
+        play_alert_sound(new_alerts[0]['bias'])
 
     for idea in new_alerts:
         direction = "📈 LONG" if idea['bias'] == 'Long' else "📉 SHORT"
+
+        # Toast
         st.toast(
             f"🚨 NEW SIGNAL: {idea['pair']} {direction}\n"
             f"Score: {idea['strength_score']}/10 | Entry: {idea['entry']:.5f}",
             icon="🔔",
         )
+
+        # Visual Banner
+        cls = "alert-buy" if idea['bias'] == "Long" else "alert-sell"
+        st.markdown(f"""
+        <div class="{cls}">
+            <strong>{idea['pair']}</strong> — {direction} detected at <strong>{idea['entry']:.5f}</strong>
+            (Score: {idea['strength_score']}/10)
+        </div>
+        """, unsafe_allow_html=True)
         st.session_state.notification_log.append({
             "time": datetime.now().strftime("%H:%M:%S"),
             "pair": idea["pair"],
@@ -888,6 +931,7 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
         st.warning("No weekly data available — click ↺ Refresh in the sidebar.")
         return
 
+
     ideas = generate_weekly_swing_ideas(data_by_timeframe)
 
 
@@ -1001,22 +1045,105 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
 # FOREX TREND FOLLOWING TAB
 # ============================================================================
 
-def _trend_score(price: float, ema20: float, ema50: float, adx: float, rsi: float) -> int:
-    """Return an integer 0-10 trend strength score for a single timeframe row."""
-    score = 0
-    if ema20 > ema50:
-        score += 3          # golden cross
-    if price > ema20:
-        score += 2          # price above fast EMA
-    if adx >= 25:
-        score += 3          # strong trend per Wilder
-    elif adx >= 20:
-        score += 1
-    if 45 < rsi < 70:
-        score += 1          # momentum in healthy range (bull)
-    elif 30 < rsi < 55:
-        score += 1          # momentum in healthy range (bear)
-    return min(score, 10)
+
+
+def render_volume_profile_tab(data_by_timeframe: Dict) -> None:
+    st.subheader("🔊 Volume Profile Analysis")
+    st.caption("Analyzes the distribution of volume over price to find Point of Control (POC) and Value Areas.")
+
+    avail_pairs = list(config.assets.keys())
+    c1, c2, c3 = st.columns(3)
+    pair = c1.selectbox("Select Pair", avail_pairs, key="vp_pair")
+    tf = c2.selectbox("Timeframe", ["Daily", "4 Hour", "Hourly"], key="vp_tf")
+    n_bins = c3.slider("Price Bins", 40, 200, 80, 10, key="vp_bins")
+
+    df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
+    if df.empty:
+        st.warning(f"No data available for {pair} on {tf} timeframe.")
+        return
+
+    vp = analyzer.compute_volume_profile(df, n_bins)
+    levels = analyzer.detect_levels(vp)
+    va_lo, va_hi = analyzer.value_area(vp)
+
+    cur = float(df["Close"].iloc[-1])
+    poc = levels["poc"]
+
+    # KPIs
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Last Price", f"{cur:.5f}")
+    m2.metric("Point of Control", f"{poc:.5f}")
+    m3.metric("Value Area High", f"{va_hi:.5f}")
+    m4.metric("Value Area Low", f"{va_lo:.5f}")
+
+    # Plot
+    fig = make_subplots(rows=1, cols=2, column_widths=[0.8, 0.2], shared_yaxes=True, horizontal_spacing=0.01)
+
+    # Candlestick
+    fig.add_trace(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
+                                 name="Price", **CANDLE_STYLE), row=1, col=1)
+
+    # POC and VA Lines
+    fig.add_hline(y=poc, line=dict(color="#f59e0b", width=2, dash="dash"), annotation_text="POC", row=1, col=1)
+    fig.add_hrect(y0=va_lo, y1=va_hi, fillcolor="rgba(6,214,232,0.05)", line_width=0, row=1, col=1)
+
+    # Volume Profile Bar Chart
+    fig.add_trace(go.Bar(x=vp["volume"], y=vp["price"], orientation="h", name="Volume Profile",
+                         marker=dict(color="rgba(6,214,232,0.45)", line_width=0)), row=1, col=2)
+
+    fig.update_layout(height=600, **CHART_LAYOUT)
+    fig.update_xaxes(showticklabels=False, row=1, col=2)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_supertrend_strategy_tab(data_by_timeframe: Dict) -> None:
+    st.subheader("🛡️ Supertrend + QQE + DEMA Strategy")
+    st.caption("Trend-following confluence strategy using dual Supertrends, DEMA filter, and QQE momentum.")
+
+    avail_pairs = list(config.assets.keys())
+    c1, c2 = st.columns(2)
+    pair = c1.selectbox("Select Pair", avail_pairs, key="st_pair")
+    tf = c2.selectbox("Timeframe", ["Daily", "4 Hour", "Hourly", "15 Minute"], index=1, key="st_tf")
+
+    df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
+    if df.empty:
+        st.warning(f"No data available for {pair} on {tf} timeframe.")
+        return
+
+    # Strategy Params
+    with st.expander("⚙️ Strategy Parameters"):
+        dema_p = st.slider("DEMA Period", 50, 300, 200, 10)
+        st_p1 = st.slider("Supertrend 1 Period", 5, 20, 10)
+        st_m1 = st.slider("Supertrend 1 Mult", 1.0, 5.0, 3.0, 0.5)
+
+    signals = generate_supertrend_signals(df, dema_period=dema_p, st_period1=st_p1, st_mult1=st_m1)
+
+    last_sig = signals.iloc[-1]
+    sig_label = "🟢 BUY" if last_sig == 1 else ("🔴 SELL" if last_sig == -1 else "⚪ HOLD")
+
+    st.metric("Current Strategy Signal", sig_label)
+
+    # Charting
+    df_st = df.copy()
+    st1 = analyzer.calculate_supertrend(df_st, st_p1, st_m1)
+    dema = analyzer.calculate_dema(df_st["Close"], dema_p)
+
+    fig = go.Figure()
+    fig.add_trace(go.Candlestick(x=df_st.index, open=df_st["Open"], high=df_st["High"], low=df_st["Low"], close=df_st["Close"],
+                                 name="Price", **CANDLE_STYLE))
+    fig.add_trace(go.Scatter(x=df_st.index, y=st1["Line"], name="Supertrend", line=dict(color="#0eed8a", width=1)))
+    fig.add_trace(go.Scatter(x=df_st.index, y=dema, name="DEMA Filter", line=dict(color="#f59e0b", width=2)))
+
+    # Buy/Sell markers
+    buy_mask = signals == 1
+    sell_mask = signals == -1
+    fig.add_trace(go.Scatter(x=df_st.index[buy_mask], y=df_st["Low"][buy_mask]*0.999, mode="markers",
+                             marker=dict(symbol="triangle-up", size=10, color="#0eed8a"), name="Buy"))
+    fig.add_trace(go.Scatter(x=df_st.index[sell_mask], y=df_st["High"][sell_mask]*1.001, mode="markers",
+                             marker=dict(symbol="triangle-down", size=10, color="#ff3b6b"), name="Sell"))
+
+    fig.update_layout(height=600, **CHART_LAYOUT)
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def render_trend_following_tab(data_by_timeframe: Dict) -> None:
@@ -1069,10 +1196,11 @@ def render_trend_following_tab(data_by_timeframe: Dict) -> None:
             prev = float(df.iloc[-2].get("Close", price) or price)
             change_pct = (price - prev) / prev * 100 if prev else 0.0
 
+        # Use consolidated signal logic
+        label, score, max_s, conds, direction = evaluate_trend_following_signal(df, min_conditions=3)
+
         # EMA alignment: +1 each for price>EMA20, EMA20>EMA50
         ema_align = int(price > ema20) + int(ema20 > ema50)
-
-        score = _trend_score(price, ema20, ema50, adx, rsi)
 
         rows.append({
             "Pair":        pair,
@@ -1086,6 +1214,7 @@ def render_trend_following_tab(data_by_timeframe: Dict) -> None:
             "RSI":         round(rsi, 1),
             "ATR":         round(atr, 5),
             "Score":       score,
+            "Signal":      label,
             "_df":         df,          # hidden, used for chart
         })
 
@@ -1109,7 +1238,7 @@ def render_trend_following_tab(data_by_timeframe: Dict) -> None:
     st.divider()
 
     # ── Scanner table ─────────────────────────────────────────────────────────
-    display_cols = ["Pair", "Direction", "Price", "Change %", "ADX", "+DI", "-DI", "EMA Align", "RSI", "ATR", "Score"]
+    display_cols = ["Pair", "Direction", "Price", "Change %", "ADX", "+DI", "-DI", "EMA Align", "RSI", "ATR", "Score", "Signal"]
     display_df = pd.DataFrame([{k: r[k] for k in display_cols} for r in rows])
 
     def _style_row(row):
@@ -1291,8 +1420,9 @@ def main():
         "⏱️ 15-Min Entry",              # Step 9 — execution timing
         "🔥 Trend Following",           # Step 10 — trending pair scanner
 
-        "🧪 Backtest Lab",              # Step 11 — historical testing
-
+        "🔊 Volume Profile",            # Step 11 — volume distribution
+        "🛡️ Supertrend Strategy",      # Step 12 — specialized strategy
+        "🧪 Backtest Lab",              # Step 13 — historical testing
     ])
 
     with tabs[0]:
@@ -1318,6 +1448,10 @@ def main():
     with tabs[10]:
         render_trend_following_tab(data_by_timeframe)
     with tabs[11]:
+        render_volume_profile_tab(data_by_timeframe)
+    with tabs[12]:
+        render_supertrend_strategy_tab(data_by_timeframe)
+    with tabs[13]:
         render_backtest_lab_tab()
 
 if __name__ == "__main__":
