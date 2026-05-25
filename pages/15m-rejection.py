@@ -471,7 +471,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -497,26 +497,12 @@ st.markdown(f"""
     Rejection candle &amp; structural confirmation on 15-minute chart · {selected_pair}
   </div>
   <div style="font-size:12px;color:#388bfd;margin-top:6px;">
-    Check #13 — Candlestick rejection on 15M · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
+    Check #12 — Candlestick rejection on 15M · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Fetch & process
-with st.spinner(f"Loading 15M data for {selected_pair}…"):
-    df_raw = fetch_15m(ticker, lookback_days)
-
-if df_raw.empty or len(df_raw) < 10:
-    st.error(f"⚠️ Could not load 15M data for **{selected_pair}**. "
-             "Try a different instrument or reduce the lookback.")
-    st.stop()
-
-df = detect_patterns(df_raw)
-df = detect_structure(df, lookback=pivot_lb)
-v  = latest_verdict(df)
-
-# ── Verdict banner ─────────────────────────────────────────────────
-verdict_cfg = {
+VERDICT_CFG = {
     "BULL":  ("verdict-bull", "🟢 BULLISH REJECTION", "#3fb950",
               "Rejection candle(s) suggest upward structural confirmation"),
     "BEAR":  ("verdict-bear", "🔴 BEARISH REJECTION", "#f85149",
@@ -526,64 +512,8 @@ verdict_cfg = {
     "NONE":  ("verdict-none", "⏳ NO CLEAR PATTERN", "#8b949e",
               "No significant rejection candles detected on the last 3 candles"),
 }
-vcls, vtitle, vcolor, vdesc = verdict_cfg[v["verdict"]]
 
-bull_pills = "".join(f'<span class="pill-bull">{p}</span>' for p in v["bull_patterns"])
-bear_pills = "".join(f'<span class="pill-bear">{p}</span>' for p in v["bear_patterns"])
-all_pills  = bull_pills + bear_pills or '<span class="pill-neutral">No patterns on last 3 candles</span>'
-
-st.markdown(f"""
-<div class="{vcls}">
-  <div style="font-size:22px;font-weight:800;color:{vcolor};letter-spacing:1px;">{vtitle}</div>
-  <div style="font-size:13px;color:#8b949e;margin:6px 0 10px 0;">{vdesc}</div>
-  <div>{all_pills}</div>
-  <div style="margin-top:10px;font-size:12px;color:#484f58;">
-    Last candle: {v['last_time'].strftime('%Y-%m-%d %H:%M')} &nbsp;·&nbsp;
-    Close: <code style="color:#c9d1d9;">{v['last_close']:.5f}</code>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ── KPI row ────────────────────────────────────────────────────────
-total_bull = int(df["bull_signal"].sum())
-total_bear = int(df["bear_signal"].sum())
-total_bos  = int(df["bos_bull"].sum() + df["bos_bear"].sum())
-total_doji = int(df["doji"].sum())
-last_3_patterns = len(v["bull_patterns"]) + len(v["bear_patterns"])
-
-k1, k2, k3, k4, k5 = st.columns(5)
-kpis = [
-    (k1, str(total_bull),       "Bull Signals",     "#3fb950"),
-    (k2, str(total_bear),       "Bear Signals",     "#f85149"),
-    (k3, str(total_bos),        "BOS Events",       "#388bfd"),
-    (k4, str(total_doji),       "Doji Candles",     "#8b949e"),
-    (k5, str(last_3_patterns),  "Last 3 Patterns",  "#e3b341"),
-]
-for col, val, lbl, color in kpis:
-    with col:
-        st.markdown(
-            f'<div class="metric-box">'
-            f'<div class="metric-value" style="color:{color};">{val}</div>'
-            f'<div class="metric-label">{lbl}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-st.markdown("---")
-
-# ── Chart ──────────────────────────────────────────────────────────
-st.markdown('<div class="section-title">📊 15M Chart — Pattern Overlay</div>', unsafe_allow_html=True)
-fig = build_chart(df, selected_pair, show_candles)
-st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
-
-# ── Recent signals table ───────────────────────────────────────────
-st.markdown('<div class="section-title">🗂️ Recent Pattern Log (last 30 candles)</div>',
-            unsafe_allow_html=True)
-
-tail = df.tail(30).copy()
-pattern_cols = [
+PATTERN_COLS = [
     ("hammer",         "🔨 Hammer",        "Bullish"),
     ("shooting_star",  "⭐ Shooting Star", "Bearish"),
     ("bullish_engulf", "🟢 Bull Engulf",   "Bullish"),
@@ -597,107 +527,282 @@ pattern_cols = [
     ("bos_bear",       "📉 BOS Down",      "Bearish"),
 ]
 
-log_rows = []
-for ts, row in tail.iterrows():
-    patterns_found = []
-    for col, label, side in pattern_cols:
-        if col in row and row[col]:
-            patterns_found.append((label, side))
-    if patterns_found:
-        for label, side in patterns_found:
-            log_rows.append({
-                "Time":    ts.strftime("%m-%d %H:%M"),
-                "Pattern": label,
-                "Side":    side,
-                "Open":    round(float(row["Open"]),  5),
-                "High":    round(float(row["High"]),  5),
-                "Low":     round(float(row["Low"]),   5),
-                "Close":   round(float(row["Close"]), 5),
+# ─────────────────────────────────────────────
+#  Tabs
+# ─────────────────────────────────────────────
+tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
+
+# ══════════════════════════════════════════════
+#  TAB 1 — All-Pairs Scanner
+# ══════════════════════════════════════════════
+with tab_scan:
+    st.markdown("Scanning all 21 instruments for 15M rejection patterns …")
+    prog = st.progress(0)
+    all_instruments = list(INSTRUMENTS.items())
+    n_inst = len(all_instruments)
+    scan_results: list[dict] = []
+
+    for idx, (pair_name, info) in enumerate(all_instruments):
+        prog.progress((idx + 1) / n_inst, text=f"Scanning {pair_name} …")
+        try:
+            df_s = fetch_15m(info["ticker"], 3)
+            if df_s.empty or len(df_s) < 10:
+                scan_results.append({"pair": pair_name, "ok": False})
+                continue
+            df_s = detect_patterns(df_s)
+            df_s = detect_structure(df_s, lookback=4)
+            v_s  = latest_verdict(df_s)
+            scan_results.append({
+                "pair":         pair_name,
+                "ok":           True,
+                "verdict":      v_s["verdict"],
+                "bull_count":   len(v_s["bull_patterns"]),
+                "bear_count":   len(v_s["bear_patterns"]),
+                "bull_patterns":v_s["bull_patterns"],
+                "bear_patterns":v_s["bear_patterns"],
+                "last_close":   v_s["last_close"],
             })
+        except Exception:
+            scan_results.append({"pair": pair_name, "ok": False})
 
-if log_rows:
-    log_df = pd.DataFrame(log_rows)
-    st.dataframe(
-        log_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Side": st.column_config.TextColumn("Side", width="small"),
-            "Pattern": st.column_config.TextColumn("Pattern", width="medium"),
-        },
-    )
-else:
-    st.info("No notable patterns detected in the last 30 candles. "
-            "Try reducing the swing pivot sensitivity or refreshing data.")
+    prog.empty()
 
-st.markdown("---")
+    # ── Summary counts ──────────────────────────
+    cnt_bull  = sum(1 for r in scan_results if r.get("verdict") == "BULL")
+    cnt_bear  = sum(1 for r in scan_results if r.get("verdict") == "BEAR")
+    cnt_mixed = sum(1 for r in scan_results if r.get("verdict") == "MIXED")
+    cnt_none  = sum(1 for r in scan_results if r.get("ok") and r.get("verdict") == "NONE")
 
-# ── Pattern reference cards ────────────────────────────────────────
-st.markdown('<div class="section-title">📖 Pattern Reference Guide</div>', unsafe_allow_html=True)
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    for col_, val_, lbl_, c_ in [
+        (sc1, cnt_bull,  "Bullish Rejection", "#3fb950"),
+        (sc2, cnt_bear,  "Bearish Rejection", "#f85149"),
+        (sc3, cnt_mixed, "Mixed Signals",     "#e3b341"),
+        (sc4, cnt_none,  "No Pattern",        "#484f58"),
+    ]:
+        with col_:
+            st.markdown(
+                f'<div class="metric-box">'
+                f'<div class="metric-value" style="color:{c_};font-size:28px;">{val_}</div>'
+                f'<div class="metric-label">{lbl_}</div>'
+                f'</div>',
+                unsafe_allow_html=True)
 
-patterns_ref = [
-    ("🔨 Hammer", "Bullish", "#3fb950",
-     "Small body at top of range, lower wick ≥ 2× body. Signals buyers absorbing selling pressure.",
-     "Lower wick ≥ 2× body · Upper wick ≤ 0.5× body · Bullish close"),
+    st.markdown("---")
 
-    ("⭐ Shooting Star", "Bearish", "#f85149",
-     "Small body at bottom of range, upper wick ≥ 2× body. Signals sellers rejecting higher prices.",
-     "Upper wick ≥ 2× body · Lower wick ≤ 0.5× body · Bearish close"),
+    # ── Card grid ───────────────────────────────
+    SCAN_COLOR = {"BULL": "#3fb950", "BEAR": "#f85149", "MIXED": "#e3b341", "NONE": "#484f58"}
+    SCAN_BG    = {"BULL": "rgba(63,185,80,.10)", "BEAR": "rgba(248,81,73,.10)",
+                  "MIXED": "rgba(227,179,65,.08)", "NONE": "rgba(72,79,88,.08)"}
 
-    ("📌 Pin Bar ↑", "Bullish", "#00d4ff",
-     "Long lower wick covering ≥ 60% of the candle range. Classic liquidity sweep / stop hunt reversal.",
-     "Lower wick ≥ 60% of range · Body in upper 40% of candle"),
+    cols3 = st.columns(3)
+    for i, r in enumerate(scan_results):
+        pair_name = r["pair"]
+        is_sel    = pair_name == selected_pair
+        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
 
-    ("📌 Pin Bar ↓", "Bearish", "#ff6b35",
-     "Long upper wick covering ≥ 60% of the candle range. Bearish rejection at key resistance.",
-     "Upper wick ≥ 60% of range · Body in lower 40% of candle"),
+        if not r.get("ok"):
+            card_body = '<span style="font-size:11px;color:#f85149;">No data</span>'
+        else:
+            vrd    = r["verdict"]
+            color  = SCAN_COLOR.get(vrd, "#484f58")
+            bg     = SCAN_BG.get(vrd, "transparent")
+            bulls  = r["bull_count"]
+            bears  = r["bear_count"]
+            label  = {"BULL": "BULL", "BEAR": "BEAR", "MIXED": "MIXED", "NONE": "NONE"}.get(vrd, vrd)
+            card_body = (
+                f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="background:{bg};border:1px solid {color}44;border-radius:4px;'
+                f'padding:2px 8px;font-size:11px;color:{color};font-weight:700;">{label}</span>'
+                f'</div>'
+                f'<div style="display:flex;gap:14px;margin-top:6px;">'
+                f'<span style="font-size:11px;color:#8b949e;">🟢 <span style="color:#3fb950;">{bulls}</span></span>'
+                f'<span style="font-size:11px;color:#8b949e;">🔴 <span style="color:#f85149;">{bears}</span></span>'
+                f'<span style="font-size:11px;color:#8b949e;font-family:monospace;">{r["last_close"]:,.5f}</span>'
+                f'</div>'
+            )
 
-    ("🟢 Bullish Engulfing", "Bullish", "#3fb950",
-     "Current bullish candle's body fully engulfs the previous bearish candle. Strong reversal signal.",
-     "Close > Prev Open AND Open < Prev Close · Current must be bullish"),
+        with cols3[i % 3]:
+            st.markdown(
+                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'padding:12px 14px;margin-bottom:8px;">{card_body}</div>',
+                unsafe_allow_html=True)
 
-    ("🔴 Bearish Engulfing", "Bearish", "#f85149",
-     "Current bearish candle's body fully engulfs the previous bullish candle. Strong reversal signal.",
-     "Close < Prev Open AND Open > Prev Close · Current must be bearish"),
+    # ── Expander table ───────────────────────────
+    with st.expander("📋 Full Scanner Results"):
+        table_rows = []
+        for r in scan_results:
+            bull_str = ", ".join(r["bull_patterns"]) if r.get("ok") else "—"
+            bear_str = ", ".join(r["bear_patterns"]) if r.get("ok") else "—"
+            table_rows.append({
+                "Pair":    r["pair"],
+                "Verdict": r.get("verdict", "Error") if r.get("ok") else "Error",
+                "Bull":    bull_str,
+                "Bear":    bear_str,
+                "Price":   f'{r["last_close"]:,.5f}' if r.get("ok") else "—",
+            })
+        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
 
-    ("🔧 Tweezer Bottom", "Bullish", "#74b9ff",
-     "Two candles with matching lows — previous bearish, current bullish. Double rejection of lows.",
-     "|Low[i] − Low[i−1]| < 5% range · Bear candle then Bull candle"),
+# ══════════════════════════════════════════════
+#  TAB 2 — Pair Detail
+# ══════════════════════════════════════════════
+with tab_detail:
+    detail_ok = True
 
-    ("🔩 Tweezer Top", "Bearish", "#fdcb6e",
-     "Two candles with matching highs — previous bullish, current bearish. Double rejection of highs.",
-     "|High[i] − High[i−1]| < 5% range · Bull candle then Bear candle"),
+    with st.spinner(f"Loading 15M data for {selected_pair}…"):
+        df_raw = fetch_15m(ticker, lookback_days)
 
-    ("⚖️ Doji", "Neutral", "#8b949e",
-     "Body < 10% of candle range. Market indecision. High confluence with other signals.",
-     "Body / Range < 0.10 · Confirm with next candle direction"),
+    if df_raw.empty or len(df_raw) < 10:
+        st.error(f"⚠️ Could not load 15M data for **{selected_pair}**. "
+                 "Try a different instrument or reduce the lookback.")
+        detail_ok = False
 
-    ("📈 BOS Break Up", "Bullish", "#3fb950",
-     "Price closes above a prior swing high, confirming a bullish break of structure.",
-     "Close > prior Swing High · Structural shift in buyer control"),
+    if detail_ok:
+        df = detect_patterns(df_raw)
+        df = detect_structure(df, lookback=pivot_lb)
+        v  = latest_verdict(df)
 
-    ("📉 BOS Break Down", "Bearish", "#f85149",
-     "Price closes below a prior swing low, confirming a bearish break of structure.",
-     "Close < prior Swing Low · Structural shift in seller control"),
-]
+        # ── Verdict banner ───────────────────────────
+        vcls, vtitle, vcolor, vdesc = VERDICT_CFG[v["verdict"]]
+        bull_pills = "".join(f'<span class="pill-bull">{p}</span>' for p in v["bull_patterns"])
+        bear_pills = "".join(f'<span class="pill-bear">{p}</span>' for p in v["bear_patterns"])
+        all_pills  = bull_pills + bear_pills or '<span class="pill-neutral">No patterns on last 3 candles</span>'
 
-cols = st.columns(2)
-for idx, (name, side, color, desc, rule) in enumerate(patterns_ref):
-    with cols[idx % 2]:
         st.markdown(f"""
-        <div class="pattern-card">
-            <div class="pattern-name" style="color:{color};">{name}
-                <span style="font-size:11px;font-weight:400;color:#8b949e;margin-left:8px;">— {side}</span>
-            </div>
-            <div class="pattern-desc">{desc}</div>
-            <div class="pattern-rule">📐 {rule}</div>
+        <div class="{vcls}">
+          <div style="font-size:22px;font-weight:800;color:{vcolor};letter-spacing:1px;">{vtitle}</div>
+          <div style="font-size:13px;color:#8b949e;margin:6px 0 10px 0;">{vdesc}</div>
+          <div>{all_pills}</div>
+          <div style="margin-top:10px;font-size:12px;color:#484f58;">
+            Last candle: {v['last_time'].strftime('%Y-%m-%d %H:%M')} &nbsp;·&nbsp;
+            Close: <code style="color:#c9d1d9;">{v['last_close']:.5f}</code>
+          </div>
         </div>
         """, unsafe_allow_html=True)
 
-# Footer
-st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-            padding-top:16px;border-top:1px solid #21262d;">
-  🕯️ 15M Rejection Scanner · Checklist Item #13 · For educational purposes only
-</div>
-""", unsafe_allow_html=True)
+        # ── KPI row ──────────────────────────────────
+        total_bull      = int(df["bull_signal"].sum())
+        total_bear      = int(df["bear_signal"].sum())
+        total_bos       = int(df["bos_bull"].sum() + df["bos_bear"].sum())
+        total_doji      = int(df["doji"].sum())
+        last_3_patterns = len(v["bull_patterns"]) + len(v["bear_patterns"])
+
+        k1, k2, k3, k4, k5 = st.columns(5)
+        for col_, val_, lbl_, color_ in [
+            (k1, str(total_bull),      "Bull Signals",    "#3fb950"),
+            (k2, str(total_bear),      "Bear Signals",    "#f85149"),
+            (k3, str(total_bos),       "BOS Events",      "#388bfd"),
+            (k4, str(total_doji),      "Doji Candles",    "#8b949e"),
+            (k5, str(last_3_patterns), "Last 3 Patterns", "#e3b341"),
+        ]:
+            with col_:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-value" style="color:{color_};">{val_}</div>'
+                    f'<div class="metric-label">{lbl_}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ── Chart ────────────────────────────────────
+        st.markdown('<div class="section-title">📊 15M Chart — Pattern Overlay</div>', unsafe_allow_html=True)
+        fig = build_chart(df, selected_pair, show_candles)
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("---")
+
+        # ── Recent signals table ─────────────────────
+        st.markdown('<div class="section-title">🗂️ Recent Pattern Log (last 30 candles)</div>',
+                    unsafe_allow_html=True)
+
+        tail = df.tail(30).copy()
+        log_rows = []
+        for ts, row in tail.iterrows():
+            for col_, label, side in PATTERN_COLS:
+                if col_ in row and row[col_]:
+                    log_rows.append({
+                        "Time":    ts.strftime("%m-%d %H:%M"),
+                        "Pattern": label,
+                        "Side":    side,
+                        "Open":    round(float(row["Open"]),  5),
+                        "High":    round(float(row["High"]),  5),
+                        "Low":     round(float(row["Low"]),   5),
+                        "Close":   round(float(row["Close"]), 5),
+                    })
+
+        if log_rows:
+            st.dataframe(
+                pd.DataFrame(log_rows),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Side":    st.column_config.TextColumn("Side",    width="small"),
+                    "Pattern": st.column_config.TextColumn("Pattern", width="medium"),
+                },
+            )
+        else:
+            st.info("No notable patterns detected in the last 30 candles. "
+                    "Try reducing the swing pivot sensitivity or refreshing data.")
+
+        st.markdown("---")
+
+        # ── Pattern reference cards ──────────────────
+        st.markdown('<div class="section-title">📖 Pattern Reference Guide</div>', unsafe_allow_html=True)
+
+        patterns_ref = [
+            ("🔨 Hammer", "Bullish", "#3fb950",
+             "Small body at top of range, lower wick ≥ 2× body. Signals buyers absorbing selling pressure.",
+             "Lower wick ≥ 2× body · Upper wick ≤ 0.5× body · Bullish close"),
+            ("⭐ Shooting Star", "Bearish", "#f85149",
+             "Small body at bottom of range, upper wick ≥ 2× body. Signals sellers rejecting higher prices.",
+             "Upper wick ≥ 2× body · Lower wick ≤ 0.5× body · Bearish close"),
+            ("📌 Pin Bar ↑", "Bullish", "#00d4ff",
+             "Long lower wick covering ≥ 60% of the candle range. Classic liquidity sweep / stop hunt reversal.",
+             "Lower wick ≥ 60% of range · Body in upper 40% of candle"),
+            ("📌 Pin Bar ↓", "Bearish", "#ff6b35",
+             "Long upper wick covering ≥ 60% of the candle range. Bearish rejection at key resistance.",
+             "Upper wick ≥ 60% of range · Body in lower 40% of candle"),
+            ("🟢 Bullish Engulfing", "Bullish", "#3fb950",
+             "Current bullish candle's body fully engulfs the previous bearish candle. Strong reversal signal.",
+             "Close > Prev Open AND Open < Prev Close · Current must be bullish"),
+            ("🔴 Bearish Engulfing", "Bearish", "#f85149",
+             "Current bearish candle's body fully engulfs the previous bullish candle. Strong reversal signal.",
+             "Close < Prev Open AND Open > Prev Close · Current must be bearish"),
+            ("🔧 Tweezer Bottom", "Bullish", "#74b9ff",
+             "Two candles with matching lows — previous bearish, current bullish. Double rejection of lows.",
+             "|Low[i] − Low[i−1]| < 5% range · Bear candle then Bull candle"),
+            ("🔩 Tweezer Top", "Bearish", "#fdcb6e",
+             "Two candles with matching highs — previous bullish, current bearish. Double rejection of highs.",
+             "|High[i] − High[i−1]| < 5% range · Bull candle then Bear candle"),
+            ("⚖️ Doji", "Neutral", "#8b949e",
+             "Body < 10% of candle range. Market indecision. High confluence with other signals.",
+             "Body / Range < 0.10 · Confirm with next candle direction"),
+            ("📈 BOS Break Up", "Bullish", "#3fb950",
+             "Price closes above a prior swing high, confirming a bullish break of structure.",
+             "Close > prior Swing High · Structural shift in buyer control"),
+            ("📉 BOS Break Down", "Bearish", "#f85149",
+             "Price closes below a prior swing low, confirming a bearish break of structure.",
+             "Close < prior Swing Low · Structural shift in seller control"),
+        ]
+
+        ref_cols = st.columns(2)
+        for idx, (name, side, color, desc, rule) in enumerate(patterns_ref):
+            with ref_cols[idx % 2]:
+                st.markdown(f"""
+                <div class="pattern-card">
+                    <div class="pattern-name" style="color:{color};">{name}
+                        <span style="font-size:11px;font-weight:400;color:#8b949e;margin-left:8px;">— {side}</span>
+                    </div>
+                    <div class="pattern-desc">{desc}</div>
+                    <div class="pattern-rule">📐 {rule}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
+                    padding-top:16px;border-top:1px solid #21262d;">
+          🕯️ 15M Rejection Scanner · Check #12 · For educational purposes only
+        </div>
+        """, unsafe_allow_html=True)
