@@ -1,6 +1,8 @@
 import pandas as pd
+import numpy as np
 import logging
 import ta
+from scipy.signal import argrelextrema
 
 logger = logging.getLogger("ForexDashboard")
 
@@ -105,8 +107,8 @@ class TechnicalAnalyzer:
         return df
 
     @staticmethod
-    def calculate_pivots(df: pd.DataFrame) -> dict:
-        """Calculates standard pivot points based on the previous period's OHLC."""
+    def calculate_pivots(df: pd.DataFrame, method: str = "Classic") -> dict:
+        """Calculates pivot points based on the previous period's OHLC using various methods."""
         if len(df) < 2:
             if df.empty: return {}
             ref = df.iloc[-1]
@@ -114,17 +116,33 @@ class TechnicalAnalyzer:
             # Use previous completed candle for current pivots
             ref = df.iloc[-2]
 
-        h, l, c = ref["High"], ref["Low"], ref["Close"]
-        p = (h + l + c) / 3
-        return {
-            "Pivot": p,
-            "R1": (2 * p) - l,
-            "S1": (2 * p) - h,
-            "R2": p + (h - l),
-            "S2": p - (h - l),
-            "R3": h + 2 * (p - l),
-            "S3": l - 2 * (h - p),
-        }
+        h, l, c = float(ref["High"]), float(ref["Low"]), float(ref["Close"])
+
+        if method == "Classic":
+            p = (h + l + c) / 3
+            return {
+                "Pivot": p,
+                "R1": (2 * p) - l, "S1": (2 * p) - h,
+                "R2": p + (h - l), "S2": p - (h - l),
+                "R3": h + 2 * (p - l), "S3": l - 2 * (h - p),
+            }
+        elif method == "Fibonacci":
+            p = (h + l + c) / 3
+            r = h - l
+            return {
+                "Pivot": p,
+                "R1": p + 0.382 * r, "S1": p - 0.382 * r,
+                "R2": p + 0.618 * r, "S2": p - 0.618 * r,
+                "R3": p + 1.000 * r, "S3": p - 1.000 * r,
+            }
+        elif method == "Woodie":
+            p = (h + l + 2 * c) / 4
+            return {
+                "Pivot": p,
+                "R1": (2 * p) - l, "S1": (2 * p) - h,
+                "R2": p + (h - l), "S2": p - (h - l),
+            }
+        return {}
 
     @staticmethod
     def calculate_fibonacci(df: pd.DataFrame) -> dict:
@@ -314,3 +332,152 @@ class TechnicalAnalyzer:
             else:
                 results[tf] = "N/A"
         return results
+
+    @staticmethod
+    def calculate_dema(series: pd.Series, period: int) -> pd.Series:
+        """Calculates Double Exponential Moving Average (DEMA)."""
+        ema1 = series.ewm(span=period, adjust=False).mean()
+        ema2 = ema1.ewm(span=period, adjust=False).mean()
+        return 2 * ema1 - ema2
+
+    @staticmethod
+    def calculate_supertrend(df: pd.DataFrame, period: int = 10, multiplier: float = 3.0) -> pd.DataFrame:
+        """Calculates Supertrend indicator."""
+        if len(df) < period:
+            return pd.DataFrame({"Trend": [0] * len(df), "Line": [np.nan] * len(df)}, index=df.index)
+
+        high, low, close = df["High"], df["Low"], df["Close"]
+        atr = ta.volatility.AverageTrueRange(high, low, close, window=period).average_true_range()
+
+        hl2 = (high + low) / 2
+        upper_band = hl2 + (multiplier * atr)
+        lower_band = hl2 - (multiplier * atr)
+
+        trend = pd.Series(1, index=df.index)
+        supertrend_line = pd.Series(index=df.index, dtype='float64')
+
+        for i in range(1, len(df)):
+            if close.iloc[i] <= supertrend_line.iloc[i - 1] if not pd.isna(supertrend_line.iloc[i - 1]) else False:
+                trend.iloc[i] = -1
+            elif close.iloc[i] >= supertrend_line.iloc[i - 1] if not pd.isna(supertrend_line.iloc[i - 1]) else False:
+                trend.iloc[i] = 1
+            else:
+                trend.iloc[i] = 1 if close.iloc[i] > lower_band.iloc[i] else -1
+
+            if trend.iloc[i] == 1:
+                supertrend_line.iloc[i] = max(lower_band.iloc[i],
+                                              supertrend_line.iloc[i - 1] if not pd.isna(supertrend_line.iloc[i - 1]) else
+                                              lower_band.iloc[i])
+            else:
+                supertrend_line.iloc[i] = min(upper_band.iloc[i],
+                                              supertrend_line.iloc[i - 1] if not pd.isna(supertrend_line.iloc[i - 1]) else
+                                              upper_band.iloc[i])
+
+        return pd.DataFrame({"Trend": trend, "Line": supertrend_line}, index=df.index)
+
+    @staticmethod
+    def calculate_qqe(series: pd.Series, rsi_period: int = 14, smooth: int = 5, factor: float = 4.236) -> pd.DataFrame:
+        """Calculates Quantitative Qualitative Estimation (QQE)."""
+        if len(series) < rsi_period:
+            return pd.DataFrame({"RSI_Smooth": [np.nan] * len(series), "Line": [np.nan] * len(series), "Trend": [0] * len(series)}, index=series.index)
+
+        rsi = ta.momentum.RSIIndicator(series, window=rsi_period).rsi()
+        rsi_smooth = rsi.ewm(span=smooth, adjust=False).mean()
+        atr_rsi = abs(rsi_smooth.diff()).ewm(span=smooth, adjust=False).mean()
+
+        upper = rsi_smooth + factor * atr_rsi
+        lower = rsi_smooth - factor * atr_rsi
+
+        qqe_line = pd.Series(0.0, index=series.index)
+        trend = pd.Series(0, index=series.index)
+
+        for i in range(1, len(series)):
+            if qqe_line.iloc[i - 1] == upper.iloc[i - 1]:
+                if rsi_smooth.iloc[i] < upper.iloc[i]:
+                    qqe_line.iloc[i] = upper.iloc[i]
+                    trend.iloc[i] = -1
+                else:
+                    qqe_line.iloc[i] = lower.iloc[i]
+                    trend.iloc[i] = 1
+            elif qqe_line.iloc[i - 1] == lower.iloc[i - 1]:
+                if rsi_smooth.iloc[i] > lower.iloc[i]:
+                    qqe_line.iloc[i] = lower.iloc[i]
+                    trend.iloc[i] = 1
+                else:
+                    qqe_line.iloc[i] = upper.iloc[i]
+                    trend.iloc[i] = -1
+            else:
+                qqe_line.iloc[i] = upper.iloc[i] if rsi_smooth.iloc[i] > 50 else lower.iloc[i]
+                trend.iloc[i] = 1 if rsi_smooth.iloc[i] > 50 else -1
+
+        return pd.DataFrame({"RSI_Smooth": rsi_smooth, "Line": qqe_line, "Trend": trend}, index=series.index)
+
+    @staticmethod
+    def calculate_heikin_ashi(df: pd.DataFrame) -> pd.DataFrame:
+        """Calculates Heikin Ashi candles."""
+        if df.empty:
+            return df
+        ha = pd.DataFrame(index=df.index)
+        ha['Open'] = 0.0
+        ha['Close'] = (df['Open'] + df['High'] + df['Low'] + df['Close']) / 4
+        ha['Open'].iloc[0] = (df['Open'].iloc[0] + df['Close'].iloc[0]) / 2
+        for i in range(1, len(df)):
+            ha['Open'].iloc[i] = (ha['Open'].iloc[i - 1] + ha['Close'].iloc[i - 1]) / 2
+        ha['High'] = df[['High', 'Open', 'Close']].max(axis=1)
+        ha['Low'] = df[['Low', 'Open', 'Close']].min(axis=1)
+        return ha
+
+    @staticmethod
+    def compute_volume_profile(df: pd.DataFrame, n_bins: int = 80) -> pd.DataFrame:
+        """Calculates Volume Profile distribution."""
+        if df.empty or "Volume" not in df.columns:
+            return pd.DataFrame(columns=["price", "volume"])
+        lo, hi = df["Low"].min(), df["High"].max()
+        bins = np.linspace(lo, hi, n_bins + 1)
+        centers = (bins[:-1] + bins[1:]) / 2
+        vol = np.zeros(n_bins)
+        for row in df.itertuples():
+            mask = (bins[1:] >= row.Low) & (bins[:-1] <= row.High)
+            n_hit = mask.sum()
+            if n_hit:
+                vol[mask] += row.Volume / n_hit
+        return pd.DataFrame({"price": centers, "volume": vol})
+
+    @staticmethod
+    def detect_levels(vp: pd.DataFrame, top_n: int = 3) -> dict:
+        """Detects POC, HVN, and LVN levels from Volume Profile."""
+        if vp.empty:
+            return {"poc": None, "hvns": [], "lvns": []}
+        vol, prices = vp["volume"].values, vp["price"].values
+        poc_i = vol.argmax()
+        poc = prices[poc_i]
+
+        lmax = argrelextrema(vol, np.greater, order=4)[0]
+        hvn_cands = [(prices[i], vol[i]) for i in lmax
+                     if i != poc_i and vol[i] >= vol.max() * 0.45]
+        hvn_cands.sort(key=lambda x: -x[1])
+        hvns = [p for p, _ in hvn_cands[:top_n]]
+
+        lmin = argrelextrema(vol, np.less, order=3)[0]
+        lvns = sorted([prices[i] for i in lmin if vol[i] <= vol.max() * 0.18],
+                      key=lambda p: abs(p - poc))[:top_n]
+        return {"poc": poc, "hvns": sorted(hvns), "lvns": sorted(lvns)}
+
+    @staticmethod
+    def value_area(vp: pd.DataFrame, pct: float = 0.70) -> tuple:
+        """Calculates Value Area High and Low."""
+        if vp.empty:
+            return None, None
+        total = vp["volume"].sum()
+        target = total * pct
+        poc_i = vp["volume"].idxmax()
+        lo = hi = poc_i
+        acc = vp.loc[poc_i, "volume"]
+        while acc < target:
+            lo2 = max(lo - 1, 0); hi2 = min(hi + 1, len(vp) - 1)
+            a_lo = vp.loc[lo2, "volume"] if lo2 != lo else 0
+            a_hi = vp.loc[hi2, "volume"] if hi2 != hi else 0
+            if a_lo == 0 and a_hi == 0: break
+            if a_hi >= a_lo: hi = hi2; acc += a_hi
+            else: lo = lo2; acc += a_lo
+        return vp.loc[lo, "price"], vp.loc[hi, "price"]
