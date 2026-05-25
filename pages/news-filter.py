@@ -315,9 +315,11 @@ with st.sidebar:
         st.success("FMP ✓ loaded from secrets", icon="🔑")
     else:
         st.caption("FMP key not found in secrets.toml")
-    finnhub_key = st.text_input("Finnhub Key",
-                                placeholder="Free at finnhub.io",
-                                type="password")
+    finnhub_key = st.secrets.get("database", {}).get("FINNHUB_API_KEY", "")
+    if finnhub_key:
+        st.success("Finnhub ✓ loaded from secrets", icon="🔑")
+    else:
+        st.caption("Finnhub key not found in secrets.toml")
 
     if st.button("🔄 Refresh Calendar", use_container_width=True, type="primary"):
         st.cache_data.clear()
