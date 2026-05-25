@@ -63,6 +63,7 @@ st.markdown("""
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1420px;}
 </style>
 """, unsafe_allow_html=True)
@@ -183,14 +184,22 @@ def fetch_weekly(ticker: str, pip_size: float, lookback: str = "2y"):
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📉 Weekly EMA")
-    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="Weekly RSI", icon="📡")
-    st.page_link("pages/daily-trend.py", label="📈 Daily Trend", icon="📈")
+    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
+    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
 
     st.divider()
 

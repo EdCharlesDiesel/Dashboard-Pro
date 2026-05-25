@@ -37,6 +37,7 @@ st.markdown("""
     .badge-neutral   {background:#21262d;color:#8b949e;border:1px solid #30363d;}
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
 """, unsafe_allow_html=True)
@@ -61,9 +62,11 @@ ALL_INSTRUMENTS = {
     "USD/ZAR": "USDZAR=X",
     "EUR/ZAR": "EURZAR=X",
     "GBP/ZAR": "GBPZAR=X",
-    "🥇 Gold":  "GC=F",
+    "🥇 Gold":    "GC=F",
     "🥈 Silver":  "SI=F",
     "🪙 Platinum":"PL=F",
+    "💵 DXY":     "DX-Y.NYB",
+    "📈 S&P 500": "^GSPC",
 }
 
 KNOWN_RELATIONSHIPS = [
@@ -79,6 +82,12 @@ KNOWN_RELATIONSHIPS = [
     ("USD/ZAR", "🥇 Gold",   "Negative",  "ZAR strengthens with Gold; USD/ZAR falls when Gold rises."),
     ("EUR/ZAR", "USD/ZAR",  "Positive",  "Both ZAR pairs — correlated through shared EM/risk-off dynamics."),
     ("GBP/JPY", "AUD/JPY",  "Positive",  "JPY crosses move together in risk-on/off regimes."),
+    ("💵 DXY",  "EUR/USD",  "Negative",  "EUR makes up 57% of the DXY basket — almost a perfect inverse."),
+    ("💵 DXY",  "🥇 Gold",  "Negative",  "Gold is USD-priced; dollar strength directly suppresses Gold."),
+    ("💵 DXY",  "AUD/USD",  "Negative",  "Commodity currencies weaken when the dollar strengthens."),
+    ("📈 S&P 500","AUD/USD","Positive",  "Risk-on flows lift equities and commodity currencies simultaneously."),
+    ("📈 S&P 500","USD/JPY","Positive",  "JPY weakens in risk-on environments as safe-haven demand fades."),
+    ("📈 S&P 500","🥇 Gold","Negative",  "Gold competes with equities for safe-haven capital — often inverse."),
 ]
 
 def corr_badge(val):
@@ -99,26 +108,35 @@ def fetch_prices(tickers: tuple, period: str, interval: str):
         if raw.empty:
             return None
         if isinstance(raw.columns, pd.MultiIndex):
+            # Multiple tickers: raw["Close"] gives DataFrame with ticker names as columns
             close = raw["Close"]
         else:
-            close = raw[["Close"]]
-        close.columns = [c[0] if isinstance(c, tuple) else c for c in close.columns]
+            # Single ticker: flat columns — rename "Close" to the ticker symbol
+            close = raw[["Close"]].rename(columns={"Close": tickers[0]})
         returns = close.pct_change().dropna()
         return returns
-    except Exception as e:
+    except Exception:
         return None
 
 # ── Sidebar controls ───────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### 🔗 Correlation Settings")
-    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="Weekly RSI", icon="📡")
-    st.page_link("pages/daily-trend.py", label="📈 Daily Trend", icon="📈")
+    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
+    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
     st.divider()
     st.markdown("")
 

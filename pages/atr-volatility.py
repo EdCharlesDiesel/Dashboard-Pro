@@ -54,6 +54,7 @@ st.markdown("""
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
 """, unsafe_allow_html=True)
@@ -150,14 +151,22 @@ def fetch_instrument_data(ticker: str, pip_size: float, period: str = "60d", int
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📊 ATR Volatility")
-    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="Weekly RSI", icon="📡")
-    st.page_link("pages/daily-trend.py", label="📈 Daily Trend", icon="📈")
+    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
+    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
     st.divider()
 
     period_options = {"30 Days": "30d", "60 Days": "60d", "90 Days": "90d", "6 Months": "6mo"}
@@ -182,6 +191,15 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════
 # FETCH ALL INSTRUMENTS
 # ══════════════════════════════════════════════════════════════════
+# Guard: yfinance caps intraday data at 60 days
+if fetch_interval in {"4h", "1h"} and fetch_period in {"90d", "6mo"}:
+    st.warning(
+        f"⚠️ **{selected_interval} data is limited to 60 days by yfinance.** "
+        f"Lookback auto-capped from {selected_period} → 60 Days.",
+        icon="⚠️",
+    )
+    fetch_period = "60d"
+
 progress_bar = st.progress(0, text="📡 Fetching ATR data for all instruments…")
 results = {}
 total = len(INSTRUMENTS)
@@ -461,36 +479,35 @@ with right:
             subplot_titles=["ATR(14) vs ATR(20) — Pips", "ATR Ratio (ATR14 ÷ ATR20)"],
         )
 
-        # ATR14 line
+        # Conditional fill: green where ATR14 > ATR20, red where ATR14 <= ATR20
+        # Build polygon segments so the colour flips correctly at every crossover
+        _d  = list(dates)
+        _a  = list(hist_atr14.values)
+        _b  = list(hist_atr20.values)
+        _s  = 0
+        for _i in range(1, len(_d) + 1):
+            _end     = _i == len(_d)
+            _changed = _end or ((_a[_i] >= _b[_i]) != (_a[_s] >= _b[_s]))
+            if _changed:
+                _sd, _sa, _sb = _d[_s:_i], _a[_s:_i], _b[_s:_i]
+                _clr = "rgba(63,185,80,0.15)" if _a[_s] >= _b[_s] else "rgba(248,81,73,0.15)"
+                fig.add_trace(go.Scatter(
+                    x=_sd + _sd[::-1], y=_sa + _sb[::-1],
+                    fill="toself", fillcolor=_clr,
+                    line=dict(width=0), showlegend=False, hoverinfo="skip",
+                ), row=1, col=1)
+                _s = _i
+
+        # ATR lines drawn on top of the fill
         fig.add_trace(go.Scatter(
             x=dates, y=hist_atr14, name="ATR(14)",
             mode="lines", line=dict(color="#388bfd", width=2.5),
-            fill="tonexty" if False else None,
             hovertemplate="ATR14: %{y:.1f} pips<extra></extra>",
         ), row=1, col=1)
-
-        # ATR20 line
         fig.add_trace(go.Scatter(
             x=dates, y=hist_atr20, name="ATR(20)",
             mode="lines", line=dict(color="#8b949e", width=1.5, dash="dot"),
             hovertemplate="ATR20: %{y:.1f} pips<extra></extra>",
-        ), row=1, col=1)
-
-        # Fill between — green when ATR14 > ATR20, red otherwise
-        fig.add_trace(go.Scatter(
-            x=dates, y=hist_atr14, name="ATR14 fill",
-            mode="lines", line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
-        ), row=1, col=1)
-        fig.add_trace(go.Scatter(
-            x=dates, y=hist_atr20,
-            mode="lines", line=dict(width=0),
-            fill="tonexty",
-            fillcolor="rgba(63,185,80,0.12)",
-            name="Vol zone",
-            showlegend=False,
-            hoverinfo="skip",
         ), row=1, col=1)
 
         # ATR Ratio
