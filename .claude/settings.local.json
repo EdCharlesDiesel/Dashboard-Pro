@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\x\\\\Dashboard-Pro\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" diff --staged)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" diff)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" status)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add pages/macro-bias.py)",
+      "Bash(git -C 'C:\\\\x\\\\Dashboard-Pro' commit -m ' *)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add pages/news-filter.py)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add .streamlit/secrets.toml pages/news-filter.py)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add pages/correlations.py)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add pages/atr-volatility.py)",
+      "Bash(python -c ' *)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add daily-trading-checklist.py pages/)",
+      "Bash(git -C \"C:\\\\x\\\\Dashboard-Pro\" add daily-trading-checklist.py)"
+    ]
+  }
+}
