@@ -532,8 +532,8 @@ with st.sidebar:
         st.page_link("pages/confluence-checker.py",   label="11. 2/3 Confluence Check", icon="🔀")
         st.page_link("pages/15m-rejection.py",        label="12. 15M Rejection",        icon="🕯️")
         st.page_link("pages/15m-entry-signal.py",     label="13. 15M Entry Signal",     icon="⚡")
-        st.page_link("pages/stop-structure.py",       label="14. Stop Structure",        icon="🛡️")
-        st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",        icon="⚖️")
+        st.page_link("pages/stop-structure.py",       label="14. Stop Structure",       icon="🛡️")
+        st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",       icon="⚖️")
         st.divider()
 
         # Instrument selection
