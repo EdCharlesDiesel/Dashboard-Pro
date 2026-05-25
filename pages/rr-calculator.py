@@ -372,8 +372,9 @@ with st.sidebar:
     st.divider()
 
     # Auto-fetch live price
-    if st.button("⚡ Fetch Live Price", use_container_width=True):
+    if st.button("⚡ Fetch Live Price", use_container_width=True, type="primary"):
         st.cache_data.clear()
+        st.rerun()
 
     with st.spinner("Fetching price…"):
         live_price = fetch_price(inst["ticker"])
@@ -472,261 +473,370 @@ st.markdown(f"""
     {'✅' if c['rr_tp1'] >= min_rr else '❌'} · {selected_pair} · {direction}
   </div>
   <div style="font-size:12px; color:#388bfd; margin-top:6px;">
-    Check #16 — R:R ≥ {min_rr:.1f}:1 to TP1 · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
+    Check #15 — R:R ≥ {min_rr:.1f}:1 to TP1 · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Verdict banner ─────────────────────────────────────────────────
-# R:R visual bar
-risk_seg  = 1 / (1 + c["rr_tp1"]) * 100 if c["rr_tp1"] else 50
-rew_seg   = 100 - risk_seg
-min_mark  = 1 / (1 + min_rr) * 100
+tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
 
-st.markdown(f"""
-<div class="{c['vclass']}">
-  <div style="font-size:23px; font-weight:800; color:{c['color']};
-              letter-spacing:1px; margin-bottom:6px;">{c['label']}</div>
-  <div style="font-size:32px; font-weight:900; color:{c['color']};
-              font-family:'JetBrains Mono',monospace; margin:8px 0;">
-    {c['rr_tp1']:.2f} : 1
-  </div>
-  <div style="font-size:13px; color:#8b949e; margin-bottom:14px;">
-    TP1 = {c['tp1_pips']:.1f} pips &nbsp;·&nbsp;
-    SL  = {c['sl_pips']:.1f} pips &nbsp;·&nbsp;
-    Min required = {min_rr:.1f}:1
-  </div>
+with tab_scan:
+    st.markdown("**ATR-Based Position Sizing — All Pairs**")
+    st.caption(f"SL = ATR×1.5 · TP1 = SL×{min_rr:.1f} · Risk {risk_pct}% of ${account_bal:,.0f}")
 
-  <!-- R:R bar -->
-  <div style="margin:0 auto; max-width:600px;">
-    <div style="display:flex; justify-content:space-between;
-                font-size:11px; color:#8b949e; margin-bottom:4px;">
-      <span>Risk (SL)</span><span>Reward (TP1)</span>
-    </div>
-    <div class="rr-track">
-      <div style="width:{risk_seg:.1f}%; background:rgba(248,81,73,0.80);
-                  display:flex; align-items:center; justify-content:center;
-                  font-size:11px; color:#fff; font-weight:700;">
-        {risk_seg:.0f}%
-      </div>
-      <div style="width:{rew_seg:.1f}%; background:rgba(63,185,80,0.80);
-                  display:flex; align-items:center; justify-content:center;
-                  font-size:11px; color:#fff; font-weight:700;">
-        {rew_seg:.0f}%
-      </div>
-    </div>
-    <div style="font-size:10px; color:#484f58; text-align:left; margin-top:2px;">
-      ▲ Min {min_rr:.1f}:1 threshold at {min_mark:.0f}% / {100-min_mark:.0f}%
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+    _prog  = st.progress(0, text="Scanning…")
+    _pairs = list(INSTRUMENTS.items())
+    _scan  = []
 
-# ── KPI strip ──────────────────────────────────────────────────────
-k1,k2,k3,k4,k5,k6 = st.columns(6)
-rr_color = c["color"]
-for col, val, lbl, color in [
-    (k1, f"{c['rr_tp1']:.2f}:1",      "R:R to TP1",          rr_color),
-    (k2, f"{c['rr_tp2']:.2f}:1",      "R:R to TP2",          "#56d364"),
-    (k3, f"{c['sl_pips']:.1f}",       "SL (pips)",           "#f85149"),
-    (k4, f"{c['tp1_pips']:.1f}",      "TP1 (pips)",          "#3fb950"),
-    (k5, f"{c['tp2_pips']:.1f}",      "TP2 (pips)",          "#56d364"),
-    (k6, f"{c['be_winrate_tp1']:.1f}%","Breakeven Win Rate",  "#388bfd"),
-]:
-    with col:
-        st.markdown(
-            f'<div class="metric-box">'
-            f'<div class="metric-value" style="color:{color};font-size:18px;">{val}</div>'
-            f'<div class="metric-label">{lbl}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+    for _i, (_name, _info) in enumerate(_pairs):
+        _prog.progress((_i + 1) / len(_pairs), text=f"Fetching {_name}…")
+        _price = fetch_price(_info["ticker"])
+        _atr   = fetch_atr14(_info["ticker"])
 
-st.markdown("---")
+        if _price is None or _atr is None:
+            _scan.append({"pair": _name, "price": None, "atr": None,
+                          "sl_pips": None, "tp1_pips": None,
+                          "lot": None, "risk_usd": None, "status": "ERROR"})
+            continue
 
-# ── Trade levels + P&L ────────────────────────────────────────────
-col_left, col_right = st.columns([1, 1])
+        _sl_pips  = _atr * 1.5 / _info["pip_size"]
+        _tp1_pips = _sl_pips * min_rr
+        _risk_usd = account_bal * risk_pct / 100
+        _lot      = _risk_usd / (_sl_pips * _info["pip"])
+        _scan.append({"pair": _name, "price": _price, "atr": _atr,
+                      "sl_pips": _sl_pips, "tp1_pips": _tp1_pips,
+                      "lot": _lot, "risk_usd": _risk_usd, "status": "OK"})
 
-with col_left:
-    st.markdown('<div class="section-title">📐 Trade Levels</div>', unsafe_allow_html=True)
-    dir_icon = "🔼" if c["long_trade"] else "🔽"
-    dir_col  = "#3fb950" if c["long_trade"] else "#f85149"
+    _prog.empty()
 
-    def lvl_row(label, val, extra="", color="#c9d1d9"):
-        return (f'<div class="lvl-row">'
-                f'<span class="lvl-label">{label}</span>'
-                f'<span class="lvl-val" style="color:{color};">{val}'
-                f'<span style="color:#8b949e;font-size:11px;font-weight:400;">'
-                f'&nbsp;&nbsp;{extra}</span></span></div>')
+    _std_n  = sum(1 for r in _scan if r["status"] == "OK" and r["lot"] >= 1.0)
+    _mini_n = sum(1 for r in _scan if r["status"] == "OK" and 0.10 <= r["lot"] < 1.0)
+    _mic_n  = sum(1 for r in _scan if r["status"] == "OK" and r["lot"] < 0.10)
+    _err_n  = sum(1 for r in _scan if r["status"] == "ERROR")
+
+    _sc1, _sc2, _sc3, _sc4 = st.columns(4)
+    for _col, _cnt, _lbl, _clr in [
+        (_sc1, _std_n,  "≥1.0 Lot",    "#3fb950"),
+        (_sc2, _mini_n, "0.1–1.0 Lot",  "#388bfd"),
+        (_sc3, _mic_n,  "<0.1 Lot",     "#e3b341"),
+        (_sc4, _err_n,  "Errors",        "#8b949e"),
+    ]:
+        with _col:
+            st.markdown(
+                f'<div class="metric-box">'
+                f'<div class="metric-value" style="color:{_clr};font-size:22px;">{_cnt}</div>'
+                f'<div class="metric-label">{_lbl}</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("---")
+
+    _gcols = st.columns(3)
+    for _i, _r in enumerate(_scan):
+        with _gcols[_i % 3]:
+            _sel  = _r["pair"] == selected_pair
+            _bclr = "#388bfd" if _sel else "#21262d"
+            if _r["status"] == "ERROR":
+                st.markdown(
+                    f'<div style="background:#161b22;border:1px solid {_bclr};'
+                    f'border-radius:10px;padding:14px;margin-bottom:10px;">'
+                    f'<div style="font-weight:700;color:#e6edf3;font-size:13px;">{_r["pair"]}</div>'
+                    f'<div style="color:#484f58;font-size:11px;margin-top:4px;">⚠️ Data unavailable</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                _lc  = "#3fb950" if _r["lot"] >= 0.10 else "#e3b341"
+                _tag = ' <span style="color:#388bfd;font-size:10px;">◀ selected</span>' if _sel else ""
+                _pfx = f"{_r['price']:.5f}" if _r["price"] < 100 else f"{_r['price']:.3f}"
+                st.markdown(
+                    f'<div style="background:#161b22;border:1px solid {_bclr};'
+                    f'border-radius:10px;padding:14px;margin-bottom:10px;">'
+                    f'<div style="font-weight:700;color:#e6edf3;font-size:13px;">{_r["pair"]}{_tag}</div>'
+                    f'<div style="font-size:11px;color:#8b949e;margin-top:2px;">{_pfx}</div>'
+                    f'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+                    f'<span style="background:#0d1117;border:1px solid #30363d;border-radius:4px;'
+                    f'padding:3px 7px;font-size:11px;color:#f85149;'
+                    f'font-family:\'JetBrains Mono\',monospace;">SL {_r["sl_pips"]:.0f}p</span>'
+                    f'<span style="background:#0d1117;border:1px solid #30363d;border-radius:4px;'
+                    f'padding:3px 7px;font-size:11px;color:#3fb950;'
+                    f'font-family:\'JetBrains Mono\',monospace;">TP1 {_r["tp1_pips"]:.0f}p</span>'
+                    f'<span style="background:#0d1117;border:1px solid #30363d;border-radius:4px;'
+                    f'padding:3px 7px;font-size:11px;color:{_lc};'
+                    f'font-family:\'JetBrains Mono\',monospace;">{_r["lot"]:.2f} lots</span>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+    with st.expander("📋 Full Scanner Table"):
+        _rows = []
+        for _r in _scan:
+            if _r["status"] == "ERROR":
+                _rows.append({"Pair": _r["pair"], "Price": "—", "ATR14": "—",
+                               "SL (pips)": "—", "TP1 (pips)": "—",
+                               "Lot Size": "—", "Risk $": "—"})
+            else:
+                _rows.append({
+                    "Pair":       _r["pair"],
+                    "Price":      round(_r["price"], 5) if _r["price"] < 100 else round(_r["price"], 2),
+                    "ATR14":      round(_r["atr"],   5) if _r["atr"]   < 1   else round(_r["atr"],   3),
+                    "SL (pips)":  round(_r["sl_pips"],  1),
+                    "TP1 (pips)": round(_r["tp1_pips"], 1),
+                    "Lot Size":   round(_r["lot"], 2),
+                    "Risk $":     f"${_r['risk_usd']:.2f}",
+                })
+        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+
+with tab_detail:
+    # ── Verdict banner ─────────────────────────────────────────────────
+    risk_seg  = 1 / (1 + c["rr_tp1"]) * 100 if c["rr_tp1"] else 50
+    rew_seg   = 100 - risk_seg
+    min_mark  = 1 / (1 + min_rr) * 100
 
     st.markdown(f"""
-    <div class="card">
-      <div class="card-header">{dir_icon} {direction} — {selected_pair}</div>
-      {lvl_row("Entry",  f"{c['entry']:.5f}", "", "#ffffff")}
-      {lvl_row("Stop Loss", f"{c['sl']:.5f}",
-               f"−{c['sl_pips']:.1f} pips  (1R)", "#f85149")}
-      {lvl_row("TP1",  f"{c['tp1']:.5f}",
-               f"+{c['tp1_pips']:.1f} pips  ({c['rr_tp1']:.2f}R)",
-               "#3fb950" if c['rr_tp1'] >= min_rr else "#e3b341")}
-      {lvl_row("TP2",  f"{c['tp2']:.5f}",
-               f"+{c['tp2_pips']:.1f} pips  ({c['rr_tp2']:.2f}R)", "#56d364")}
-      {lvl_row("Lot size", f"{c['lot_size']:.2f} lots",
-               f"${c['risk_amt']:.2f} risk ({risk_pct}%)", "#388bfd")}
-      {lvl_row(f"Partial close ({partial_pct}%)",
-               f"{c['partial_lots']:.2f} lots at TP1", "", "#a29bfe")}
-      {lvl_row(f"Runner ({100-partial_pct}%)",
-               f"{c['runner_lots']:.2f} lots to TP2", "", "#a29bfe")}
+    <div class="{c['vclass']}">
+      <div style="font-size:23px; font-weight:800; color:{c['color']};
+                  letter-spacing:1px; margin-bottom:6px;">{c['label']}</div>
+      <div style="font-size:32px; font-weight:900; color:{c['color']};
+                  font-family:'JetBrains Mono',monospace; margin:8px 0;">
+        {c['rr_tp1']:.2f} : 1
+      </div>
+      <div style="font-size:13px; color:#8b949e; margin-bottom:14px;">
+        TP1 = {c['tp1_pips']:.1f} pips &nbsp;·&nbsp;
+        SL  = {c['sl_pips']:.1f} pips &nbsp;·&nbsp;
+        Min required = {min_rr:.1f}:1
+      </div>
+
+      <!-- R:R bar -->
+      <div style="margin:0 auto; max-width:600px;">
+        <div style="display:flex; justify-content:space-between;
+                    font-size:11px; color:#8b949e; margin-bottom:4px;">
+          <span>Risk (SL)</span><span>Reward (TP1)</span>
+        </div>
+        <div class="rr-track">
+          <div style="width:{risk_seg:.1f}%; background:rgba(248,81,73,0.80);
+                      display:flex; align-items:center; justify-content:center;
+                      font-size:11px; color:#fff; font-weight:700;">
+            {risk_seg:.0f}%
+          </div>
+          <div style="width:{rew_seg:.1f}%; background:rgba(63,185,80,0.80);
+                      display:flex; align-items:center; justify-content:center;
+                      font-size:11px; color:#fff; font-weight:700;">
+            {rew_seg:.0f}%
+          </div>
+        </div>
+        <div style="font-size:10px; color:#484f58; text-align:left; margin-top:2px;">
+          ▲ Min {min_rr:.1f}:1 threshold at {min_mark:.0f}% / {100-min_mark:.0f}%
+        </div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
-with col_right:
-    st.markdown('<div class="section-title">💰 P&L Projection</div>', unsafe_allow_html=True)
+    # ── KPI strip ──────────────────────────────────────────────────────
+    k1,k2,k3,k4,k5,k6 = st.columns(6)
+    rr_color = c["color"]
+    for col, val, lbl, color in [
+        (k1, f"{c['rr_tp1']:.2f}:1",       "R:R to TP1",         rr_color),
+        (k2, f"{c['rr_tp2']:.2f}:1",       "R:R to TP2",         "#56d364"),
+        (k3, f"{c['sl_pips']:.1f}",        "SL (pips)",          "#f85149"),
+        (k4, f"{c['tp1_pips']:.1f}",       "TP1 (pips)",         "#3fb950"),
+        (k5, f"{c['tp2_pips']:.1f}",       "TP2 (pips)",         "#56d364"),
+        (k6, f"{c['be_winrate_tp1']:.1f}%", "Breakeven Win Rate", "#388bfd"),
+    ]:
+        with col:
+            st.markdown(
+                f'<div class="metric-box">'
+                f'<div class="metric-value" style="color:{color};font-size:18px;">{val}</div>'
+                f'<div class="metric-label">{lbl}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-    tp1_usd  = c["partial_lots"] * c["tp1_pips"] * pip_val
-    tp2_usd  = c["runner_lots"]  * c["tp2_pips"] * pip_val
-    sl_usd   = c["lot_size"]     * c["sl_pips"]  * pip_val
-    total    = tp1_usd + tp2_usd
+    st.markdown("---")
 
-    pnl_color = "#3fb950" if c["rr_tp1"] >= min_rr else "#f85149"
+    # ── Trade levels + P&L ────────────────────────────────────────────
+    col_left, col_right = st.columns([1, 1])
+
+    with col_left:
+        st.markdown('<div class="section-title">📐 Trade Levels</div>', unsafe_allow_html=True)
+        dir_icon = "🔼" if c["long_trade"] else "🔽"
+        dir_col  = "#3fb950" if c["long_trade"] else "#f85149"
+
+        def lvl_row(label, val, extra="", color="#c9d1d9"):
+            return (f'<div class="lvl-row">'
+                    f'<span class="lvl-label">{label}</span>'
+                    f'<span class="lvl-val" style="color:{color};">{val}'
+                    f'<span style="color:#8b949e;font-size:11px;font-weight:400;">'
+                    f'&nbsp;&nbsp;{extra}</span></span></div>')
+
+        st.markdown(f"""
+        <div class="card">
+          <div class="card-header">{dir_icon} {direction} — {selected_pair}</div>
+          {lvl_row("Entry",  f"{c['entry']:.5f}", "", "#ffffff")}
+          {lvl_row("Stop Loss", f"{c['sl']:.5f}",
+                   f"−{c['sl_pips']:.1f} pips  (1R)", "#f85149")}
+          {lvl_row("TP1",  f"{c['tp1']:.5f}",
+                   f"+{c['tp1_pips']:.1f} pips  ({c['rr_tp1']:.2f}R)",
+                   "#3fb950" if c['rr_tp1'] >= min_rr else "#e3b341")}
+          {lvl_row("TP2",  f"{c['tp2']:.5f}",
+                   f"+{c['tp2_pips']:.1f} pips  ({c['rr_tp2']:.2f}R)", "#56d364")}
+          {lvl_row("Lot size", f"{c['lot_size']:.2f} lots",
+                   f"${c['risk_amt']:.2f} risk ({risk_pct}%)", "#388bfd")}
+          {lvl_row(f"Partial close ({partial_pct}%)",
+                   f"{c['partial_lots']:.2f} lots at TP1", "", "#a29bfe")}
+          {lvl_row(f"Runner ({100-partial_pct}%)",
+                   f"{c['runner_lots']:.2f} lots to TP2", "", "#a29bfe")}
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_right:
+        st.markdown('<div class="section-title">💰 P&L Projection</div>', unsafe_allow_html=True)
+
+        tp1_usd  = c["partial_lots"] * c["tp1_pips"] * pip_val
+        tp2_usd  = c["runner_lots"]  * c["tp2_pips"] * pip_val
+        sl_usd   = c["lot_size"]     * c["sl_pips"]  * pip_val
+        total    = tp1_usd + tp2_usd
+
+        pnl_color = "#3fb950" if c["rr_tp1"] >= min_rr else "#f85149"
+
+        st.markdown(f"""
+        <div class="card">
+          <div class="card-header">💵 Projected P&L</div>
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      padding:12px 0; border-bottom:1px solid #21262d;">
+            <span style="color:#8b949e; font-size:13px;">
+              TP1 profit &nbsp;({partial_pct}% of position)
+            </span>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
+                         color:#3fb950; font-size:15px;">+${tp1_usd:.2f}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      padding:12px 0; border-bottom:1px solid #21262d;">
+            <span style="color:#8b949e; font-size:13px;">
+              TP2 profit &nbsp;({100-partial_pct}% of position)
+            </span>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
+                         color:#56d364; font-size:15px;">+${tp2_usd:.2f}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      padding:12px 0; border-bottom:1px solid #21262d;">
+            <span style="color:#8b949e; font-size:13px;">Total profit (both TPs hit)</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:800;
+                         color:#3fb950; font-size:17px;">+${total:.2f}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      padding:12px 0; border-bottom:1px solid #21262d;">
+            <span style="color:#8b949e; font-size:13px;">Max loss (SL hit)</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
+                         color:#f85149; font-size:15px;">−${sl_usd:.2f}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;
+                      padding:14px 0 4px 0;">
+            <span style="color:#c9d1d9; font-size:13px; font-weight:600;">
+              Net profit-to-risk ratio
+            </span>
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:800;
+                         color:{pnl_color}; font-size:18px;">
+              {total/sl_usd:.2f}:1
+            </span>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Charts ─────────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">📊 Visuals</div>', unsafe_allow_html=True)
+
+    chart_l, chart_r = st.columns([3, 2])
+    with chart_l:
+        st.plotly_chart(build_rr_chart(c, selected_pair), use_container_width=True)
+    with chart_r:
+        st.plotly_chart(build_winrate_chart(c), use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Win-rate scenario table ────────────────────────────────────────
+    st.markdown('<div class="section-title">📋 Win-Rate Scenario Analysis</div>',
+                unsafe_allow_html=True)
+    st.caption("Showing net P&L over 100 trades at varying win rates — "
+               f"using {c['lot_size']:.2f} lots, SL=${sl_usd:.2f}, TP1=${tp1_usd + tp2_usd:.2f}")
+
+    scenario_rows = []
+    for wr in [30, 35, 40, 45, 50, 55, 60, 65, 70]:
+        wins   = wr
+        losses = 100 - wr
+        gross  = wins * (tp1_usd + tp2_usd) - losses * sl_usd
+        edge   = gross / 100
+        status = "✅" if gross > 0 else "❌"
+        scenario_rows.append({
+            "Win Rate": f"{wr}%",
+            "Wins / 100": wins,
+            "Losses / 100": losses,
+            "Gross P&L ($)": round(gross, 2),
+            "Edge per trade ($)": round(edge, 2),
+            "Profitable": status,
+        })
+
+    sc_df = pd.DataFrame(scenario_rows)
+    st.dataframe(sc_df, use_container_width=True, hide_index=True,
+                 column_config={
+                     "Gross P&L ($)":      st.column_config.NumberColumn(format="$%.2f"),
+                     "Edge per trade ($)": st.column_config.NumberColumn(format="$%.2f"),
+                 })
+
+    st.markdown("---")
+
+    # ── Formula + explainer ────────────────────────────────────────────
+    st.markdown('<div class="section-title">📖 R:R Logic & Rules</div>',
+                unsafe_allow_html=True)
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown(f"""
+        <div class="explainer">
+        <b style="color:#388bfd;">⚖️ Why R:R ≥ {min_rr:.1f}:1 matters</b><br><br>
+        At a {min_rr:.1f}:1 R:R, you only need to be right <b style="color:#c9d1d9;">
+        {1/(1+min_rr)*100:.0f}%</b> of the time to break even.<br><br>
+        At a 2:1 R:R with a 40% win rate, 100 trades produce:<br>
+        40 wins × $200 − 60 losses × $100 = <b style="color:#3fb950;">+$2,000 net profit</b>.<br><br>
+        This is why a losing strategy can still be profitable — the R:R multiplies
+        every winning trade relative to every loss. A minimum of 2:1 gives you
+        enough margin to absorb losses while staying net positive.
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_b:
+        st.markdown(f"""
+        <div class="explainer">
+        <b style="color:#388bfd;">📐 How to use this checker</b><br><br>
+        <b>1.</b> Fetch the live price (⚡ button in sidebar) or enter your entry manually.<br><br>
+        <b>2.</b> Enter your SL in pips — pulled from Check #14 (ATR-based stop structure).<br><br>
+        <b>3.</b> TP1 = at least {min_rr:.1f}× the SL distance.
+        TP2 = 3× the SL distance for the runner.<br><br>
+        <b>4.</b> If R:R is below {min_rr:.1f}:1 → <b style="color:#f85149;">do not take the trade.</b>
+        Widen the TP target or wait for a closer entry.<br><br>
+        This is <em>Check #15</em>. Must pass before confirming position size in Check #18.
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown(f"""
-    <div class="card">
-      <div class="card-header">💵 Projected P&L</div>
-      <div style="display:flex; justify-content:space-between; align-items:center;
-                  padding:12px 0; border-bottom:1px solid #21262d;">
-        <span style="color:#8b949e; font-size:13px;">
-          TP1 profit &nbsp;({partial_pct}% of position)
-        </span>
-        <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
-                     color:#3fb950; font-size:15px;">+${tp1_usd:.2f}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center;
-                  padding:12px 0; border-bottom:1px solid #21262d;">
-        <span style="color:#8b949e; font-size:13px;">
-          TP2 profit &nbsp;({100-partial_pct}% of position)
-        </span>
-        <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
-                     color:#56d364; font-size:15px;">+${tp2_usd:.2f}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center;
-                  padding:12px 0; border-bottom:1px solid #21262d;">
-        <span style="color:#8b949e; font-size:13px;">Total profit (both TPs hit)</span>
-        <span style="font-family:'JetBrains Mono',monospace; font-weight:800;
-                     color:#3fb950; font-size:17px;">+${total:.2f}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center;
-                  padding:12px 0; border-bottom:1px solid #21262d;">
-        <span style="color:#8b949e; font-size:13px;">Max loss (SL hit)</span>
-        <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
-                     color:#f85149; font-size:15px;">−${sl_usd:.2f}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center;
-                  padding:14px 0 4px 0;">
-        <span style="color:#c9d1d9; font-size:13px; font-weight:600;">
-          Net profit-to-risk ratio
-        </span>
-        <span style="font-family:'JetBrains Mono',monospace; font-weight:800;
-                     color:{pnl_color}; font-size:18px;">
-          {total/sl_usd:.2f}:1
-        </span>
-      </div>
+    <div class="formula-box">
+    R:R to TP1 &nbsp;= &nbsp;TP1 distance ÷ SL distance
+    &nbsp;= &nbsp;{c['tp1_pips']:.1f} pips ÷ {c['sl_pips']:.1f} pips
+    &nbsp;= &nbsp;<b style="color:{c['color']};">{c['rr_tp1']:.2f} : 1</b>
+    &nbsp; {'✅' if c['rr_tp1'] >= min_rr else '❌'} (min {min_rr:.1f}:1)<br>
+    R:R to TP2 &nbsp;= &nbsp;{c['tp2_pips']:.1f} pips ÷ {c['sl_pips']:.1f} pips
+    &nbsp;= &nbsp;<b style="color:#56d364;">{c['rr_tp2']:.2f} : 1</b><br>
+    Breakeven &nbsp;&nbsp;= &nbsp;1 ÷ (1 + {c['rr_tp1']:.2f})
+    &nbsp;= &nbsp;<b style="color:#388bfd;">{c['be_winrate_tp1']:.1f}% win rate needed</b>
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("---")
-
-# ── Charts ─────────────────────────────────────────────────────────
-st.markdown('<div class="section-title">📊 Visuals</div>', unsafe_allow_html=True)
-
-chart_l, chart_r = st.columns([3, 2])
-with chart_l:
-    st.plotly_chart(build_rr_chart(c, selected_pair), use_container_width=True)
-with chart_r:
-    st.plotly_chart(build_winrate_chart(c), use_container_width=True)
-
-st.markdown("---")
-
-# ── Win-rate scenario table ────────────────────────────────────────
-st.markdown('<div class="section-title">📋 Win-Rate Scenario Analysis</div>',
-            unsafe_allow_html=True)
-st.caption("Showing net P&L over 100 trades at varying win rates — "
-           f"using {c['lot_size']:.2f} lots, SL=${sl_usd:.2f}, TP1=${tp1_usd + tp2_usd:.2f}")
-
-scenario_rows = []
-for wr in [30, 35, 40, 45, 50, 55, 60, 65, 70]:
-    wins  = wr
-    losses= 100 - wr
-    gross = wins * (tp1_usd + tp2_usd) - losses * sl_usd
-    edge  = gross / 100
-    status = "✅" if gross > 0 else "❌"
-    scenario_rows.append({
-        "Win Rate": f"{wr}%",
-        "Wins / 100": wins,
-        "Losses / 100": losses,
-        "Gross P&L ($)": round(gross, 2),
-        "Edge per trade ($)": round(edge, 2),
-        "Profitable": status,
-    })
-
-sc_df = pd.DataFrame(scenario_rows)
-st.dataframe(sc_df, use_container_width=True, hide_index=True,
-             column_config={
-                 "Gross P&L ($)":     st.column_config.NumberColumn(format="$%.2f"),
-                 "Edge per trade ($)":st.column_config.NumberColumn(format="$%.2f"),
-             })
-
-st.markdown("---")
-
-# ── Formula + explainer ────────────────────────────────────────────
-st.markdown('<div class="section-title">📖 R:R Logic & Rules</div>',
-            unsafe_allow_html=True)
-
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown(f"""
-    <div class="explainer">
-    <b style="color:#388bfd;">⚖️ Why R:R ≥ {min_rr:.1f}:1 matters</b><br><br>
-    At a {min_rr:.1f}:1 R:R, you only need to be right <b style="color:#c9d1d9;">
-    {1/(1+min_rr)*100:.0f}%</b> of the time to break even.<br><br>
-    At a 2:1 R:R with a 40% win rate, 100 trades produce:<br>
-    40 wins × $200 − 60 losses × $100 = <b style="color:#3fb950;">+$2,000 net profit</b>.<br><br>
-    This is why a losing strategy can still be profitable — the R:R multiplies
-    every winning trade relative to every loss. A minimum of 2:1 gives you
-    enough margin to absorb losses while staying net positive.
+    # Footer
+    st.markdown("""
+    <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
+                padding-top:16px;border-top:1px solid #21262d;">
+      ⚖️ R:R Calculator · Check #15 · Risk to Reward · For educational purposes only
     </div>
     """, unsafe_allow_html=True)
-
-with col_b:
-    st.markdown(f"""
-    <div class="explainer">
-    <b style="color:#388bfd;">📐 How to use this checker</b><br><br>
-    <b>1.</b> Fetch the live price (⚡ button in sidebar) or enter your entry manually.<br><br>
-    <b>2.</b> Enter your SL in pips — pulled from Check #15 (ATR-based stop structure).<br><br>
-    <b>3.</b> TP1 = at least {min_rr:.1f}× the SL distance.
-    TP2 = 3× the SL distance for the runner.<br><br>
-    <b>4.</b> If R:R is below {min_rr:.1f}:1 → <b style="color:#f85149;">do not take the trade.</b>
-    Widen the TP target or wait for a closer entry.<br><br>
-    This is <em>Check #16</em>. Must pass before confirming position size in Check #18.
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown(f"""
-<div class="formula-box">
-R:R to TP1 &nbsp;= &nbsp;TP1 distance ÷ SL distance
-&nbsp;= &nbsp;{c['tp1_pips']:.1f} pips ÷ {c['sl_pips']:.1f} pips
-&nbsp;= &nbsp;<b style="color:{c['color']};">{c['rr_tp1']:.2f} : 1</b>
-&nbsp; {'✅' if c['rr_tp1'] >= min_rr else '❌'} (min {min_rr:.1f}:1)<br>
-R:R to TP2 &nbsp;= &nbsp;{c['tp2_pips']:.1f} pips ÷ {c['sl_pips']:.1f} pips
-&nbsp;= &nbsp;<b style="color:#56d364;">{c['rr_tp2']:.2f} : 1</b><br>
-Breakeven &nbsp;&nbsp;= &nbsp;1 ÷ (1 + {c['rr_tp1']:.2f})
-&nbsp;= &nbsp;<b style="color:#388bfd;">{c['be_winrate_tp1']:.1f}% win rate needed</b>
-</div>
-""", unsafe_allow_html=True)
-
-# Footer
-st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-            padding-top:16px;border-top:1px solid #21262d;">
-  ⚖️ R:R Calculator · Check #16 · Risk to Reward · For educational purposes only
-</div>
-""", unsafe_allow_html=True)
