@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import plotly.express as px
 import requests
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -71,6 +70,7 @@ st.markdown("""
     .metric-value{font-size:20px;font-weight:700;color:#c9d1d9;}
     .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
 
+    [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     .block-container{padding-top:1.5rem;max-width:1420px;}
 </style>
@@ -300,7 +300,7 @@ def pair_macro_bias(base: str, quote: str, scores: dict) -> dict:
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 🌐 Macro Bias")
-    st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
     st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")

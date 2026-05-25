@@ -52,6 +52,7 @@ st.markdown("""
     .rank-row:last-child{border-bottom:none;}
     .rank-num{width:28px;font-size:11px;font-weight:700;color:#484f58;}
 
+    [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -78,6 +79,8 @@ INSTRUMENTS = {
     "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001, "pip_label": "0.0001"},
     "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001, "pip_label": "0.0001"},
     "🥇 Gold":  {"ticker": "GC=F",    "pip_size": 0.10,   "pip_label": "0.10"},
+    "🥈 Silver":  {"ticker": "SI=F",  "pip_size": 0.01,  "pip_label": "0.01"},
+    "🪙 Platinum":{"ticker": "PL=F",  "pip_size": 0.10,  "pip_label": "0.10"},
 }
 
 # ── ATR Calculation ────────────────────────────────────────────────────────────
@@ -147,7 +150,7 @@ def fetch_instrument_data(ticker: str, pip_size: float, period: str = "60d", int
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📊 ATR Volatility")
-    st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
     st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")

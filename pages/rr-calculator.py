@@ -338,6 +338,15 @@ def build_winrate_chart(c: dict) -> go.Figure:
 
 with st.sidebar:
     st.markdown("### ⚖️ R:R Calculator")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
+    st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
+    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")

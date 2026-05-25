@@ -11,9 +11,10 @@ import pytz
 #  Page config
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="4H Confluence Zone",
+    page_title="4H Confluence Zone · Trading System",
     page_icon="🎯",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────
@@ -21,18 +22,20 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'JetBrains Mono', monospace;
-    background-color: #0a0e17;
-    color: #c9d1e0;
+    font-family: 'Inter', sans-serif;
+    background-color: #0d1117;
+    color: #c9d1d9;
 }
 
-.stApp { background-color: #0a0e17; }
+.stApp { background-color: #0d1117; }
+
+section[data-testid="stSidebar"] { background: #161b22 !important; border-right: 1px solid #21262d; }
 
 h1, h2, h3 {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Inter', sans-serif;
     letter-spacing: -0.03em;
 }
 
@@ -91,7 +94,7 @@ div[data-testid="stMetricLabel"] {
     background: linear-gradient(135deg, rgba(0, 212, 255, 0.13), rgba(0, 119, 255, 0.13));
     border: 1px solid rgba(0, 212, 255, 0.33);
     color: #00d4ff;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'Inter', sans-serif;
     font-weight: 600;
     letter-spacing: 0.05em;
     border-radius: 6px;
@@ -275,10 +278,49 @@ def safe_rgba(hex_color: str, opacity: float) -> str:
 # ─────────────────────────────────────────────
 #  Sidebar
 # ─────────────────────────────────────────────
+INSTRUMENTS = {
+    "EUR/USD":    {"ticker": "EURUSD=X", "pip_size": 0.0001},
+    "GBP/USD":    {"ticker": "GBPUSD=X", "pip_size": 0.0001},
+    "AUD/USD":    {"ticker": "AUDUSD=X", "pip_size": 0.0001},
+    "NZD/USD":    {"ticker": "NZDUSD=X", "pip_size": 0.0001},
+    "USD/JPY":    {"ticker": "USDJPY=X", "pip_size": 0.01},
+    "USD/CHF":    {"ticker": "USDCHF=X", "pip_size": 0.0001},
+    "USD/CAD":    {"ticker": "USDCAD=X", "pip_size": 0.0001},
+    "EUR/GBP":    {"ticker": "EURGBP=X", "pip_size": 0.0001},
+    "EUR/JPY":    {"ticker": "EURJPY=X", "pip_size": 0.01},
+    "GBP/JPY":    {"ticker": "GBPJPY=X", "pip_size": 0.01},
+    "AUD/JPY":    {"ticker": "AUDJPY=X", "pip_size": 0.01},
+    "EUR/AUD":    {"ticker": "EURAUD=X", "pip_size": 0.0001},
+    "GBP/AUD":    {"ticker": "GBPAUD=X", "pip_size": 0.0001},
+    "EUR/CAD":    {"ticker": "EURCAD=X", "pip_size": 0.0001},
+    "GBP/CAD":    {"ticker": "GBPCAD=X", "pip_size": 0.0001},
+    "USD/ZAR":    {"ticker": "USDZAR=X", "pip_size": 0.0001},
+    "EUR/ZAR":    {"ticker": "EURZAR=X", "pip_size": 0.0001},
+    "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip_size": 0.0001},
+    "🥇 Gold":    {"ticker": "GC=F",     "pip_size": 0.10},
+    "🥈 Silver":  {"ticker": "SI=F",     "pip_size": 0.01},
+    "🪙 Platinum":{"ticker": "PL=F",     "pip_size": 0.10},
+}
+
 with st.sidebar:
+    st.markdown("### 🎯 4H Confluence Zone")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
+    st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
+    st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
+    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
+    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
+    st.divider()
     st.markdown("### ⚙️ Settings")
 
-    ticker = st.text_input("Ticker Symbol", value="BTC-USD").upper().strip()
+    inst_keys = list(INSTRUMENTS.keys())
+    default_inst = st.session_state.get("selected_instrument", "EUR/USD")
+    if default_inst not in inst_keys:
+        default_inst = inst_keys[0]
+    selected_pair = st.selectbox("Instrument", inst_keys, index=inst_keys.index(default_inst))
+    ticker = INSTRUMENTS[selected_pair]["ticker"]
     lookback_days = st.slider("Lookback (days)", 30, 180, 90, step=15)
 
     st.markdown("---")
@@ -306,7 +348,7 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 st.markdown('<div class="page-header">', unsafe_allow_html=True)
 st.markdown("# 🎯 4H Confluence Zone")
-st.markdown(f"**{ticker}** · Fibonacci + Pivot Points + EMA overlap on 4H chart")
+st.markdown(f"**{selected_pair}** · Fibonacci + Pivot Points + EMA overlap on 4H chart")
 st.markdown("</div>", unsafe_allow_html=True)
 
 if refresh:
@@ -435,12 +477,12 @@ fig.add_trace(
         low=df["Low"],
         close=df["Close"],
         increasing=dict(
-            line=dict(color="#00d4ff"),
-            fillcolor=safe_rgba("#00d4ff", 0.13),
+            line=dict(color="#3fb950"),
+            fillcolor=safe_rgba("#3fb950", 0.13),
         ),
         decreasing=dict(
-            line=dict(color="#ff4d6d"),
-            fillcolor=safe_rgba("#ff4d6d", 0.13),
+            line=dict(color="#f85149"),
+            fillcolor=safe_rgba("#f85149", 0.13),
         ),
         name="4H Candles",
         showlegend=False,
@@ -563,7 +605,7 @@ fig.add_hline(
 )
 
 colors_vol = [
-    safe_rgba("#ff4560", 0.53) if close < open_ else safe_rgba("#00d4ff", 0.53)
+    safe_rgba("#f85149", 0.53) if close < open_ else safe_rgba("#3fb950", 0.53)
     for close, open_ in zip(df["Close"], df["Open"])
 ]
 
@@ -580,16 +622,16 @@ fig.add_trace(
 )
 
 fig.update_layout(
-    paper_bgcolor="#0a0e17",
-    plot_bgcolor="#0d1220",
+    paper_bgcolor="#0d1117",
+    plot_bgcolor="#161b22",
     font=dict(
-        family="JetBrains Mono, monospace",
+        family="Inter, sans-serif",
         size=11,
-        color="#6b7a99",
+        color="#8b949e",
     ),
     xaxis_rangeslider_visible=False,
     legend=dict(
-        bgcolor=safe_rgba("#0a0e17", 0.60),
+        bgcolor=safe_rgba("#0d1117", 0.60),
         bordercolor="#1e3a5f",
         borderwidth=1,
         font=dict(size=10),
@@ -601,8 +643,8 @@ fig.update_layout(
     ),
     margin=dict(l=10, r=120, t=10, b=10),
     height=680,
-    xaxis2=dict(showgrid=True, gridcolor="#1a2235"),
-    yaxis=dict(showgrid=True, gridcolor="#1a2235", side="right"),
+    xaxis2=dict(showgrid=True, gridcolor="#21262d"),
+    yaxis=dict(showgrid=True, gridcolor="#21262d", side="right"),
     yaxis2=dict(showgrid=False, side="right"),
 )
 

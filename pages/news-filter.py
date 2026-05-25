@@ -64,6 +64,7 @@ st.markdown("""
     .now-line{background:#388bfd;height:2px;border-radius:2px;margin:8px 0;position:relative;}
     .now-label{position:absolute;right:0;top:-10px;font-size:10px;color:#388bfd;font-weight:700;}
 
+    [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -211,7 +212,7 @@ def events_near_window(events: list, entry_dt: datetime, window_min: int = 60) -
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📰 News Filter")
-    st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
     st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")

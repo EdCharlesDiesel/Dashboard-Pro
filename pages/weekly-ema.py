@@ -61,6 +61,7 @@ st.markdown("""
 
     .prog-track{background:#21262d;border-radius:6px;height:5px;overflow:hidden;margin:4px 0;}
 
+    [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     .block-container{padding-top:1.5rem;max-width:1420px;}
 </style>
@@ -87,6 +88,8 @@ INSTRUMENTS = {
     "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001},
     "🥇 Gold":  {"ticker": "GC=F",    "pip_size": 0.10},
+    "🥈 Silver":  {"ticker": "SI=F",  "pip_size": 0.01},
+    "🪙 Platinum":{"ticker": "PL=F",  "pip_size": 0.10},
 }
 
 EMA_PERIODS = [10, 20, 50]   # Weekly EMAs calculated
@@ -180,7 +183,7 @@ def fetch_weekly(ticker: str, pip_size: float, lookback: str = "2y"):
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📉 Weekly EMA")
-    st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
     st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")

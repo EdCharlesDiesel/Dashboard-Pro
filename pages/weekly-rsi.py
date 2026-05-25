@@ -59,6 +59,7 @@ st.markdown("""
 
     .zone-label{font-size:9px;color:#484f58;display:flex;justify-content:space-between;margin-top:2px;}
 
+    [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -66,16 +67,27 @@ st.markdown("""
 
 # ── Instruments ────────────────────────────────────────────────────────────────
 INSTRUMENTS = {
-    "EUR/USD": {"ticker": "EURUSD=X"}, "GBP/USD": {"ticker": "GBPUSD=X"},
-    "AUD/USD": {"ticker": "AUDUSD=X"}, "NZD/USD": {"ticker": "NZDUSD=X"},
-    "USD/JPY": {"ticker": "USDJPY=X"}, "USD/CHF": {"ticker": "USDCHF=X"},
-    "USD/CAD": {"ticker": "USDCAD=X"}, "EUR/GBP": {"ticker": "EURGBP=X"},
-    "EUR/JPY": {"ticker": "EURJPY=X"}, "GBP/JPY": {"ticker": "GBPJPY=X"},
-    "AUD/JPY": {"ticker": "AUDJPY=X"}, "EUR/AUD": {"ticker": "EURAUD=X"},
-    "GBP/AUD": {"ticker": "GBPAUD=X"}, "EUR/CAD": {"ticker": "EURCAD=X"},
-    "GBP/CAD": {"ticker": "GBPCAD=X"}, "USD/ZAR": {"ticker": "USDZAR=X"},
-    "EUR/ZAR": {"ticker": "EURZAR=X"}, "GBP/ZAR": {"ticker": "GBPZAR=X"},
-    "🥇 Gold":  {"ticker": "GC=F"},
+    "EUR/USD":    {"ticker": "EURUSD=X", "pip_size": 0.0001},
+    "GBP/USD":    {"ticker": "GBPUSD=X", "pip_size": 0.0001},
+    "AUD/USD":    {"ticker": "AUDUSD=X", "pip_size": 0.0001},
+    "NZD/USD":    {"ticker": "NZDUSD=X", "pip_size": 0.0001},
+    "USD/JPY":    {"ticker": "USDJPY=X", "pip_size": 0.01},
+    "USD/CHF":    {"ticker": "USDCHF=X", "pip_size": 0.0001},
+    "USD/CAD":    {"ticker": "USDCAD=X", "pip_size": 0.0001},
+    "EUR/GBP":    {"ticker": "EURGBP=X", "pip_size": 0.0001},
+    "EUR/JPY":    {"ticker": "EURJPY=X", "pip_size": 0.01},
+    "GBP/JPY":    {"ticker": "GBPJPY=X", "pip_size": 0.01},
+    "AUD/JPY":    {"ticker": "AUDJPY=X", "pip_size": 0.01},
+    "EUR/AUD":    {"ticker": "EURAUD=X", "pip_size": 0.0001},
+    "GBP/AUD":    {"ticker": "GBPAUD=X", "pip_size": 0.0001},
+    "EUR/CAD":    {"ticker": "EURCAD=X", "pip_size": 0.0001},
+    "GBP/CAD":    {"ticker": "GBPCAD=X", "pip_size": 0.0001},
+    "USD/ZAR":    {"ticker": "USDZAR=X", "pip_size": 0.0001},
+    "EUR/ZAR":    {"ticker": "EURZAR=X", "pip_size": 0.0001},
+    "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip_size": 0.0001},
+    "🥇 Gold":    {"ticker": "GC=F",     "pip_size": 0.10},
+    "🥈 Silver":  {"ticker": "SI=F",     "pip_size": 0.01},
+    "🪙 Platinum":{"ticker": "PL=F",     "pip_size": 0.10},
 }
 
 # ── RSI Calculation ────────────────────────────────────────────────────────────
@@ -180,7 +192,7 @@ def fetch_rsi_data(ticker: str, rsi_period: int, weeks: int):
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📡 Weekly RSI")
-    st.page_link("daliy-trading-checklist.py", label="Checklist", icon="📋")
+    st.page_link("daily-trading-checklist.py", label="Checklist", icon="📋")
     st.page_link("pages/macro-bias.py", label=" 01. Macro Bias", icon="🌐")
     st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
     st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
