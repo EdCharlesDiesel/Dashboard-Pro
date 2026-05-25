@@ -37,6 +37,7 @@ st.markdown("""
     .badge-neutral   {background:#21262d;color:#8b949e;border:1px solid #30363d;}
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
 """, unsafe_allow_html=True)

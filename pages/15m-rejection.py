@@ -31,6 +31,7 @@ st.markdown("""
     .section-title{ font-size:16px; font-weight:700; color:#e6edf3; margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
     .prog-track{ background:#21262d; border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 

@@ -21,6 +21,7 @@ st.markdown("""
     .stApp{ background:#0d1117; }
     section[data-testid="stSidebar"]{ background:#161b22!important; border-right:1px solid #21262d; }
     #MainMenu,footer,header{ visibility:hidden; }
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 

@@ -36,6 +36,7 @@ st.markdown("""
     .prog-track{ background:#21262d; border-radius:8px; height:10px;
                  margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
+    [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
     /* Verdict banners */
