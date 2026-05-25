@@ -145,6 +145,60 @@ def fetch_fmp_calendar(api_key: str, from_date: str, to_date: str):
         pass
     return []
 
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_finnhub_calendar(api_key: str, from_date: str, to_date: str):
+    """Finnhub economic calendar — free tier, 60 calls/min. Times are UTC."""
+    if not api_key:
+        return []
+    iso_to_ccy = {
+        "US": "USD", "GB": "GBP", "EU": "EUR", "EMU": "EUR",
+        "JP": "JPY", "AU": "AUD", "NZ": "NZD", "CA": "CAD",
+        "CH": "CHF", "ZA": "ZAR", "CN": "CNY",
+    }
+    url = (f"https://finnhub.io/api/v1/calendar/economic"
+           f"?from={from_date}&to={to_date}&token={api_key}")
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code != 200:
+            return []
+        raw = r.json().get("economicCalendar", [])
+        out = []
+        utc = pytz.utc
+        for e in raw:
+            t_str = e.get("time", "")  # "YYYY-MM-DD HH:MM:SS" UTC
+            try:
+                utc_dt = utc.localize(datetime.strptime(t_str, "%Y-%m-%d %H:%M:%S"))
+            except Exception:
+                utc_dt = None
+            iso = e.get("country", "").upper()
+            ccy = iso_to_ccy.get(iso, iso)
+            out.append({
+                "_utc_dt":  utc_dt,
+                "date_str": t_str[:10],
+                "time_str": t_str[11:16],
+                "title":    e.get("event", ""),
+                "country":  ccy,
+                "impact":   e.get("impact", "low").capitalize(),
+                "forecast": str(e.get("estimate") or "—"),
+                "previous": str(e.get("prev")     or "—"),
+                "actual":   str(e.get("actual")   or ""),
+                "flag":     FLAG.get(ccy, "🌐"),
+            })
+        return out
+    except Exception:
+        return []
+
+def normalise_finnhub(raw: list, tz_target) -> list:
+    """Convert Finnhub UTC datetimes to the user's local timezone."""
+    out = []
+    for e in raw:
+        utc_dt   = e.get("_utc_dt")
+        local_dt = utc_dt.astimezone(tz_target) if utc_dt else None
+        entry    = {k: v for k, v in e.items() if k != "_utc_dt"}
+        entry["datetime_local"] = local_dt
+        out.append(entry)
+    return out
+
 def normalise_ff(raw: list, tz_target) -> list:
     """
     Parse FF calendar JSON and add datetime objects in the user's timezone.
@@ -255,8 +309,12 @@ with st.sidebar:
     show_week = st.radio("Calendar Range", ["This Week", "Next Week", "Both"], index=0)
 
     st.markdown("---")
-    fmp_key = st.text_input("FMP API Key (optional fallback)",
-                            placeholder="Get free key at fmp.financialmodelingprep.com",
+    st.markdown("**🔑 Free API Keys (optional fallbacks)**")
+    finnhub_key = st.text_input("Finnhub Key",
+                                placeholder="Free at finnhub.io",
+                                type="password")
+    fmp_key = st.text_input("FMP Key",
+                            placeholder="Free at financialmodelingprep.com",
                             type="password")
 
     if st.button("🔄 Refresh Calendar", use_container_width=True, type="primary"):
@@ -265,21 +323,47 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════
 # FETCH & NORMALISE
 # ══════════════════════════════════════════════════════════════════
+
+# Date ranges for fallback APIs
+_today    = date.today()
+_wk_start = _today - timedelta(days=_today.weekday())
+_wk_end   = _wk_start + timedelta(days=6)
+_nw_start = _wk_start + timedelta(days=7)
+_nw_end   = _nw_start + timedelta(days=6)
+if show_week == "This Week":
+    _fb_from, _fb_to = _wk_start.isoformat(), _wk_end.isoformat()
+elif show_week == "Next Week":
+    _fb_from, _fb_to = _nw_start.isoformat(), _nw_end.isoformat()
+else:
+    _fb_from, _fb_to = _wk_start.isoformat(), _nw_end.isoformat()
+
+data_source = "No Data"
+
+# Primary: Forex Factory mirror
 with st.spinner("📡 Fetching economic calendar from Forex Factory…"):
     raw_this = fetch_ff_calendar("thisweek") if show_week in ["This Week", "Both"] else []
     raw_next = fetch_ff_calendar("nextweek") if show_week in ["Next Week", "Both"] else []
     raw_all  = raw_this + raw_next
 
 events_all = normalise_ff(raw_all, user_tz)
+if events_all:
+    data_source = "Forex Factory"
 
-# Fallback to FMP if FF returned nothing
+# Fallback 1: Finnhub
+if not events_all and finnhub_key:
+    with st.spinner("FF unavailable — trying Finnhub…"):
+        fh_raw = fetch_finnhub_calendar(finnhub_key, _fb_from, _fb_to)
+        if fh_raw:
+            events_all  = normalise_finnhub(fh_raw, user_tz)
+            data_source = "Finnhub"
+
+# Fallback 2: FMP
 if not events_all and fmp_key:
-    from_dt = date.today().isoformat()
-    to_dt   = (date.today() + timedelta(days=7)).isoformat()
     with st.spinner("Trying FMP fallback…"):
-        fmp_raw  = fetch_fmp_calendar(fmp_key, from_dt, to_dt)
+        fmp_raw = fetch_fmp_calendar(fmp_key, _fb_from, _fb_to)
         if fmp_raw:
-            events_all = fmp_raw   # already normalised
+            events_all  = fmp_raw
+            data_source = "FMP"
 
 # Filter by currency and impact
 filtered = [
@@ -317,7 +401,6 @@ DANGER = bool(near_entry)
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════
-data_source = "Forex Factory" if raw_all else ("FMP" if fmp_key else "No Data")
 st.markdown(f"""
 <div class="hero">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
