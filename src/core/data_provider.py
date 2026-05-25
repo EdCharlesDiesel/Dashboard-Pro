@@ -23,7 +23,7 @@ class QuantConnectProvider(MarketDataProvider):
     def get_data(self, symbol, interval, period):
         try:
             url = f"{self.base_url}/{symbol}?interval={interval}&period={period}"
-            r = requests.get(url, timeout=5)
+            r = requests.get(url, timeout=1)
             r.raise_for_status()
             df = pd.DataFrame(r.json())
             if not df.empty and 'time' in df.columns:

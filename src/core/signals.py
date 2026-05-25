@@ -400,6 +400,8 @@ def generate_trading_ideas(data_by_timeframe: Dict) -> Tuple[List[Dict], List[st
             skipped.append(f"{pair_name} — insufficient bars in: {', '.join(thin)}")
             continue
 
+        frames = {tf: analyzer.add_indicators(df) for tf, df in frames.items()}
+
         idea = analyze_multi_timeframe(frames['Daily'], frames['4 Hour'], frames['Hourly'], frames['15 Minute'],
                                        pair_name)
         if idea and idea['bias'] != 'Neutral':
