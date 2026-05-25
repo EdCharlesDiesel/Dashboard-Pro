@@ -182,6 +182,15 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════
 # FETCH ALL INSTRUMENTS
 # ══════════════════════════════════════════════════════════════════
+# Guard: yfinance caps intraday data at 60 days
+if fetch_interval in {"4h", "1h"} and fetch_period in {"90d", "6mo"}:
+    st.warning(
+        f"⚠️ **{selected_interval} data is limited to 60 days by yfinance.** "
+        f"Lookback auto-capped from {selected_period} → 60 Days.",
+        icon="⚠️",
+    )
+    fetch_period = "60d"
+
 progress_bar = st.progress(0, text="📡 Fetching ATR data for all instruments…")
 results = {}
 total = len(INSTRUMENTS)
@@ -461,36 +470,35 @@ with right:
             subplot_titles=["ATR(14) vs ATR(20) — Pips", "ATR Ratio (ATR14 ÷ ATR20)"],
         )
 
-        # ATR14 line
+        # Conditional fill: green where ATR14 > ATR20, red where ATR14 <= ATR20
+        # Build polygon segments so the colour flips correctly at every crossover
+        _d  = list(dates)
+        _a  = list(hist_atr14.values)
+        _b  = list(hist_atr20.values)
+        _s  = 0
+        for _i in range(1, len(_d) + 1):
+            _end     = _i == len(_d)
+            _changed = _end or ((_a[_i] >= _b[_i]) != (_a[_s] >= _b[_s]))
+            if _changed:
+                _sd, _sa, _sb = _d[_s:_i], _a[_s:_i], _b[_s:_i]
+                _clr = "rgba(63,185,80,0.15)" if _a[_s] >= _b[_s] else "rgba(248,81,73,0.15)"
+                fig.add_trace(go.Scatter(
+                    x=_sd + _sd[::-1], y=_sa + _sb[::-1],
+                    fill="toself", fillcolor=_clr,
+                    line=dict(width=0), showlegend=False, hoverinfo="skip",
+                ), row=1, col=1)
+                _s = _i
+
+        # ATR lines drawn on top of the fill
         fig.add_trace(go.Scatter(
             x=dates, y=hist_atr14, name="ATR(14)",
             mode="lines", line=dict(color="#388bfd", width=2.5),
-            fill="tonexty" if False else None,
             hovertemplate="ATR14: %{y:.1f} pips<extra></extra>",
         ), row=1, col=1)
-
-        # ATR20 line
         fig.add_trace(go.Scatter(
             x=dates, y=hist_atr20, name="ATR(20)",
             mode="lines", line=dict(color="#8b949e", width=1.5, dash="dot"),
             hovertemplate="ATR20: %{y:.1f} pips<extra></extra>",
-        ), row=1, col=1)
-
-        # Fill between — green when ATR14 > ATR20, red otherwise
-        fig.add_trace(go.Scatter(
-            x=dates, y=hist_atr14, name="ATR14 fill",
-            mode="lines", line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
-        ), row=1, col=1)
-        fig.add_trace(go.Scatter(
-            x=dates, y=hist_atr20,
-            mode="lines", line=dict(width=0),
-            fill="tonexty",
-            fillcolor="rgba(63,185,80,0.12)",
-            name="Vol zone",
-            showlegend=False,
-            hoverinfo="skip",
         ), row=1, col=1)
 
         # ATR Ratio
