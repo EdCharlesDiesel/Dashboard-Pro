@@ -478,14 +478,21 @@ with st.sidebar:
 
 ticker = INSTRUMENTS[selected_pair]["ticker"]
 
-# Header
+GRADE_CSS = {
+    "bull":         "verdict-bull",
+    "bear":         "verdict-bear",
+    "turning-bull": "verdict-turning-bull",
+    "turning-bear": "verdict-turning-bear",
+    "flat":         "verdict-flat",
+    "none":         "verdict-none",
+}
+
+# ── Hero ───────────────────────────────────────────────────────────
 st.markdown(f"""
 <div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
             border:1px solid #21262d; border-radius:16px; padding:24px 28px;
             margin-bottom:20px; position:relative; overflow:hidden;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">
-    📊 Daily MACD Momentum
-  </div>
+  <div style="font-size:24px; font-weight:700; color:#e6edf3;">📊 Daily MACD Momentum</div>
   <div style="color:#8b949e; font-size:13px; margin-top:4px;">
     MACD histogram turning in the direction of the trade · Daily chart · {selected_pair}
   </div>
@@ -495,227 +502,347 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Fetch
-with st.spinner(f"Loading daily data for {selected_pair}…"):
-    df_raw = fetch_daily(ticker)
+tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
 
-if df_raw.empty or len(df_raw) < slow + sig + 5:
-    st.error(f"⚠️ Not enough daily data for **{selected_pair}**. Try a different instrument.")
-    st.stop()
 
-m = analyse_momentum(df_raw, int(fast), int(slow), int(sig), int(lb))
+# ══════════════════════════════════════════════════════════════════
+# TAB 1 — ALL-PAIRS SCANNER
+# ══════════════════════════════════════════════════════════════════
+with tab_scan:
+    scan_results = {}
+    prog = st.progress(0, text="📡 Scanning MACD momentum for all pairs…")
+    for idx, (scan_pair, cfg) in enumerate(INSTRUMENTS.items()):
+        prog.progress((idx + 1) / len(INSTRUMENTS),
+                      text=f"📡 {scan_pair} ({idx+1}/{len(INSTRUMENTS)})…")
+        try:
+            df_s = fetch_daily(cfg["ticker"])
+            if df_s.empty or len(df_s) < int(slow) + int(sig) + 5:
+                scan_results[scan_pair] = None
+                continue
+            scan_results[scan_pair] = analyse_momentum(
+                df_s, int(fast), int(slow), int(sig), int(lb))
+        except Exception:
+            scan_results[scan_pair] = None
+    prog.empty()
 
-# ── Verdict banner ─────────────────────────────────────────────────
-GRADE_CSS = {
-    "bull":         "verdict-bull",
-    "bear":         "verdict-bear",
-    "turning-bull": "verdict-turning-bull",
-    "turning-bear": "verdict-turning-bear",
-    "flat":         "verdict-flat",
-    "none":         "verdict-none",
-}
-vcls  = GRADE_CSS[m["grade"]]
-color = m["color"]
+    loaded_s    = {p: v for p, v in scan_results.items() if v is not None}
+    bull_s      = [p for p, v in loaded_s.items() if v["verdict"] == "BULLISH"]
+    t_bull_s    = [p for p, v in loaded_s.items() if v["verdict"] == "TURNING BULLISH"]
+    t_bear_s    = [p for p, v in loaded_s.items() if v["verdict"] == "TURNING BEARISH"]
+    bear_s      = [p for p, v in loaded_s.items() if v["verdict"] == "BEARISH"]
+    flat_s      = [p for p, v in loaded_s.items() if v["verdict"] == "FLAT"]
+    no_data_s   = [p for p in INSTRUMENTS if p not in loaded_s]
 
-# Histogram sparkline (last 8 bars as mini bars in HTML)
-spark_bars = ""
-hist_tail  = list(m["df"]["hist"].tail(8).values)
-max_abs    = max(abs(v) for v in hist_tail) or 1
-for v in hist_tail:
-    h_pct  = int(abs(v) / max_abs * 32)
-    col    = "#3fb950" if v >= 0 else "#f85149"
-    align  = "flex-end" if v >= 0 else "flex-start"
-    spark_bars += (
-        f'<div style="display:flex;flex-direction:column;justify-content:{align};'
-        f'width:10px;height:40px;">'
-        f'<div style="background:{col};width:10px;height:{max(h_pct,2)}px;'
-        f'border-radius:2px;opacity:0.85;"></div></div>'
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    for col_, val_, lbl_, c_ in [
+        (c1, len(bull_s),    "📈 Bullish",       "#3fb950"),
+        (c2, len(t_bull_s),  "🟡 Turning Bull",  "#6ac43f"),
+        (c3, len(t_bear_s),  "🟡 Turning Bear",  "#e07b39"),
+        (c4, len(bear_s),    "📉 Bearish",        "#f85149"),
+        (c5, len(flat_s),    "⏳ Flat",            "#484f58"),
+        (c6, len(no_data_s), "⛔ No Data",        "#30363d"),
+    ]:
+        with col_:
+            st.markdown(
+                f'<div class="metric-box">'
+                f'<div class="metric-value" style="color:{c_};font-size:18px;">{val_}</div>'
+                f'<div class="metric-label">{lbl_}</div></div>',
+                unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+    SCAN_ORDER = {"BULLISH": 0, "TURNING BULLISH": 1,
+                  "TURNING BEARISH": 2, "BEARISH": 3, "FLAT": 4}
+    sorted_scan = sorted(
+        INSTRUMENTS.keys(),
+        key=lambda p: (SCAN_ORDER.get(
+            loaded_s[p]["verdict"] if p in loaded_s else "FLAT", 9), p)
     )
 
-st.markdown(f"""
-<div class="{vcls}">
-  <div style="font-size:23px; font-weight:800; color:{color};
-              letter-spacing:1px; margin-bottom:6px;">{m['label']}</div>
-  <div style="font-size:13px; color:#8b949e; margin-bottom:14px;">{m['desc']}</div>
+    SCAN_BORDER = {
+        "BULLISH":        "#3fb950",
+        "TURNING BULLISH":"#6ac43f",
+        "TURNING BEARISH":"#e07b39",
+        "BEARISH":        "#f85149",
+        "FLAT":           "#484f58",
+    }
+    SCAN_BADGE = {
+        "BULLISH":        ("background:#0d2f1a;color:#3fb950;border:1px solid #238636;",  "📈 Bullish"),
+        "TURNING BULLISH":("background:#162812;color:#6ac43f;border:1px solid #4d8c2a;",  "🟡 Turning Bull"),
+        "TURNING BEARISH":("background:#28160d;color:#e07b39;border:1px solid #8c5a2a;",  "🟡 Turning Bear"),
+        "BEARISH":        ("background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;",  "📉 Bearish"),
+        "FLAT":           ("background:#21262d;color:#8b949e;border:1px solid #30363d;",  "⏳ Flat"),
+    }
 
-  <div style="display:flex; justify-content:center; align-items:flex-end;
-              gap:3px; margin:10px 0;">{spark_bars}</div>
-  <div style="font-size:10px; color:#484f58; margin-top:4px;">
-    Last 8 daily histogram bars
-  </div>
+    cards_html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;">'
+    for scan_pair in sorted_scan:
+        if scan_pair not in loaded_s:
+            cards_html += (
+                f'<div style="border:1px solid #21262d;border-left:4px solid #30363d;'
+                f'background:#161b22;border-radius:10px;padding:11px 14px;opacity:.5;">'
+                f'<div style="font-size:13px;font-weight:700;color:#8b949e;">{scan_pair}</div>'
+                f'<div style="font-size:10px;color:#484f58;margin-top:4px;">No data</div></div>'
+            )
+            continue
 
-  <div style="display:flex; gap:28px; justify-content:center; flex-wrap:wrap;
-              font-size:13px; color:#c9d1d9; margin-top:14px;">
-    <div>MACD &nbsp;<code style="color:#0984e3;">{m['macd_now']:.5f}</code></div>
-    <div>Signal &nbsp;<code style="color:#e17055;">{m['sig_now']:.5f}</code></div>
-    <div>Hist &nbsp;<code style="color:{color};">{m['h_now']:.5f}</code></div>
-    <div>Close &nbsp;<code style="color:#e6edf3;">{m['price']:.5f}</code></div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+        r       = loaded_s[scan_pair]
+        verdict = r["verdict"]
+        bdr     = SCAN_BORDER.get(verdict, "#30363d")
+        bdg_css, bdg_txt = SCAN_BADGE.get(verdict, SCAN_BADGE["FLAT"])
+        h_col   = "#3fb950" if r["h_now"] > 0 else "#f85149"
+        outline = "outline:2px solid #388bfd;" if scan_pair == selected_pair else ""
 
-# ── KPI strip ──────────────────────────────────────────────────────
-k1, k2, k3, k4, k5 = st.columns(5)
-for col, val, lbl, c in [
-    (k1, f'{m["h_now"]:+.5f}',      "Histogram Now",         color),
-    (k2, f'{m["h_prev"]:+.5f}',     "Histogram Prev Bar",    "#8b949e"),
-    (k3, str(m["rising_count"]),     f"Rising / Last {lb}",   "#3fb950"),
-    (k4, str(m["falling_count"]),    f"Falling / Last {lb}",  "#f85149"),
-    (k5, "✅ Yes" if m["accelerating"] else ("✅ Yes" if m["decelerating"] else "—"),
-     "Accelerating",             "#3fb950" if (m["accelerating"] or m["decelerating"]) else "#484f58"),
-]:
-    with col:
-        st.markdown(
-            f'<div class="metric-box">'
-            f'<div class="metric-value" style="color:{c};font-size:16px;">{val}</div>'
-            f'<div class="metric-label">{lbl}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
+        accel_html = ""
+        if r["accelerating"]:
+            accel_html = '<span style="color:#3fb950;font-weight:600;">▲ Accel</span>'
+        elif r["decelerating"]:
+            accel_html = '<span style="color:#f85149;font-weight:600;">▼ Decel</span>'
+
+        cross_html = ""
+        if r["crossed_up"]:
+            cross_html = '<span style="color:#e3b341;font-weight:600;">⬆ Cross</span>'
+        elif r["crossed_down"]:
+            cross_html = '<span style="color:#e3b341;font-weight:600;">⬇ Cross</span>'
+
+        cards_html += (
+            f'<div style="border:1px solid #21262d;border-left:4px solid {bdr};'
+            f'background:#161b22;border-radius:10px;padding:11px 14px;{outline}">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            f'<span style="font-size:13px;font-weight:700;color:#e6edf3;">{scan_pair}</span>'
+            f'<span style="border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;{bdg_css}">{bdg_txt}</span>'
+            f'</div>'
+            f'<div style="display:flex;gap:8px;font-size:11px;align-items:center;flex-wrap:wrap;">'
+            f'<span style="color:#484f58;">H:</span>'
+            f'<span style="color:{h_col};font-weight:600;font-family:monospace;">{r["h_now"]:+.5f}</span>'
+            f'<span style="color:#484f58;">↑{r["rising_count"]} ↓{r["falling_count"]}</span>'
+            f'{accel_html}{cross_html}'
+            f'</div></div>'
         )
+    cards_html += "</div>"
+    st.markdown(cards_html, unsafe_allow_html=True)
 
-st.markdown("---")
+    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+    with st.expander("📋 Full Scan Table"):
+        tbl_rows = []
+        for scan_pair in INSTRUMENTS:
+            r = loaded_s.get(scan_pair)
+            if r is None:
+                tbl_rows.append({"Pair": scan_pair, "Verdict": "No Data",
+                                 "H Now": None, "MACD": None, "Signal": None,
+                                 "Rising": None, "Falling": None, "Accel": "—"})
+            else:
+                tbl_rows.append({
+                    "Pair":    scan_pair,
+                    "Verdict": r["verdict"],
+                    "H Now":   round(r["h_now"], 5),
+                    "MACD":    round(r["macd_now"], 5),
+                    "Signal":  round(r["sig_now"], 5),
+                    "Rising":  r["rising_count"],
+                    "Falling": r["falling_count"],
+                    "Accel":   "▲" if r["accelerating"] else ("▼" if r["decelerating"] else "—"),
+                })
+        st.dataframe(pd.DataFrame(tbl_rows), use_container_width=True, hide_index=True,
+                     column_config={
+                         "H Now":   st.column_config.NumberColumn("H Now",   format="%+.5f"),
+                         "MACD":    st.column_config.NumberColumn("MACD",    format="%.5f"),
+                         "Signal":  st.column_config.NumberColumn("Signal",  format="%.5f"),
+                     })
 
-# ── Condition breakdown ────────────────────────────────────────────
-st.markdown('<div class="section-title">🧩 Momentum Conditions</div>',
-            unsafe_allow_html=True)
 
-col_l, col_r = st.columns(2)
+# ══════════════════════════════════════════════════════════════════
+# TAB 2 — PAIR DETAIL
+# ══════════════════════════════════════════════════════════════════
+with tab_detail:
+    with st.spinner(f"Loading daily data for {selected_pair}…"):
+        df_raw = fetch_daily(ticker)
 
-def render_conds(title, icon_color, conds):
-    html = f'<div class="card"><div class="card-header">{title}</div>'
-    for text, met in conds.items():
-        badge_cls = "cond-badge-ok" if met else "cond-badge-fail"
-        badge_txt = "✅ Yes" if met else "❌ No"
-        html += f"""
-        <div class="cond-row">
-          <div class="cond-text">{text}</div>
-          <span class="{badge_cls}">{badge_txt}</span>
-        </div>"""
-    score     = sum(conds.values())
-    total     = len(conds)
-    pct       = int(score / total * 100)
-    prog_col  = "#3fb950" if pct >= 70 else "#e3b341" if pct >= 40 else "#f85149"
-    html += f"""
-    <div style="margin-top:14px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <span style="font-size:11px;color:#8b949e;">Score</span>
-        <span style="font-size:11px;font-weight:700;color:{prog_col};">{score}/{total}</span>
-      </div>
-      <div class="prog-track">
-        <div style="background:{prog_col};width:{pct}%;height:100%;border-radius:8px;"></div>
-      </div>
-    </div></div>"""
-    return html
+    detail_ok = True
+    if df_raw.empty or len(df_raw) < int(slow) + int(sig) + 5:
+        st.error(f"⚠️ Not enough daily data for **{selected_pair}**.")
+        detail_ok = False
 
-with col_l:
-    st.markdown(render_conds("📈 Bullish Momentum Conditions", "#3fb950", m["conds"]),
-                unsafe_allow_html=True)
-with col_r:
-    st.markdown(render_conds("📉 Bearish Momentum Conditions", "#f85149", m["bear_conds"]),
-                unsafe_allow_html=True)
+    if detail_ok:
+        m     = analyse_momentum(df_raw, int(fast), int(slow), int(sig), int(lb))
+        vcls  = GRADE_CSS[m["grade"]]
+        color = m["color"]
 
-st.markdown("---")
+        # Histogram sparkline
+        spark_bars = ""
+        hist_tail  = list(m["df"]["hist"].tail(8).values)
+        max_abs    = max(abs(v) for v in hist_tail) or 1
+        for v in hist_tail:
+            h_pct = int(abs(v) / max_abs * 32)
+            sc    = "#3fb950" if v >= 0 else "#f85149"
+            align = "flex-end" if v >= 0 else "flex-start"
+            spark_bars += (
+                f'<div style="display:flex;flex-direction:column;justify-content:{align};'
+                f'width:10px;height:40px;">'
+                f'<div style="background:{sc};width:10px;height:{max(h_pct,2)}px;'
+                f'border-radius:2px;opacity:0.85;"></div></div>'
+            )
 
-# ── Chart ──────────────────────────────────────────────────────────
-st.markdown('<div class="section-title">📈 Daily Chart — Price · MACD · Histogram</div>',
-            unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="{vcls}">
+          <div style="font-size:23px;font-weight:800;color:{color};
+                      letter-spacing:1px;margin-bottom:6px;">{m['label']}</div>
+          <div style="font-size:13px;color:#8b949e;margin-bottom:14px;">{m['desc']}</div>
+          <div style="display:flex;justify-content:center;align-items:flex-end;
+                      gap:3px;margin:10px 0;">{spark_bars}</div>
+          <div style="font-size:10px;color:#484f58;margin-top:4px;">Last 8 daily histogram bars</div>
+          <div style="display:flex;gap:28px;justify-content:center;flex-wrap:wrap;
+                      font-size:13px;color:#c9d1d9;margin-top:14px;">
+            <div>MACD &nbsp;<code style="color:#0984e3;">{m['macd_now']:.5f}</code></div>
+            <div>Signal &nbsp;<code style="color:#e17055;">{m['sig_now']:.5f}</code></div>
+            <div>Hist &nbsp;<code style="color:{color};">{m['h_now']:.5f}</code></div>
+            <div>Close &nbsp;<code style="color:#e6edf3;">{m['price']:.5f}</code></div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-fig = build_chart(m, selected_pair,
-                  fast=int(fast), slow=int(slow), sig=int(sig),
-                  show_n=show_candles)
-st.plotly_chart(fig, use_container_width=True)
+        # ── KPI strip ──────────────────────────────────────────────
+        accel_val = "▲ Accel" if m["accelerating"] else ("▼ Decel" if m["decelerating"] else "—")
+        accel_col = "#3fb950" if m["accelerating"] else "#f85149" if m["decelerating"] else "#484f58"
+        k1, k2, k3, k4, k5 = st.columns(5)
+        for col, val, lbl, c in [
+            (k1, f'{m["h_now"]:+.5f}',   "Histogram Now",        color),
+            (k2, f'{m["h_prev"]:+.5f}',  "Histogram Prev Bar",   "#8b949e"),
+            (k3, str(m["rising_count"]),  f"Rising / Last {lb}",  "#3fb950"),
+            (k4, str(m["falling_count"]), f"Falling / Last {lb}", "#f85149"),
+            (k5, accel_val,               "Momentum",             accel_col),
+        ]:
+            with col:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-value" style="color:{c};font-size:16px;">{val}</div>'
+                    f'<div class="metric-label">{lbl}</div></div>',
+                    unsafe_allow_html=True)
 
-st.markdown("---")
+        st.markdown("---")
 
-# ── Recent histogram log ───────────────────────────────────────────
-st.markdown('<div class="section-title">🗂️ Recent Histogram Values (last 20 days)</div>',
-            unsafe_allow_html=True)
+        # ── Condition breakdown ────────────────────────────────────
+        st.markdown('<div class="section-title">🧩 Momentum Conditions</div>',
+                    unsafe_allow_html=True)
 
-recent = m["df"].tail(20)[["Close","macd","signal","hist"]].copy()
-recent = recent[::-1]  # newest first
-recent.index = recent.index.strftime("%Y-%m-%d")
+        def render_conds(title, conds):
+            html = f'<div class="card"><div class="card-header">{title}</div>'
+            for text, met in conds.items():
+                badge_cls = "cond-badge-ok" if met else "cond-badge-fail"
+                badge_txt = "✅ Yes" if met else "❌ No"
+                html += (f'<div class="cond-row">'
+                         f'<div class="cond-text">{text}</div>'
+                         f'<span class="{badge_cls}">{badge_txt}</span></div>')
+            score    = sum(conds.values())
+            total    = len(conds)
+            pct      = int(score / total * 100)
+            prog_col = "#3fb950" if pct >= 70 else "#e3b341" if pct >= 40 else "#f85149"
+            html += (f'<div style="margin-top:14px;">'
+                     f'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+                     f'<span style="font-size:11px;color:#8b949e;">Score</span>'
+                     f'<span style="font-size:11px;font-weight:700;color:{prog_col};">{score}/{total}</span>'
+                     f'</div><div class="prog-track">'
+                     f'<div style="background:{prog_col};width:{pct}%;height:100%;border-radius:8px;"></div>'
+                     f'</div></div></div>')
+            return html
 
-# Add direction column
-hist_arr = recent["hist"].values
-directions = []
-for i, v in enumerate(hist_arr):
-    if i == len(hist_arr) - 1:
-        directions.append("—")
-        continue
-    prev = hist_arr[i + 1]   # next row = older bar
-    if v > prev:
-        directions.append("↑ Rising" if v > 0 else "↑ Recovering")
-    elif v < prev:
-        directions.append("↓ Falling" if v < 0 else "↓ Fading")
-    else:
-        directions.append("→ Flat")
+        col_l, col_r = st.columns(2)
+        with col_l:
+            st.markdown(render_conds("📈 Bullish Momentum Conditions", m["conds"]),
+                        unsafe_allow_html=True)
+        with col_r:
+            st.markdown(render_conds("📉 Bearish Momentum Conditions", m["bear_conds"]),
+                        unsafe_allow_html=True)
 
-recent["Direction"] = directions
-recent.columns      = ["Close", "MACD", "Signal", "Histogram", "Direction"]
+        st.markdown("---")
 
-st.dataframe(
-    recent.round(5),
-    use_container_width=True,
-    column_config={
-        "Histogram":  st.column_config.NumberColumn("Histogram", format="%.5f"),
-        "MACD":       st.column_config.NumberColumn("MACD",      format="%.5f"),
-        "Signal":     st.column_config.NumberColumn("Signal",    format="%.5f"),
-        "Close":      st.column_config.NumberColumn("Close",     format="%.5f"),
-        "Direction":  st.column_config.TextColumn("Direction"),
-    },
-)
+        # ── Chart ──────────────────────────────────────────────────
+        st.markdown('<div class="section-title">📈 Daily Chart — Price · MACD · Histogram</div>',
+                    unsafe_allow_html=True)
+        fig = build_chart(m, selected_pair,
+                          fast=int(fast), slow=int(slow), sig=int(sig),
+                          show_n=show_candles)
+        st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("---")
+        st.markdown("---")
 
-# ── Explainer ──────────────────────────────────────────────────────
-st.markdown('<div class="section-title">📖 How to Read MACD Histogram Momentum</div>',
-            unsafe_allow_html=True)
+        # ── Recent histogram log ───────────────────────────────────
+        st.markdown('<div class="section-title">🗂️ Recent Histogram Values (last 20 days)</div>',
+                    unsafe_allow_html=True)
+        recent = m["df"].tail(20)[["Close","macd","signal","hist"]].copy()
+        recent = recent[::-1]
+        recent.index = recent.index.strftime("%Y-%m-%d")
+        hist_arr   = recent["hist"].values
+        directions = []
+        for i, v in enumerate(hist_arr):
+            if i == len(hist_arr) - 1:
+                directions.append("—")
+                continue
+            prev = hist_arr[i + 1]
+            if v > prev:
+                directions.append("↑ Rising" if v > 0 else "↑ Recovering")
+            elif v < prev:
+                directions.append("↓ Falling" if v < 0 else "↓ Fading")
+            else:
+                directions.append("→ Flat")
+        recent["Direction"] = directions
+        recent.columns      = ["Close", "MACD", "Signal", "Histogram", "Direction"]
+        st.dataframe(recent.round(5), use_container_width=True,
+                     column_config={
+                         "Histogram": st.column_config.NumberColumn("Histogram", format="%.5f"),
+                         "MACD":      st.column_config.NumberColumn("MACD",      format="%.5f"),
+                         "Signal":    st.column_config.NumberColumn("Signal",    format="%.5f"),
+                         "Close":     st.column_config.NumberColumn("Close",     format="%.5f"),
+                         "Direction": st.column_config.TextColumn("Direction"),
+                     })
 
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown(f"""
-    <div class="explainer">
-    <b style="color:#3fb950;">📈 Bullish histogram setup</b><br><br>
-    <b>1. Histogram turns positive</b><br>
-    Crosses from negative to positive — MACD line has crossed above the signal line.
-    The histogram bar is now above zero.<br><br>
-    <b>2. Histogram bars grow taller</b><br>
-    Each bar is larger than the previous — momentum is <em>accelerating</em> to the upside.
-    Bright green bars in the chart.<br><br>
-    <b>3. Histogram stays positive while pulling back</b><br>
-    Bars shrink (faded green) but stay above zero — healthy pullback within an uptrend.
-    Look for entry when bars start growing again.
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown("---")
 
-with col_b:
-    st.markdown(f"""
-    <div class="explainer">
-    <b style="color:#f85149;">📉 Bearish histogram setup</b><br><br>
-    <b>1. Histogram turns negative</b><br>
-    Crosses from positive to negative — MACD line has crossed below the signal line.
-    The histogram bar is now below zero.<br><br>
-    <b>2. Histogram bars grow deeper</b><br>
-    Each bar is more negative than the previous — bearish momentum is <em>accelerating</em>.
-    Bright red bars in the chart.<br><br>
-    <b>3. Histogram stays negative while recovering</b><br>
-    Bars shrink (faded red) but stay below zero — a pullback within a downtrend.
-    Look for short entry when bars start deepening again.
-    </div>
-    """, unsafe_allow_html=True)
+        # ── Explainer ──────────────────────────────────────────────
+        st.markdown('<div class="section-title">📖 How to Read MACD Histogram Momentum</div>',
+                    unsafe_allow_html=True)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("""
+            <div class="explainer">
+            <b style="color:#3fb950;">📈 Bullish histogram setup</b><br><br>
+            <b>1. Histogram turns positive</b><br>
+            Crosses from negative to positive — MACD line has crossed above the signal line.
+            The histogram bar is now above zero.<br><br>
+            <b>2. Histogram bars grow taller</b><br>
+            Each bar is larger than the previous — momentum is <em>accelerating</em> to the upside.
+            Bright green bars in the chart.<br><br>
+            <b>3. Histogram stays positive while pulling back</b><br>
+            Bars shrink (faded green) but stay above zero — healthy pullback within an uptrend.
+            Look for entry when bars start growing again.
+            </div>
+            """, unsafe_allow_html=True)
+        with col_b:
+            st.markdown("""
+            <div class="explainer">
+            <b style="color:#f85149;">📉 Bearish histogram setup</b><br><br>
+            <b>1. Histogram turns negative</b><br>
+            Crosses from positive to negative — MACD line has crossed below the signal line.
+            The histogram bar is now below zero.<br><br>
+            <b>2. Histogram bars grow deeper</b><br>
+            Each bar is more negative than the previous — bearish momentum is <em>accelerating</em>.
+            Bright red bars in the chart.<br><br>
+            <b>3. Histogram stays negative while recovering</b><br>
+            Bars shrink (faded red) but stay below zero — a pullback within a downtrend.
+            Look for short entry when bars start deepening again.
+            </div>
+            """, unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="explainer" style="margin-top:12px;">
-<b style="color:#388bfd;">⚙️ Settings used on this page</b>&nbsp;·&nbsp;
-MACD Fast: <code>{fast}</code> &nbsp;·&nbsp;
-Slow: <code>{slow}</code> &nbsp;·&nbsp;
-Signal: <code>{sig}</code> &nbsp;·&nbsp;
-Lookback: <code>{lb} bars</code><br><br>
-This is <em>Check #09</em>. Confirm the histogram is turning in your intended trade direction
-<em>before</em> moving to Check #10 (session window) and the 4H confluence checks.
-Use alongside Check #08 (Daily trend intact — EMA crossover) for full daily timeframe alignment.
-</div>
-""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="explainer" style="margin-top:12px;">
+        <b style="color:#388bfd;">⚙️ Settings used on this page</b>&nbsp;·&nbsp;
+        MACD Fast: <code>{fast}</code> &nbsp;·&nbsp;
+        Slow: <code>{slow}</code> &nbsp;·&nbsp;
+        Signal: <code>{sig}</code> &nbsp;·&nbsp;
+        Lookback: <code>{lb} bars</code><br><br>
+        This is <em>Check #09</em>. Confirm the histogram is turning in your intended trade direction
+        <em>before</em> moving to Check #10 (session window) and the 4H confluence checks.
+        Use alongside Check #08 (Daily trend intact — EMA crossover) for full daily timeframe alignment.
+        </div>
+        """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("""
