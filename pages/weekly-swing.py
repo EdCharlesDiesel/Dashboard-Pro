@@ -555,6 +555,7 @@ with st.sidebar:
     st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
     st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
     st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
+    st.divider()
     st.markdown("**📅 Weekly Settings**")
     pivot_lb = st.slider("Swing pivot sensitivity (weeks)", 1, 5, 2,
                          help="Left/right candles needed to confirm a swing pivot. "
@@ -612,249 +613,370 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-with st.spinner(f"Fetching weekly & daily data for {selected_pair}…"):
-    df_w = fetch_weekly(ticker)
-    df_d = fetch_daily(ticker)
+tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
 
-if df_w.empty or len(df_w) < 10:
-    st.error(f"⚠️ Could not load weekly data for **{selected_pair}**.")
-    st.stop()
-if df_d.empty or len(df_d) < 20:
-    st.error(f"⚠️ Could not load daily data for **{selected_pair}**.")
-    st.stop()
 
-sw = classify_weekly_swing(df_w, pivot_lb=int(pivot_lb))
-dt = classify_daily_trend(df_d, fast=int(daily_fast), slow=int(daily_slow))
-aln = determine_alignment(sw["bias"], dt["trend"])
+# ══════════════════════════════════════════════════════════════════
+# TAB 1 — ALL-PAIRS SCANNER
+# ══════════════════════════════════════════════════════════════════
+with tab_scan:
+    scan_results = {}
+    prog = st.progress(0, text="📡 Scanning all pairs…")
+    for idx, (pair, cfg) in enumerate(INSTRUMENTS.items()):
+        prog.progress((idx + 1) / len(INSTRUMENTS),
+                      text=f"📡 {pair} ({idx+1}/{len(INSTRUMENTS)})…")
+        try:
+            df_w_s = fetch_weekly(cfg["ticker"])
+            df_d_s = fetch_daily(cfg["ticker"])
+            if df_w_s.empty or len(df_w_s) < 10 or df_d_s.empty or len(df_d_s) < 20:
+                scan_results[pair] = None
+                continue
+            sw_s  = classify_weekly_swing(df_w_s, pivot_lb=int(pivot_lb))
+            dt_s  = classify_daily_trend(df_d_s, fast=int(daily_fast), slow=int(daily_slow))
+            aln_s = determine_alignment(sw_s["bias"], dt_s["trend"])
+            scan_results[pair] = {"sw": sw_s, "dt": dt_s, "aln": aln_s}
+        except Exception:
+            scan_results[pair] = None
+    prog.empty()
 
-GRADE_CSS = {
-    "aligned": "verdict-aligned",
-    "conflict": "verdict-conflict",
-    "neutral": "verdict-neutral",
-    "unclear": "verdict-unclear",
-}
-vcls = GRADE_CSS[aln["grade"]]
-color = aln["color"]
+    loaded_s = {p: v for p, v in scan_results.items() if v is not None}
+    aligned  = [p for p, v in loaded_s.items() if v["aln"]["status"] == "ALIGNED"]
+    conflict = [p for p, v in loaded_s.items() if v["aln"]["status"] == "CONFLICT"]
+    ranging  = [p for p, v in loaded_s.items() if v["aln"]["status"] == "RANGING"]
+    unclear  = [p for p, v in loaded_s.items() if v["aln"]["status"] == "UNCLEAR"]
+    no_data  = [p for p in INSTRUMENTS if p not in loaded_s]
 
-w_arrow = "📈" if sw["bias"] == "BULLISH" else "📉" if sw["bias"] == "BEARISH" else "↔️"
-d_arrow = "📈" if dt["trend"] == "BULLISH" else "📉" if dt["trend"] == "BEARISH" else "〰️"
-match_icon = "✅" if aln["status"] == "ALIGNED" else "❌" if aln["status"] == "CONFLICT" else "⚠️"
+    s1, s2, s3, s4, s5 = st.columns(5)
+    for col_, val_, lbl_, c_ in [
+        (s1, len(aligned),  "✅ Aligned",  "#3fb950"),
+        (s2, len(conflict), "❌ Conflict", "#f85149"),
+        (s3, len(ranging),  "↔️ Ranging",  "#e3b341"),
+        (s4, len(unclear),  "⚠️ Unclear",  "#8b949e"),
+        (s5, len(no_data),  "⛔ No Data",  "#484f58"),
+    ]:
+        with col_:
+            st.markdown(
+                f'<div class="metric-box">'
+                f'<div class="metric-value" style="color:{c_};font-size:20px;">{val_}</div>'
+                f'<div class="metric-label">{lbl_}</div></div>',
+                unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="{vcls}">
-  <div style="font-size:26px; font-weight:800; color:{color};
-              letter-spacing:1px; margin-bottom:10px;">{aln['verdict']}</div>
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-  <div style="display:flex; justify-content:center; align-items:center;
-              gap:20px; margin:12px 0; flex-wrap:wrap;">
-    <div style="background:rgba(13, 17, 23, 0.40); border:1px solid #30363d; border-radius:10px;
-                padding:12px 24px; text-align:center;">
-      <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase;
-                  color:#8b949e; margin-bottom:6px;">Weekly Swing</div>
-      <div style="font-size:22px;">{w_arrow}</div>
-      <div style="font-size:13px; font-weight:700;
-                  color:{'#3fb950' if sw['bias']=='BULLISH' else '#f85149' if sw['bias']=='BEARISH' else '#e3b341'};">
-        {sw["bias"]}
-      </div>
-    </div>
+    SCAN_ORDER = {"ALIGNED": 0, "CONFLICT": 1, "RANGING": 2, "UNCLEAR": 3}
+    sorted_scan = sorted(
+        INSTRUMENTS.keys(),
+        key=lambda p: (SCAN_ORDER.get(
+            loaded_s[p]["aln"]["status"] if p in loaded_s else "UNCLEAR", 9), p)
+    )
 
-    <div style="font-size:28px;">{match_icon}</div>
+    BORDER_COL = {"ALIGNED": "#3fb950", "CONFLICT": "#f85149",
+                  "RANGING": "#e3b341", "UNCLEAR":  "#484f58"}
+    BADGE_STYLE = {
+        "ALIGNED":  ("background:#0d2f1a;color:#3fb950;border:1px solid #238636;", "✅ Aligned"),
+        "CONFLICT": ("background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;", "❌ Conflict"),
+        "RANGING":  ("background:#2f1f0d;color:#e3b341;border:1px solid #9e6a03;", "↔️ Ranging"),
+        "UNCLEAR":  ("background:#21262d;color:#8b949e;border:1px solid #30363d;", "⚠️ Unclear"),
+    }
 
-    <div style="background:rgba(13, 17, 23, 0.40); border:1px solid #30363d; border-radius:10px;
-                padding:12px 24px; text-align:center;">
-      <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase;
-                  color:#8b949e; margin-bottom:6px;">Daily Trend</div>
-      <div style="font-size:22px;">{d_arrow}</div>
-      <div style="font-size:13px; font-weight:700;
-                  color:{'#3fb950' if dt['trend']=='BULLISH' else '#f85149' if dt['trend']=='BEARISH' else '#e3b341'};">
-        {dt["trend"]}
-      </div>
-    </div>
-  </div>
+    def _tag(css_class, text):
+        return (f'<span style="border-radius:3px;padding:1px 5px;font-size:9px;'
+                f'font-weight:700;margin-right:2px;{css_class}">{text}</span>')
 
-  <div style="font-size:13px; color:#8b949e; margin-top:10px;">{aln['desc']}</div>
-</div>
-""", unsafe_allow_html=True)
+    HH_CSS = "background:#0d4a2f;color:#3fb950;border:1px solid #238636;"
+    HL_CSS = "background:#0a3522;color:#56d364;border:1px solid #2ea043;"
+    LL_CSS = "background:#4a0d0d;color:#f85149;border:1px solid #8b2d2d;"
+    LH_CSS = "background:#3a0d0d;color:#ff7b72;border:1px solid #6e1414;"
 
-num_sh = len(sw["sh"])
-num_sl = len(sw["sl"])
-ema_cross = "✅ Bull" if dt["ema_bull"] else "❌ Bear"
+    cards_html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;">'
+    for pair in sorted_scan:
+        if pair not in loaded_s:
+            cards_html += (
+                f'<div style="border:1px solid #21262d;border-left:4px solid #30363d;'
+                f'background:#161b22;border-radius:10px;padding:11px 14px;opacity:.5;">'
+                f'<div style="font-size:13px;font-weight:700;color:#8b949e;">{pair}</div>'
+                f'<div style="font-size:10px;color:#484f58;margin-top:4px;">No data</div></div>'
+            )
+            continue
 
-k1, k2, k3, k4, k5 = st.columns(5)
-for col, val, lbl, c in [
-    (k1, sw["bias"], "Weekly Bias", color),
-    (k2, dt["trend"], "Daily Trend", "#3fb950" if dt["trend"] == "BULLISH" else "#f85149" if dt["trend"] == "BEARISH" else "#e3b341"),
-    (k3, str(num_sh), "Weekly Swing Highs", "#f85149"),
-    (k4, str(num_sl), "Weekly Swing Lows", "#3fb950"),
-    (k5, ema_cross, f"EMA {int(daily_fast)}/{int(daily_slow)} Cross", "#3fb950" if dt["ema_bull"] else "#f85149"),
-]:
-    with col:
-        st.markdown(
-            f'<div class="metric-box">'
-            f'<div class="metric-value" style="color:{c};font-size:17px;">{val}</div>'
-            f'<div class="metric-label">{lbl}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
+        r   = loaded_s[pair]
+        st_ = r["aln"]["status"]
+        bdr = BORDER_COL.get(st_, "#30363d")
+        bdg_css, bdg_txt = BADGE_STYLE.get(st_, BADGE_STYLE["UNCLEAR"])
+        w_bias  = r["sw"]["bias"]
+        d_trend = r["dt"]["trend"]
+        w_col   = "#3fb950" if w_bias == "BULLISH" else "#f85149" if w_bias == "BEARISH" else "#e3b341"
+        d_col   = "#3fb950" if d_trend == "BULLISH" else "#f85149" if d_trend == "BEARISH" else "#e3b341"
+        tags    = ((_tag(HH_CSS, "HH") if r["sw"].get("hh") else "") +
+                   (_tag(HL_CSS, "HL") if r["sw"].get("hl") else "") +
+                   (_tag(LL_CSS, "LL") if r["sw"].get("ll") else "") +
+                   (_tag(LH_CSS, "LH") if r["sw"].get("lh") else ""))
+        outline = "outline:2px solid #388bfd;" if pair == selected_pair else ""
+
+        cards_html += (
+            f'<div style="border:1px solid #21262d;border-left:4px solid {bdr};'
+            f'background:#161b22;border-radius:10px;padding:11px 14px;{outline}">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            f'<span style="font-size:13px;font-weight:700;color:#e6edf3;">{pair}</span>'
+            f'<span style="border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;{bdg_css}">{bdg_txt}</span>'
+            f'</div>'
+            f'<div style="display:flex;gap:10px;font-size:11px;margin-bottom:5px;">'
+            f'<span style="color:#484f58;">W:</span>'
+            f'<span style="color:{w_col};font-weight:600;">{w_bias}</span>'
+            f'<span style="color:#484f58;">D:</span>'
+            f'<span style="color:{d_col};font-weight:600;">{d_trend}</span>'
+            f'</div>'
+            f'<div>{tags}</div>'
+            f'</div>'
         )
+    cards_html += "</div>"
+    st.markdown(cards_html, unsafe_allow_html=True)
 
-st.markdown("---")
+    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+    with st.expander("📋 Full Scan Table"):
+        tbl_rows = []
+        for pair in INSTRUMENTS:
+            r = loaded_s.get(pair)
+            if r is None:
+                tbl_rows.append({"Pair": pair, "W Bias": "—", "D Trend": "—",
+                                 "HH": "—", "HL": "—", "LL": "—", "LH": "—",
+                                 "Alignment": "No Data"})
+            else:
+                tbl_rows.append({
+                    "Pair":      pair,
+                    "W Bias":    r["sw"]["bias"],
+                    "D Trend":   r["dt"]["trend"],
+                    "HH":        "✅" if r["sw"].get("hh") else "❌",
+                    "HL":        "✅" if r["sw"].get("hl") else "❌",
+                    "LL":        "✅" if r["sw"].get("ll") else "❌",
+                    "LH":        "✅" if r["sw"].get("lh") else "❌",
+                    "Alignment": r["aln"]["verdict"],
+                })
+        st.dataframe(pd.DataFrame(tbl_rows), use_container_width=True, hide_index=True)
 
-st.markdown('<div class="section-title">🧩 Alignment Breakdown</div>',
-            unsafe_allow_html=True)
 
+# ══════════════════════════════════════════════════════════════════
+# TAB 2 — PAIR DETAIL
+# ══════════════════════════════════════════════════════════════════
+with tab_detail:
+    with st.spinner(f"Fetching weekly & daily data for {selected_pair}…"):
+        df_w = fetch_weekly(ticker)
+        df_d = fetch_daily(ticker)
 
-def align_row(icon, label, value, badge_text, badge_ok):
-    badge_cls = "align-badge-ok" if badge_ok is True \
-        else "align-badge-fail" if badge_ok is False \
-        else "align-badge-warn"
-    st.markdown(f"""
-    <div class="align-row">
-      <div class="align-icon">{icon}</div>
-      <div class="align-label">{label}</div>
-      <div class="align-value">{value}</div>
-      <span class="{badge_cls}">{badge_text}</span>
-    </div>
-    """, unsafe_allow_html=True)
+    detail_ok = True
+    if df_w.empty or len(df_w) < 10:
+        st.error(f"⚠️ Could not load weekly data for **{selected_pair}**.")
+        detail_ok = False
+    elif df_d.empty or len(df_d) < 20:
+        st.error(f"⚠️ Could not load daily data for **{selected_pair}**.")
+        detail_ok = False
 
+    if detail_ok:
+        sw  = classify_weekly_swing(df_w, pivot_lb=int(pivot_lb))
+        dt  = classify_daily_trend(df_d, fast=int(daily_fast), slow=int(daily_slow))
+        aln = determine_alignment(sw["bias"], dt["trend"])
 
-hh_tag = '<span class="hh-tag">HH</span>' if sw.get("hh") else ""
-hl_tag = '<span class="hl-tag">HL</span>' if sw.get("hl") else ""
-ll_tag = '<span class="ll-tag">LL</span>' if sw.get("ll") else ""
-lh_tag = '<span class="lh-tag">LH</span>' if sw.get("lh") else ""
-struct_tags = hh_tag + hl_tag + ll_tag or "—"
+        GRADE_CSS = {
+            "aligned":  "verdict-aligned",
+            "conflict": "verdict-conflict",
+            "neutral":  "verdict-neutral",
+            "unclear":  "verdict-unclear",
+        }
+        vcls  = GRADE_CSS[aln["grade"]]
+        color = aln["color"]
 
-col_l, col_r = st.columns(2)
+        w_arrow    = "📈" if sw["bias"] == "BULLISH" else "📉" if sw["bias"] == "BEARISH" else "↔️"
+        d_arrow    = "📈" if dt["trend"] == "BULLISH" else "📉" if dt["trend"] == "BEARISH" else "〰️"
+        match_icon = "✅" if aln["status"] == "ALIGNED" else "❌" if aln["status"] == "CONFLICT" else "⚠️"
 
-with col_l:
-    st.markdown('<div class="card"><div class="card-header">📅 Weekly Swing Structure</div>',
-                unsafe_allow_html=True)
-    align_row("📊", "Swing structure",
-              sw["label"],
-              "Bullish" if sw["bias"] == "BULLISH" else "Bearish" if sw["bias"] == "BEARISH" else "Ranging",
-              sw["bias"] == "BULLISH" or None if sw["bias"] != "BEARISH" else False)
-    align_row("🔺", "Last swing high",
-              f'{sw["last_sh"]:.5f}' if sw.get("last_sh") else "—",
-              "HH ✅" if sw.get("hh") else "LH ❌",
-              sw.get("hh", False))
-    align_row("🔻", "Last swing low",
-              f'{sw["last_sl"]:.5f}' if sw.get("last_sl") else "—",
-              "HL ✅" if sw.get("hl") else "LL ❌",
-              sw.get("hl", False))
-    align_row("🔢", "Confirmed pivots",
-              f'{num_sh} SH · {num_sl} SL',
-              "Sufficient" if num_sh >= 2 and num_sl >= 2 else "Need more",
-              num_sh >= 2 and num_sl >= 2)
-    st.markdown(f"""
-    <div style="padding:10px 0 4px 0;font-size:12px;color:#8b949e;">
-        Structure tags: &nbsp;{struct_tags}
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="{vcls}">
+          <div style="font-size:26px; font-weight:800; color:{color};
+                      letter-spacing:1px; margin-bottom:10px;">{aln['verdict']}</div>
+          <div style="display:flex; justify-content:center; align-items:center;
+                      gap:20px; margin:12px 0; flex-wrap:wrap;">
+            <div style="background:rgba(13,17,23,.40); border:1px solid #30363d;
+                        border-radius:10px; padding:12px 24px; text-align:center;">
+              <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+                          color:#8b949e; margin-bottom:6px;">Weekly Swing</div>
+              <div style="font-size:22px;">{w_arrow}</div>
+              <div style="font-size:13px; font-weight:700;
+                          color:{'#3fb950' if sw['bias']=='BULLISH' else '#f85149' if sw['bias']=='BEARISH' else '#e3b341'};">
+                {sw["bias"]}
+              </div>
+            </div>
+            <div style="font-size:28px;">{match_icon}</div>
+            <div style="background:rgba(13,17,23,.40); border:1px solid #30363d;
+                        border-radius:10px; padding:12px 24px; text-align:center;">
+              <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+                          color:#8b949e; margin-bottom:6px;">Daily Trend</div>
+              <div style="font-size:22px;">{d_arrow}</div>
+              <div style="font-size:13px; font-weight:700;
+                          color:{'#3fb950' if dt['trend']=='BULLISH' else '#f85149' if dt['trend']=='BEARISH' else '#e3b341'};">
+                {dt["trend"]}
+              </div>
+            </div>
+          </div>
+          <div style="font-size:13px; color:#8b949e; margin-top:10px;">{aln['desc']}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-with col_r:
-    st.markdown('<div class="card"><div class="card-header">📆 Daily Trend Confirmation</div>',
-                unsafe_allow_html=True)
-    align_row("〰️", "Daily trend",
-              dt["trend"],
-              "Bullish" if dt["trend"] == "BULLISH" else "Bearish" if dt["trend"] == "BEARISH" else "Mixed",
-              dt["trend"] == "BULLISH" or None if dt["trend"] != "BEARISH" else False)
-    align_row("📈", f"EMA {int(daily_fast)} vs EMA {int(daily_slow)}",
-              f'{dt["ema_f"]:.5f} vs {dt["ema_s"]:.5f}',
-              "Bull cross ✅" if dt["ema_bull"] else "Bear cross ❌",
-              dt["ema_bull"])
-    align_row("💵", "Price vs slow EMA",
-              f'{dt["price"]:.5f} {">" if dt["price"] > dt["ema_s"] else "<"} {dt["ema_s"]:.5f}',
-              "Above ✅" if dt["price"] > dt["ema_s"] else "Below ❌",
-              dt["price"] > dt["ema_s"])
-    align_row("🔺", "Daily swing highs",
-              "HH ✅" if dt["daily_hh"] else "LH ❌",
-              "Higher Highs" if dt["daily_hh"] else "Lower Highs",
-              dt["daily_hh"])
-    align_row("🔻", "Daily swing lows",
-              "HL ✅" if dt["daily_hl"] else "LL ❌",
-              "Higher Lows" if dt["daily_hl"] else "Lower Lows",
-              dt["daily_hl"])
-    st.markdown('</div>', unsafe_allow_html=True)
+        num_sh    = len(sw["sh"])
+        num_sl    = len(sw["sl"])
+        ema_cross = "✅ Bull" if dt["ema_bull"] else "❌ Bear"
 
-st.markdown("---")
+        k1, k2, k3, k4, k5 = st.columns(5)
+        for col, val, lbl, c in [
+            (k1, sw["bias"], "Weekly Bias", color),
+            (k2, dt["trend"], "Daily Trend",
+             "#3fb950" if dt["trend"]=="BULLISH" else "#f85149" if dt["trend"]=="BEARISH" else "#e3b341"),
+            (k3, str(num_sh), "Weekly Swing Highs", "#f85149"),
+            (k4, str(num_sl), "Weekly Swing Lows",  "#3fb950"),
+            (k5, ema_cross, f"EMA {int(daily_fast)}/{int(daily_slow)} Cross",
+             "#3fb950" if dt["ema_bull"] else "#f85149"),
+        ]:
+            with col:
+                st.markdown(
+                    f'<div class="metric-box">'
+                    f'<div class="metric-value" style="color:{c};font-size:17px;">{val}</div>'
+                    f'<div class="metric-label">{lbl}</div></div>',
+                    unsafe_allow_html=True)
 
-st.markdown('<div class="section-title">📊 Weekly & Daily Charts</div>',
-            unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown('<div class="section-title">🧩 Alignment Breakdown</div>',
+                    unsafe_allow_html=True)
 
-tab_w, tab_d = st.tabs(["📅 Weekly Swing Chart", "📆 Daily Trend Chart"])
+        def align_row(icon, label, value, badge_text, badge_ok):
+            badge_cls = ("align-badge-ok"   if badge_ok is True  else
+                         "align-badge-fail" if badge_ok is False else
+                         "align-badge-warn")
+            st.markdown(f"""
+            <div class="align-row">
+              <div class="align-icon">{icon}</div>
+              <div class="align-label">{label}</div>
+              <div class="align-value">{value}</div>
+              <span class="{badge_cls}">{badge_text}</span>
+            </div>""", unsafe_allow_html=True)
 
-with tab_w:
-    fig_w = build_weekly_chart(sw, selected_pair, show_n=weekly_n)
-    st.plotly_chart(fig_w, use_container_width=True)
+        hh_tag = '<span class="hh-tag">HH</span>' if sw.get("hh") else ""
+        hl_tag = '<span class="hl-tag">HL</span>' if sw.get("hl") else ""
+        ll_tag = '<span class="ll-tag">LL</span>' if sw.get("ll") else ""
+        lh_tag = '<span class="lh-tag">LH</span>' if sw.get("lh") else ""
+        struct_tags = (hh_tag + hl_tag + ll_tag + lh_tag) or "—"
 
-with tab_d:
-    fig_d = build_daily_chart(dt, selected_pair,
-                              fast=int(daily_fast), slow=int(daily_slow),
-                              show_n=daily_n)
-    st.plotly_chart(fig_d, use_container_width=True)
+        col_l, col_r = st.columns(2)
 
-st.markdown("---")
+        with col_l:
+            st.markdown('<div class="card"><div class="card-header">📅 Weekly Swing Structure</div>',
+                        unsafe_allow_html=True)
+            align_row("📊", "Swing structure", sw["label"],
+                      "Bullish" if sw["bias"]=="BULLISH" else "Bearish" if sw["bias"]=="BEARISH" else "Ranging",
+                      True if sw["bias"]=="BULLISH" else False if sw["bias"]=="BEARISH" else None)
+            align_row("🔺", "Last swing high",
+                      f'{sw["last_sh"]:.5f}' if sw.get("last_sh") else "—",
+                      "HH ✅" if sw.get("hh") else "LH ❌", sw.get("hh", False))
+            align_row("🔻", "Last swing low",
+                      f'{sw["last_sl"]:.5f}' if sw.get("last_sl") else "—",
+                      "HL ✅" if sw.get("hl") else "LL ❌", sw.get("hl", False))
+            align_row("🔢", "Confirmed pivots", f'{num_sh} SH · {num_sl} SL',
+                      "Sufficient" if num_sh >= 2 and num_sl >= 2 else "Need more",
+                      num_sh >= 2 and num_sl >= 2)
+            st.markdown(f'<div style="padding:10px 0 4px 0;font-size:12px;color:#8b949e;">'
+                        f'Structure tags: &nbsp;{struct_tags}</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-with st.expander("📋 Weekly Pivot History"):
-    rows = []
-    df_tmp = sw["df"]
-    sh_list = [(i, float(df_tmp.loc[i, "High"])) for i in sw["sh_idx"]]
-    sl_list = [(i, float(df_tmp.loc[i, "Low"])) for i in sw["sl_idx"]]
+        with col_r:
+            st.markdown('<div class="card"><div class="card-header">📆 Daily Trend Confirmation</div>',
+                        unsafe_allow_html=True)
+            align_row("〰️", "Daily trend", dt["trend"],
+                      "Bullish" if dt["trend"]=="BULLISH" else "Bearish" if dt["trend"]=="BEARISH" else "Mixed",
+                      True if dt["trend"]=="BULLISH" else False if dt["trend"]=="BEARISH" else None)
+            align_row("📈", f"EMA {int(daily_fast)} vs EMA {int(daily_slow)}",
+                      f'{dt["ema_f"]:.5f} vs {dt["ema_s"]:.5f}',
+                      "Bull cross ✅" if dt["ema_bull"] else "Bear cross ❌", dt["ema_bull"])
+            align_row("💵", "Price vs slow EMA",
+                      f'{dt["price"]:.5f} {">" if dt["price"] > dt["ema_s"] else "<"} {dt["ema_s"]:.5f}',
+                      "Above ✅" if dt["price"] > dt["ema_s"] else "Below ❌",
+                      dt["price"] > dt["ema_s"])
+            align_row("🔺", "Daily swing highs",
+                      "HH ✅" if dt["daily_hh"] else "LH ❌",
+                      "Higher Highs" if dt["daily_hh"] else "Lower Highs", dt["daily_hh"])
+            align_row("🔻", "Daily swing lows",
+                      "HL ✅" if dt["daily_hl"] else "LL ❌",
+                      "Higher Lows" if dt["daily_hl"] else "Lower Lows", dt["daily_hl"])
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    for idx, (ts, val) in enumerate(sh_list[-10:]):
-        prev_val = sh_list[idx - 1][1] if idx > 0 else None
-        tag = "HH ✅" if (prev_val and val > prev_val) else ("LH ❌" if prev_val else "—")
-        rows.append({"Date": ts.strftime("%Y-%m-%d"), "Type": "Swing High",
-                     "Price": round(val, 5), "Structure": tag})
-    for idx, (ts, val) in enumerate(sl_list[-10:]):
-        prev_val = sl_list[idx - 1][1] if idx > 0 else None
-        tag = "HL ✅" if (prev_val and val > prev_val) else ("LL ❌" if prev_val else "—")
-        rows.append({"Date": ts.strftime("%Y-%m-%d"), "Type": "Swing Low",
-                     "Price": round(val, 5), "Structure": tag})
+        st.markdown("---")
+        st.markdown('<div class="section-title">📊 Weekly & Daily Charts</div>',
+                    unsafe_allow_html=True)
 
-    if rows:
-        piv_df = pd.DataFrame(rows).sort_values("Date", ascending=False)
-        st.dataframe(piv_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("No pivot data available.")
+        tab_w, tab_d = st.tabs(["📅 Weekly Swing Chart", "📆 Daily Trend Chart"])
+        with tab_w:
+            fig_w = build_weekly_chart(sw, selected_pair, show_n=weekly_n)
+            st.plotly_chart(fig_w, use_container_width=True)
+        with tab_d:
+            fig_d = build_daily_chart(dt, selected_pair,
+                                      fast=int(daily_fast), slow=int(daily_slow),
+                                      show_n=daily_n)
+            st.plotly_chart(fig_d, use_container_width=True)
 
-st.markdown("---")
+        st.markdown("---")
 
-st.markdown('<div class="section-title">📖 Alignment Logic Explained</div>',
-            unsafe_allow_html=True)
+        with st.expander("📋 Weekly Pivot History"):
+            rows = []
+            df_tmp  = sw["df"]
+            sh_list = [(i, float(df_tmp.loc[i, "High"])) for i in sw["sh_idx"]]
+            sl_list = [(i, float(df_tmp.loc[i, "Low"]))  for i in sw["sl_idx"]]
+            for idx, (ts, val) in enumerate(sh_list[-10:]):
+                prev_val = sh_list[idx - 1][1] if idx > 0 else None
+                tag = "HH ✅" if (prev_val and val > prev_val) else ("LH ❌" if prev_val else "—")
+                rows.append({"Date": ts.strftime("%Y-%m-%d"), "Type": "Swing High",
+                             "Price": round(val, 5), "Structure": tag})
+            for idx, (ts, val) in enumerate(sl_list[-10:]):
+                prev_val = sl_list[idx - 1][1] if idx > 0 else None
+                tag = "HL ✅" if (prev_val and val > prev_val) else ("LL ❌" if prev_val else "—")
+                rows.append({"Date": ts.strftime("%Y-%m-%d"), "Type": "Swing Low",
+                             "Price": round(val, 5), "Structure": tag})
+            if rows:
+                piv_df = pd.DataFrame(rows).sort_values("Date", ascending=False)
+                st.dataframe(piv_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No pivot data available.")
 
-col_a, col_b = st.columns(2)
-with col_a:
-    st.markdown("""
-    <div class="explainer">
-    <b style="color:#3fb950;">📅 Weekly Swing Structure</b><br><br>
-    The weekly chart defines the <em>primary bias</em> — the dominant force driving price.<br><br>
-    <b>Bullish structure (HH + HL):</b><br>
-    Each successive swing high and swing low is higher than the previous.
-    Buyers are in control across the macro timeframe.<br><br>
-    <b>Bearish structure (LH + LL):</b><br>
-    Each successive swing high and swing low is lower than the previous.
-    Sellers dominate the macro picture.<br><br>
-    Pivots require a configurable number of candles on each side to be confirmed,
-    reducing false signals from noise.
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_b:
-    st.markdown(f"""
-    <div class="explainer">
-    <b style="color:#388bfd;">📆 Daily Trend & Alignment Rule</b><br><br>
-    The daily trend acts as the <em>execution timeframe filter</em>.<br><br>
-    <b>EMA crossover:</b><br>
-    EMA {int(daily_fast)} above EMA {int(daily_slow)} = daily bullish.<br>
-    EMA {int(daily_fast)} below EMA {int(daily_slow)} = daily bearish.<br><br>
-    <b>✅ Aligned:</b> Weekly bias matches daily EMA direction → trade with both.<br>
-    <b>❌ Conflict:</b> Weekly and daily point opposite ways → skip or size down.<br>
-    <b>↔️ Ranging:</b> Weekly structure is not trending → wait for breakout.<br><br>
-    This is <em>Check #7</em>. A confirmed ✅ Aligned result here means the
-    primary macro trend supports the entry direction you identified on the lower timeframes.
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown("---")
+        st.markdown('<div class="section-title">📖 Alignment Logic Explained</div>',
+                    unsafe_allow_html=True)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("""
+            <div class="explainer">
+            <b style="color:#3fb950;">📅 Weekly Swing Structure</b><br><br>
+            The weekly chart defines the <em>primary bias</em> — the dominant force driving price.<br><br>
+            <b>Bullish structure (HH + HL):</b><br>
+            Each successive swing high and swing low is higher than the previous.
+            Buyers are in control across the macro timeframe.<br><br>
+            <b>Bearish structure (LH + LL):</b><br>
+            Each successive swing high and swing low is lower than the previous.
+            Sellers dominate the macro picture.<br><br>
+            Pivots require a configurable number of candles on each side to be confirmed,
+            reducing false signals from noise.
+            </div>
+            """, unsafe_allow_html=True)
+        with col_b:
+            st.markdown(f"""
+            <div class="explainer">
+            <b style="color:#388bfd;">📆 Daily Trend & Alignment Rule</b><br><br>
+            The daily trend acts as the <em>execution timeframe filter</em>.<br><br>
+            <b>EMA crossover:</b><br>
+            EMA {int(daily_fast)} above EMA {int(daily_slow)} = daily bullish.<br>
+            EMA {int(daily_fast)} below EMA {int(daily_slow)} = daily bearish.<br><br>
+            <b>✅ Aligned:</b> Weekly bias matches daily EMA direction → trade with both.<br>
+            <b>❌ Conflict:</b> Weekly and daily point opposite ways → skip or size down.<br>
+            <b>↔️ Ranging:</b> Weekly structure is not trending → wait for breakout.<br><br>
+            This is <em>Check #7</em>. A confirmed ✅ Aligned result here means the
+            primary macro trend supports the entry direction you identified on the lower timeframes.
+            </div>
+            """, unsafe_allow_html=True)
 
 st.markdown("""
 <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
