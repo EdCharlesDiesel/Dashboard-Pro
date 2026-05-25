@@ -53,6 +53,12 @@ st.markdown("""
     .verdict-none { background:linear-gradient(135deg,#161b22,#1c2128);
                     border:1px solid #30363d; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
+    .verdict-turning-bull { background:linear-gradient(135deg,#162812,#1f3d18);
+                            border:2px solid #4d8c2a; border-radius:14px;
+                            padding:22px 28px; text-align:center; margin-bottom:18px; }
+    .verdict-turning-bear { background:linear-gradient(135deg,#28160d,#3d2214);
+                            border:2px solid #8c5a2a; border-radius:14px;
+                            padding:22px 28px; text-align:center; margin-bottom:18px; }
 
     /* Histogram bars table */
     .hist-row{ display:flex; align-items:center; gap:12px; padding:8px 14px;
@@ -208,14 +214,14 @@ def analyse_momentum(df: pd.DataFrame,
     elif crossed_up or (below_zero and rising_count >= 2):
         verdict = "TURNING BULLISH"
         label   = "🟡 Turning Bullish"
-        color   = "#e3b341"
-        grade   = "flat"
+        color   = "#6ac43f"
+        grade   = "turning-bull"
         desc    = "Histogram is climbing from negative territory — possible bullish shift forming."
     elif crossed_down or (above_zero and falling_count >= 2):
         verdict = "TURNING BEARISH"
         label   = "🟡 Turning Bearish"
-        color   = "#e3b341"
-        grade   = "flat"
+        color   = "#e07b39"
+        grade   = "turning-bear"
         desc    = "Histogram is falling from positive territory — possible bearish shift forming."
     else:
         verdict = "FLAT"
@@ -501,10 +507,12 @@ m = analyse_momentum(df_raw, int(fast), int(slow), int(sig), int(lb))
 
 # ── Verdict banner ─────────────────────────────────────────────────
 GRADE_CSS = {
-    "bull": "verdict-bull",
-    "bear": "verdict-bear",
-    "flat": "verdict-flat",
-    "none": "verdict-none",
+    "bull":         "verdict-bull",
+    "bear":         "verdict-bear",
+    "turning-bull": "verdict-turning-bull",
+    "turning-bear": "verdict-turning-bear",
+    "flat":         "verdict-flat",
+    "none":         "verdict-none",
 }
 vcls  = GRADE_CSS[m["grade"]]
 color = m["color"]
