@@ -556,7 +556,7 @@ with right:
                       annotation_position="right")
 
         fig.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             legend=dict(font=dict(color="#8b949e", size=11), bgcolor="#161b22",
                         bordercolor="#21262d", orientation="h", x=0, y=1.06),
             margin=dict(l=10, r=80, t=30, b=10),
@@ -605,7 +605,7 @@ with right:
         fig2.add_hrect(y0=ob_level, y1=105, fillcolor="#f85149", opacity=0.05, line_width=0)
         fig2.add_hrect(y0=0, y1=os_level, fillcolor="#388bfd", opacity=0.05, line_width=0)
         fig2.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             margin=dict(l=10, r=60, t=10, b=10), height=300,
             xaxis=dict(tickfont=dict(color="#8b949e", size=9), tickangle=-40, showgrid=False),
             yaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d",

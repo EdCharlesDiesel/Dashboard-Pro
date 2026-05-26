@@ -39,7 +39,7 @@ st.markdown("""
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0;
                     padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:#21262d; border-radius:8px; height:12px;
+    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:12px;
                  margin:6px 0 2px 0; overflow:hidden; }
     [data-testid="stSidebarNav"]{ display:none; }
     #MainMenu,footer,header{ visibility:hidden; }
@@ -81,9 +81,9 @@ st.markdown("""
     .prox-label{ color:#8b949e; }
     .prox-val{ font-family:monospace; font-weight:600; }
 
-    .explainer{ background:#0d1117; border:1px solid #1e3a5f;
+    .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
                 border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:#8b949e; line-height:1.7; }
+                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -362,7 +362,7 @@ def build_chart(df: pd.DataFrame, pair: str,
 
     fig.update_layout(
         height=620,
-        paper_bgcolor="#0d1117",
+        paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#161b22",
         font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
         xaxis_rangeslider_visible=False,

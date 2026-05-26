@@ -613,7 +613,7 @@ if rate_vals:
         annotation_font_color="#8b949e", annotation_position="right",
     )
 fig_rates.update_layout(
-    paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
     margin=dict(l=10, r=80, t=30, b=10), height=300,
     xaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False, linecolor="#21262d"),
     yaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d",
@@ -774,7 +774,7 @@ with chart_col1:
         fig_gdp.add_vline(x=0.0, line_dash="dot", line_color="#8b2d2d", line_width=1,
                           annotation_text="Recession", annotation_font_color="#8b2d2d")
         fig_gdp.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             margin=dict(l=10, r=60, t=10, b=10), height=280,
             xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d", ticksuffix="%"),
             yaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False),
@@ -812,7 +812,7 @@ with chart_col2:
             hovertemplate="<b>%{y}</b><br>Inflation: %{x:.2f}%<extra></extra>",
         ))
         fig_cpi.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             margin=dict(l=10, r=60, t=10, b=10), height=280,
             xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d", ticksuffix="%"),
             yaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False),

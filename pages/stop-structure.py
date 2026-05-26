@@ -24,7 +24,7 @@ st.markdown("""
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
-    .stApp{ background:#0d1117; }
+    .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
@@ -42,7 +42,7 @@ st.markdown("""
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color);
                     margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:#21262d; border-radius:8px; height:10px;
+    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px;
                  margin:6px 0 2px 0; overflow:hidden; }
 
     /* SL level cards */
@@ -71,9 +71,9 @@ st.markdown("""
                     border:1px solid #30363d; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
 
-    .explainer{ background:#0d1117; border:1px solid #1e3a5f;
+    .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
                 border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:#8b949e; line-height:1.7; }
+                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
     .formula-box{ background:#0d1117; border:1px solid #30363d; border-radius:8px;
                   padding:14px 18px; font-family:monospace; font-size:13px;
                   color:#c9d1d9; margin:10px 0; line-height:2; }
@@ -397,7 +397,7 @@ def build_chart(df: pd.DataFrame, pair: str,
 
     fig.update_layout(
         height=620,
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
         xaxis_rangeslider_visible=False,
         legend=dict(

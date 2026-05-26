@@ -64,7 +64,7 @@ st.markdown("""
     .slope-arrow-down{color:#f85149;font-size:14px;font-weight:900;}
     .slope-arrow-flat{color:#e3b341;font-size:14px;font-weight:900;}
 
-    .prog-track{background:#21262d;border-radius:6px;height:5px;overflow:hidden;margin:4px 0;}
+    .prog-track{background:var(--border,#21262d);border-radius:6px;height:5px;overflow:hidden;margin:4px 0;}
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
@@ -509,7 +509,7 @@ with right:
                       annotation_text="Falling",  annotation_font_color="#8b2d2d", annotation_position="right")
 
         fig.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             legend=dict(font=dict(color="#8b949e", size=11), bgcolor="#161b22",
                         bordercolor="#21262d", orientation="h", x=0, y=1.06),
             margin=dict(l=10, r=80, t=30, b=10),

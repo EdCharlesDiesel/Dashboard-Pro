@@ -34,7 +34,7 @@ st.markdown("""
     .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0;
                     padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:#21262d; border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
+    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{ padding-top:1.5rem; max-width:1380px; }
@@ -64,8 +64,8 @@ st.markdown("""
                  border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700; }
 
     /* Explanation box */
-    .explainer{ background:#0d1117; border:1px solid #1e3a5f; border-left:3px solid #388bfd;
-                border-radius:8px; padding:14px 18px; margin:8px 0; font-size:13px; color:#8b949e; line-height:1.7; }
+    .explainer{ background:var(--background-color); border:1px solid #1e3a5f; border-left:3px solid #388bfd;
+                border-radius:8px; padding:14px 18px; margin:8px 0; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
     [data-testid="stSidebarNav"]{ display:none; }
 </style>
 """, unsafe_allow_html=True)
@@ -499,7 +499,7 @@ def build_chart(df: pd.DataFrame, pair: str,
     # Global layout
     fig.update_layout(
         height=780,
-        paper_bgcolor="#0d1117",
+        paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#161b22",
         font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
         xaxis_rangeslider_visible=False,
