@@ -18,16 +18,21 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    /* Theme-adaptive layout vars */
+    .stApp {
+      --border: color-mix(in srgb, var(--text-color) 12%, transparent);
+      --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
+    }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
-    .stApp { background:#0d1117; }
-    section[data-testid="stSidebar"]{ background:#161b22!important; border-right:1px solid #21262d; }
+    .stApp { background:var(--background-color); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
 
-    .card{ background:#161b22; border:1px solid #21262d; border-radius:12px; padding:20px; margin-bottom:16px; }
-    .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:#8b949e; margin-bottom:14px; }
-    .metric-box{ background:#0d1117; border:1px solid #21262d; border-radius:8px; padding:14px; text-align:center; }
-    .metric-value{ font-size:22px; font-weight:700; color:#c9d1d9; }
-    .metric-label{ font-size:11px; color:#8b949e; margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
-    .section-title{ font-size:16px; font-weight:700; color:#e6edf3; margin:24px 0 12px 0;
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px; padding:20px; margin-bottom:16px; }
+    .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted,#8b949e); margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px; padding:14px; text-align:center; }
+    .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
+    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
+    .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0;
                     padding-left:4px; border-left:3px solid #388bfd; }
     .prog-track{ background:#21262d; border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
@@ -133,7 +138,8 @@ def calc_rsi(series: pd.Series, period: int = 14) -> pd.Series:
 def detect_signals(df: pd.DataFrame,
                    stoch_os: float = 20.0, stoch_ob: float = 80.0,
                    rsi_os: float = 40.0, rsi_ob: float = 60.0,
-                   rsi_reset_band: float = 5.0) -> pd.DataFrame:
+                   rsi_reset_band: float = 5.0,
+                   vol_period: int = 20, vol_multiplier: float = 1.5) -> pd.DataFrame:
     """
     Detect LONG / SHORT entry signals:
 
@@ -141,6 +147,8 @@ def detect_signals(df: pd.DataFrame,
              AND RSI was oversold / reset (crossed back above rsi_os from below)
     SHORT — Stochastic %K crosses below %D in overbought zone (> stoch_ob)
              AND RSI was overbought / reset (crossed back below rsi_ob from above)
+
+    Volume spike column added: volume > vol_multiplier × vol_period MA
     """
     df = df.copy()
     K, D = calc_stochastic(df)
@@ -149,6 +157,14 @@ def detect_signals(df: pd.DataFrame,
     df["stoch_k"] = K
     df["stoch_d"] = D
     df["rsi"] = rsi_vals
+
+    # Volume spike — vectorized
+    vol_raw = df["Volume"].values.astype(float)
+    vol_ma_arr = pd.Series(vol_raw).rolling(vol_period, min_periods=1).mean().values
+    with np.errstate(invalid="ignore"):
+        vol_spike_arr = np.where(vol_ma_arr > 0, vol_raw > vol_multiplier * vol_ma_arr, False)
+    df["vol_spike"] = vol_spike_arr.astype(bool)
+    df["vol_ma"] = pd.Series(vol_ma_arr, index=df.index)
 
     n = len(df)
 
@@ -212,7 +228,8 @@ def detect_signals(df: pd.DataFrame,
 
 def latest_signal_status(df: pd.DataFrame,
                          stoch_os: float, stoch_ob: float,
-                         rsi_os: float, rsi_ob: float) -> dict:
+                         rsi_os: float, rsi_ob: float,
+                         vol_multiplier: float = 1.5) -> dict:
     """Analyse the last 5 candles for a live entry signal."""
     tail = df.tail(5)
     last = df.iloc[-1]
@@ -225,28 +242,45 @@ def latest_signal_status(df: pd.DataFrame,
     recent_long = int(tail["signal_long"].sum())
     recent_short = int(tail["signal_short"].sum())
 
+    # Volume spike checks on recent candles
+    has_vol = "vol_spike" in tail.columns
+    bullish_vol_spike = False
+    bearish_vol_spike = False
+    vol_spike_now = False
+    if has_vol:
+        spikes = tail[tail["vol_spike"]]
+        bullish_vol_spike = bool(len(spikes[spikes["Close"] >= spikes["Open"]]) > 0)
+        bearish_vol_spike = bool(len(spikes[spikes["Close"] < spikes["Open"]]) > 0)
+        vol_spike_now = bool(last.get("vol_spike", False))
+
     # Per-condition status for display
     cond_long = {
         "Stoch %K crossed above %D": bool(tail["stoch_cross_up"].any()),
         f"Stoch in oversold zone (K < {stoch_os + 20:.0f})": k_now < (stoch_os + 20),
         f"RSI reset from oversold (RSI ≥ {rsi_os:.0f})": bool(tail["rsi_reset_up"].any()),
+        f"Volume spike (>{vol_multiplier:.1f}× avg) on up candle": bullish_vol_spike,
     }
     cond_short = {
         "Stoch %K crossed below %D": bool(tail["stoch_cross_down"].any()),
         f"Stoch in overbought zone (K > {stoch_ob - 20:.0f})": k_now > (stoch_ob - 20),
         f"RSI reset from overbought (RSI ≤ {rsi_ob:.0f})": bool(tail["rsi_reset_down"].any()),
+        f"Volume spike (>{vol_multiplier:.1f}× avg) on down candle": bearish_vol_spike,
     }
 
     long_score = sum(cond_long.values())
     short_score = sum(cond_short.values())
 
-    if recent_long and long_score == 3:
+    if recent_long and long_score == 4:
+        verdict = "LONG_CONFIRMED"
+    elif recent_short and short_score == 4:
+        verdict = "SHORT_CONFIRMED"
+    elif recent_long and long_score >= 3:
         verdict = "LONG"
-    elif recent_short and short_score == 3:
+    elif recent_short and short_score >= 3:
         verdict = "SHORT"
-    elif long_score == 2:
+    elif long_score >= 3:
         verdict = "WAIT_LONG"
-    elif short_score == 2:
+    elif short_score >= 3:
         verdict = "WAIT_SHORT"
     else:
         verdict = "NONE"
@@ -264,6 +298,7 @@ def latest_signal_status(df: pd.DataFrame,
         "short_score": short_score,
         "recent_long": recent_long,
         "recent_short": recent_short,
+        "vol_spike_now": vol_spike_now,
     }
 
 
@@ -274,17 +309,18 @@ def latest_signal_status(df: pd.DataFrame,
 def build_chart(df: pd.DataFrame, pair: str,
                 stoch_os: float, stoch_ob: float,
                 rsi_os: float, rsi_ob: float,
-                show_n: int = 80) -> go.Figure:
+                show_n: int = 80, vol_period: int = 20) -> go.Figure:
     plot = df.tail(show_n).copy()
 
     fig = make_subplots(
-        rows=3, cols=1, shared_xaxes=True,
-        row_heights=[0.52, 0.24, 0.24],
-        vertical_spacing=0.03,
+        rows=4, cols=1, shared_xaxes=True,
+        row_heights=[0.44, 0.19, 0.19, 0.18],
+        vertical_spacing=0.02,
         subplot_titles=[
             f"{pair} — 15M Price",
             "Stochastic Oscillator (%K / %D)",
             "RSI (14)",
+            "Volume",
         ],
     )
 
@@ -437,9 +473,32 @@ def build_chart(df: pd.DataFrame, pair: str,
             name="RSI Reset ↓", showlegend=True,
         ), row=3, col=1)
 
+    # ── Row 4: Volume ─────────────────────────────────────────────
+    if "vol_spike" in plot.columns:
+        is_bull = plot["Close"].values >= plot["Open"].values
+        is_spk  = plot["vol_spike"].values.astype(bool)
+        vol_colors = [
+            "#3fb950" if bull and spk else
+            "#f85149" if (not bull) and spk else
+            "rgba(63,185,80,0.30)" if bull else
+            "rgba(248,81,73,0.30)"
+            for bull, spk in zip(is_bull, is_spk)
+        ]
+        fig.add_trace(go.Bar(
+            x=plot.index, y=plot["Volume"],
+            marker_color=vol_colors,
+            name="Volume", showlegend=False,
+        ), row=4, col=1)
+        if "vol_ma" in plot.columns:
+            fig.add_trace(go.Scatter(
+                x=plot.index, y=plot["vol_ma"],
+                mode="lines", line=dict(color="#fdcb6e", width=1.2, dash="dot"),
+                name=f"Vol MA({vol_period})",
+            ), row=4, col=1)
+
     # Global layout
     fig.update_layout(
-        height=680,
+        height=780,
         paper_bgcolor="#0d1117",
         plot_bgcolor="#161b22",
         font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
@@ -481,6 +540,9 @@ with st.sidebar:
     st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
     st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
     st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
+    st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
+    st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
+    st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
     st.divider()
 
     inst_keys = list(INSTRUMENTS.keys())
@@ -507,6 +569,11 @@ with st.sidebar:
     rsi_os = st.slider("RSI oversold level", 20, 50, 40)
     rsi_ob = st.slider("RSI overbought level", 50, 80, 60)
     rsi_reset_band = st.slider("RSI reset band (pts)", 1, 15, 5)
+
+    st.divider()
+    st.markdown("**📊 Volume Spike Settings**")
+    vol_period = st.slider("Vol MA period (bars)", 5, 50, 20)
+    vol_multiplier = st.slider("Spike multiplier (×avg)", 1.1, 3.0, 1.5, step=0.1)
 
     st.divider()
     if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
@@ -553,23 +620,29 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 VERDICT_CFG = {
-    "LONG":       ("verdict-long",  "⚡ LONG ENTRY SIGNAL FIRED", "#3fb950",
-                   "All 3 conditions met — Stochastic crossover ↑ + RSI reset from oversold"),
-    "SHORT":      ("verdict-short", "⚡ SHORT ENTRY SIGNAL FIRED", "#f85149",
-                   "All 3 conditions met — Stochastic crossover ↓ + RSI reset from overbought"),
-    "WAIT_LONG":  ("verdict-wait",  "🟡 LONG SETUP FORMING",      "#e3b341",
-                   "2 of 3 long conditions met — wait for stochastic crossover confirmation"),
-    "WAIT_SHORT": ("verdict-wait",  "🟡 SHORT SETUP FORMING",     "#e3b341",
-                   "2 of 3 short conditions met — wait for stochastic crossover confirmation"),
-    "NONE":       ("verdict-none",  "⏳ NO ENTRY SIGNAL",          "#8b949e",
-                   "Conditions not yet aligned — monitor for stochastic crossover + RSI reset"),
+    "LONG_CONFIRMED": ("verdict-long",  "⚡ LONG SIGNAL CONFIRMED (4/4)", "#3fb950",
+                       "All 4 conditions met including volume spike — high-conviction LONG entry"),
+    "SHORT_CONFIRMED":("verdict-short", "⚡ SHORT SIGNAL CONFIRMED (4/4)", "#f85149",
+                       "All 4 conditions met including volume spike — high-conviction SHORT entry"),
+    "LONG":           ("verdict-long",  "⚡ LONG ENTRY SIGNAL FIRED",     "#3fb950",
+                       "3 of 4 conditions met — Stochastic crossover ↑ + RSI reset from oversold (no vol spike)"),
+    "SHORT":          ("verdict-short", "⚡ SHORT ENTRY SIGNAL FIRED",    "#f85149",
+                       "3 of 4 conditions met — Stochastic crossover ↓ + RSI reset from overbought (no vol spike)"),
+    "WAIT_LONG":      ("verdict-wait",  "🟡 LONG SETUP FORMING",          "#e3b341",
+                       "≥3 long conditions forming — wait for stochastic crossover confirmation"),
+    "WAIT_SHORT":     ("verdict-wait",  "🟡 SHORT SETUP FORMING",         "#e3b341",
+                       "≥3 short conditions forming — wait for stochastic crossover confirmation"),
+    "NONE":           ("verdict-none",  "⏳ NO ENTRY SIGNAL",              "#8b949e",
+                       "Conditions not yet aligned — monitor for stochastic crossover + RSI reset"),
 }
 
 SCAN_COLOR = {
+    "LONG_CONFIRMED": "#3fb950", "SHORT_CONFIRMED": "#f85149",
     "LONG": "#3fb950", "SHORT": "#f85149",
     "WAIT_LONG": "#e3b341", "WAIT_SHORT": "#e3b341", "NONE": "#484f58",
 }
 SCAN_LABEL = {
+    "LONG_CONFIRMED": "LONG ✓VOL", "SHORT_CONFIRMED": "SHORT ✓VOL",
     "LONG": "LONG", "SHORT": "SHORT",
     "WAIT_LONG": "WAIT ↑", "WAIT_SHORT": "WAIT ↓", "NONE": "NONE",
 }
@@ -586,8 +659,9 @@ def render_conditions(title, color, conds, score):
             f'<div><div class="cond-text" style="color:{shade};">{cond_text}</div></div>'
             f'</div>'
         )
-    prog_pct = int(score / 3 * 100)
-    prog_col = color if score == 3 else "#e3b341" if score == 2 else "#484f58"
+    max_score = max(len(conds), 1)
+    prog_pct = int(score / max_score * 100)
+    prog_col = color if score == max_score else "#e3b341" if score >= max_score - 1 else "#484f58"
     return (
         f'<div class="card">'
         f'<div class="card-header" style="color:{color};">{title}</div>'
@@ -614,7 +688,7 @@ tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
 with tab_scan:
     st.markdown(
         f"Scanning all 21 instruments for 15M entry signals "
-        f"(Stoch {stoch_os}/{stoch_ob} · RSI {rsi_os}/{rsi_ob}) …"
+        f"(Stoch {stoch_os}/{stoch_ob} · RSI {rsi_os}/{rsi_ob} · Vol >{vol_multiplier:.1f}×) …"
     )
     prog = st.progress(0)
     all_instruments = list(INSTRUMENTS.items())
@@ -633,17 +707,20 @@ with tab_scan:
                 stoch_os=stoch_os, stoch_ob=stoch_ob,
                 rsi_os=rsi_os, rsi_ob=rsi_ob,
                 rsi_reset_band=rsi_reset_band,
+                vol_period=vol_period, vol_multiplier=vol_multiplier,
             )
-            st_s = latest_signal_status(df_s, stoch_os, stoch_ob, rsi_os, rsi_ob)
+            st_s = latest_signal_status(df_s, stoch_os, stoch_ob, rsi_os, rsi_ob,
+                                        vol_multiplier=vol_multiplier)
             scan_results.append({
-                "pair":    pair_name,
-                "ok":      True,
-                "verdict": st_s["verdict"],
-                "k_now":   st_s["k_now"],
-                "rsi_now": st_s["rsi_now"],
-                "close":   st_s["close"],
-                "l_score": st_s["long_score"],
-                "s_score": st_s["short_score"],
+                "pair":      pair_name,
+                "ok":        True,
+                "verdict":   st_s["verdict"],
+                "k_now":     st_s["k_now"],
+                "rsi_now":   st_s["rsi_now"],
+                "close":     st_s["close"],
+                "l_score":   st_s["long_score"],
+                "s_score":   st_s["short_score"],
+                "vol_spike": st_s.get("vol_spike_now", False),
             })
         except Exception:
             scan_results.append({"pair": pair_name, "ok": False})
@@ -651,17 +728,19 @@ with tab_scan:
     prog.empty()
 
     # ── Summary counts ──────────────────────────
-    cnt_long  = sum(1 for r in scan_results if r.get("verdict") == "LONG")
-    cnt_short = sum(1 for r in scan_results if r.get("verdict") == "SHORT")
-    cnt_wait  = sum(1 for r in scan_results if r.get("verdict") in ("WAIT_LONG", "WAIT_SHORT"))
-    cnt_none  = sum(1 for r in scan_results if r.get("ok") and r.get("verdict") == "NONE")
+    cnt_long     = sum(1 for r in scan_results if r.get("verdict") in ("LONG", "LONG_CONFIRMED"))
+    cnt_short    = sum(1 for r in scan_results if r.get("verdict") in ("SHORT", "SHORT_CONFIRMED"))
+    cnt_conf     = sum(1 for r in scan_results if r.get("verdict") in ("LONG_CONFIRMED", "SHORT_CONFIRMED"))
+    cnt_wait     = sum(1 for r in scan_results if r.get("verdict") in ("WAIT_LONG", "WAIT_SHORT"))
+    cnt_none     = sum(1 for r in scan_results if r.get("ok") and r.get("verdict") == "NONE")
 
-    sc1, sc2, sc3, sc4 = st.columns(4)
+    sc1, sc2, sc3, sc4, sc5 = st.columns(5)
     for col_, val_, lbl_, c_ in [
         (sc1, cnt_long,  "LONG Signal",   "#3fb950"),
         (sc2, cnt_short, "SHORT Signal",  "#f85149"),
-        (sc3, cnt_wait,  "Setup Forming", "#e3b341"),
-        (sc4, cnt_none,  "No Signal",     "#484f58"),
+        (sc3, cnt_conf,  "Vol Confirmed", "#00d4ff"),
+        (sc4, cnt_wait,  "Setup Forming", "#e3b341"),
+        (sc5, cnt_none,  "No Signal",     "#484f58"),
     ]:
         with col_:
             st.markdown(
@@ -740,8 +819,10 @@ with tab_detail:
             stoch_os=stoch_os, stoch_ob=stoch_ob,
             rsi_os=rsi_os, rsi_ob=rsi_ob,
             rsi_reset_band=rsi_reset_band,
+            vol_period=vol_period, vol_multiplier=vol_multiplier,
         )
-        status = latest_signal_status(df, stoch_os, stoch_ob, rsi_os, rsi_ob)
+        status = latest_signal_status(df, stoch_os, stoch_ob, rsi_os, rsi_ob,
+                                      vol_multiplier=vol_multiplier)
 
         # ── Verdict banner ───────────────────────────
         vcls, vtitle, vcolor, vdesc = VERDICT_CFG[status["verdict"]]
@@ -766,14 +847,16 @@ with tab_detail:
         total_cross_up  = int(df["stoch_cross_up"].sum())
         total_cross_dn  = int(df["stoch_cross_down"].sum())
         total_rsi_reset = int(df["rsi_reset_up"].sum() + df["rsi_reset_down"].sum())
+        total_vol_spk   = int(df["vol_spike"].sum()) if "vol_spike" in df.columns else 0
 
-        k1, k2, k3, k4, k5 = st.columns(5)
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
         for col_, val_, lbl_, color_ in [
             (k1, total_long,      "LONG Signals",  "#3fb950"),
             (k2, total_short,     "SHORT Signals", "#f85149"),
             (k3, total_cross_up,  "Stoch Cross ↑", "#00d4ff"),
             (k4, total_cross_dn,  "Stoch Cross ↓", "#fdcb6e"),
             (k5, total_rsi_reset, "RSI Resets",    "#a29bfe"),
+            (k6, total_vol_spk,   "Vol Spikes",    "#58a6ff"),
         ]:
             with col_:
                 st.markdown(
@@ -805,7 +888,7 @@ with tab_detail:
             df, selected_pair,
             stoch_os=stoch_os, stoch_ob=stoch_ob,
             rsi_os=rsi_os, rsi_ob=rsi_ob,
-            show_n=show_candles,
+            show_n=show_candles, vol_period=vol_period,
         )
         st.plotly_chart(fig, use_container_width=True)
 
@@ -896,6 +979,8 @@ with tab_detail:
         (adjustable in sidebar)<br>
         <b>RSI:</b> Period 14 · Oversold &lt; {rsi_os} · Overbought &gt; {rsi_ob} &nbsp;
         (use 30/70 for stricter signals)<br>
+        <b>Volume:</b> Spike when volume &gt; {vol_multiplier:.1f}× its {vol_period}-bar MA · shown on chart as bright bars<br>
+        &nbsp;&nbsp;<em>CONFIRMED</em> (4/4) requires vol spike on same-direction candle within signal window.<br>
         <b>Best used with:</b> 4H confluence zone confirmed + candlestick rejection on 15M already identified.<br>
         This is <em>Check #13</em> — the final entry trigger after all higher-timeframe confluences align.
         </div>

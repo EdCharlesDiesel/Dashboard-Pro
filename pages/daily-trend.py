@@ -16,12 +16,17 @@ st.set_page_config(
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    /* Theme-adaptive layout vars */
+    .stApp {
+      --border: color-mix(in srgb, var(--text-color) 12%, transparent);
+      --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
+    }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
-    .stApp{background:#0d1117;}
-    section[data-testid="stSidebar"]{background:#161b22!important;border-right:1px solid #21262d;}
+    .stApp{background:var(--background-color);}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
     .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
     .hero::before{content:'';position:absolute;top:-40%;right:-5%;width:300px;height:300px;background:radial-gradient(circle,rgba(56,139,253,.07) 0%,transparent 70%);border-radius:50%;}
-    .metric-box{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;text-align:center;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px 14px;text-align:center;}
     .metric-value{font-size:20px;font-weight:700;color:#c9d1d9;}
     .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
 
@@ -251,6 +256,9 @@ with st.sidebar:
     st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
     st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
     st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
+    st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
+    st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
+    st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
     st.divider()
 
     direction = st.radio("🎯 Trade Direction", ["LONG", "SHORT"], horizontal=True)
