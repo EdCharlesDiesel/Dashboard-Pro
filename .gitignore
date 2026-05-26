@@ -11,5 +11,4 @@ ENV/
 *.jpeg
 *.webm
 forex_notify_cache.json
-.streamlit/config.toml
 .streamlit/secrets.toml

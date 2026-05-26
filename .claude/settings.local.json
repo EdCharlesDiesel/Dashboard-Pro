@@ -25,7 +25,21 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('pages/15m-rejection.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('pages/15m-entry-signal.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('pages/stop-structure.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/rr-calculator.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('pages/rr-calculator.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -m py_compile daily-trading-checklist.py)",
+      "Bash(python -m py_compile pages/4H-confluence-zone.py)",
+      "Bash(python -m py_compile pages/atr-volatility.py)",
+      "Bash(python -m py_compile pages/confluence-checker.py)",
+      "Bash(git push *)",
+      "PowerShell(Get-Command *)",
+      "Bash(python -m py_compile pages/trade-journal.py)",
+      "Bash(python -m py_compile pages/market-structure.py)",
+      "Bash(python -m py_compile pages/setup-ranker.py)",
+      "Bash(python -m py_compile pages/15m-entry-signal.py)",
+      "Bash(python -m py_compile pages/15m-rejection.py)",
+      "Bash(sed -n '426,450p' pages/macro-bias.py)",
+      "Bash(sed -n '200,208p' pages/weekly-ema.py)",
+      "Bash(python -m py_compile daily-trading-checklist.py pages/15m-entry-signal.py pages/15m-rejection.py pages/macro-bias.py pages/weekly-ema.py pages/setup-ranker.py pages/trade-journal.py pages/market-structure.py)"
     ]
   }
 }

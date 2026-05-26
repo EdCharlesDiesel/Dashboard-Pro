@@ -23,9 +23,14 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    /* Theme-adaptive layout vars */
+    .stApp {
+      --border: color-mix(in srgb, var(--text-color) 12%, transparent);
+      --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
+    }
 html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
 .stApp{ background:#0d1117; }
-section[data-testid="stSidebar"]{ background:#161b22!important; border-right:1px solid #21262d; }
+section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
 #MainMenu,footer,header{ visibility:hidden; }
 [data-testid="stSidebarCollapsedControl"]{ visibility:visible!important; }
 [data-testid="stSidebarNav"]{ display:none; }
