@@ -34,7 +34,7 @@ st.markdown("""
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
     .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:#21262d; border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
+    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
@@ -506,7 +506,7 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
 
     fig.update_layout(
         height=600,
-        paper_bgcolor="#0d1117",
+        paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#161b22",
         font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
         xaxis_rangeslider_visible=False,

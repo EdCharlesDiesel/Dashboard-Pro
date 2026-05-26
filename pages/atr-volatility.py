@@ -45,7 +45,7 @@ st.markdown("""
     .check-warn{background:#2f1f0d;color:#e3b341;border:1px solid #9e6a03;}
 
     /* Progress bar */
-    .prog-track{background:#21262d;border-radius:6px;height:6px;margin:6px 0;overflow:hidden;}
+    .prog-track{background:var(--border,#21262d);border-radius:6px;height:6px;margin:6px 0;overflow:hidden;}
 
     /* Metric */
     .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px 14px;text-align:center;}
@@ -564,7 +564,7 @@ with right:
                       annotation_position="right")
 
         fig.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             legend=dict(font=dict(color="#8b949e", size=11),
                         bgcolor="#161b22", bordercolor="#21262d",
                         orientation="h", x=0, y=1.08),
@@ -608,7 +608,7 @@ with right:
             hovertemplate="<b>%{x}</b><br>ATR20: %{y:.1f} pips<extra></extra>",
         ))
         fig2.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             margin=dict(l=10, r=10, t=10, b=10), height=280,
             legend=dict(font=dict(color="#8b949e", size=11), bgcolor="#161b22",
                         bordercolor="#21262d", orientation="h", x=0, y=1.08),

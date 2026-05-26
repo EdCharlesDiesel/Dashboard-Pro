@@ -29,7 +29,7 @@ st.markdown("""
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
 html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
-.stApp{ background:#0d1117; }
+.stApp{ background:var(--background-color); }
 section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
 #MainMenu,footer,header{ visibility:hidden; }
 [data-testid="stSidebarCollapsedControl"]{ visibility:visible!important; }
@@ -804,7 +804,7 @@ with tab_detail:
         )
 
         fig.update_layout(
-            paper_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="#161b22",
             font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
             xaxis_rangeslider_visible=False,

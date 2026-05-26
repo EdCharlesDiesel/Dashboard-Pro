@@ -324,7 +324,7 @@ with tab_equity:
     fig.add_hline(y=0, line_dash="solid", line_color="#484f58", line_width=1, row=3, col=1)
 
     fig.update_layout(
-        height=680, paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        height=680, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         font=dict(family="Inter,sans-serif", size=11, color="#8b949e"),
         legend=dict(bgcolor="rgba(13,17,23,.6)", bordercolor="#21262d", borderwidth=1,
                     font=dict(size=10), orientation="h", y=1.02, x=0),
@@ -412,7 +412,7 @@ with tab_session:
                     annotation_text="66% target", annotation_font_color="#3fb950",
                     annotation_position="right")
     fig_s.update_layout(
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22", height=320,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22", height=320,
         yaxis=dict(range=[0, 110], gridcolor="#21262d", ticksuffix="%"),
         xaxis=dict(showgrid=False), margin=dict(l=10, r=80, t=10, b=10),
         showlegend=False,
@@ -461,7 +461,7 @@ with tab_session:
         ))
         fig_h.add_hline(y=66, line_dash="dash", line_color="#3fb950", line_width=1)
         fig_h.update_layout(
-            paper_bgcolor="#0d1117", plot_bgcolor="#161b22", height=300,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22", height=300,
             xaxis=dict(tickmode="linear", tick0=0, dtick=1, showgrid=False, title="Hour (UTC)"),
             yaxis=dict(range=[0, 115], gridcolor="#21262d", ticksuffix="%"),
             margin=dict(l=10, r=80, t=10, b=10), showlegend=False,
@@ -507,7 +507,7 @@ with tab_pair:
                     annotation_text="66%", annotation_font_color="#3fb950",
                     annotation_position="top")
     fig_p.update_layout(
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         height=max(320, len(pair_group) * 34),
         xaxis=dict(range=[0, 115], gridcolor="#21262d", ticksuffix="%"),
         yaxis=dict(showgrid=False),
@@ -599,7 +599,7 @@ with tab_dir:
             ))
             fig_dir.add_hline(y=66, line_dash="dash", line_color="#3fb950", line_width=1)
             fig_dir.update_layout(
-                paper_bgcolor="#0d1117", plot_bgcolor="#161b22", height=200,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22", height=200,
                 yaxis=dict(range=[0, 105], gridcolor="#21262d", ticksuffix="%"),
                 xaxis=dict(showgrid=False),
                 margin=dict(l=10, r=40, t=10, b=10), showlegend=False, title_text=direction,

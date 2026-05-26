@@ -559,7 +559,7 @@ with tab_chart:
     fig.add_vline(x=6, line_dash="dot", line_color="#388bfd", line_width=1,
                   annotation_text="Grade B", annotation_font_color="#388bfd")
     fig.update_layout(
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         height=max(400, len(top) * 30),
         xaxis=dict(range=[0, 12], showgrid=True, gridcolor="#21262d", title="Score / 10"),
         yaxis=dict(showgrid=False),

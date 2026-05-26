@@ -288,7 +288,7 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
     ), row=2, col=1)
 
     fig.update_layout(
-        height=600, paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        height=600, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         font=dict(family="Inter,sans-serif", size=11, color="#8b949e"),
         xaxis_rangeslider_visible=False,
         legend=dict(bgcolor="rgba(13,17,23,.6)", bordercolor="#21262d", borderwidth=1,

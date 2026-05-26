@@ -290,7 +290,7 @@ with left:
         hovertemplate="<b>%{y}</b> vs <b>%{x}</b><br>Correlation: <b>%{z:.3f}</b><extra></extra>",
     ))
     fig_heat.update_layout(
-        paper_bgcolor="#161b22", plot_bgcolor="#161b22",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         margin=dict(l=10, r=10, t=10, b=10),
         height=520,
         xaxis=dict(tickfont=dict(color="#8b949e", size=10), side="bottom",
@@ -407,7 +407,7 @@ if focus_pair in returns.columns:
         fig_roll.add_hrect(y0=-1,   y1=-0.7, fillcolor="#8b2d2d", opacity=0.05, line_width=0)
 
         fig_roll.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             margin=dict(l=20, r=80, t=20, b=20), height=400,
             legend=dict(font=dict(color="#8b949e", size=10), bgcolor="#161b22",
                         bordercolor="#21262d", borderwidth=1, orientation="v",

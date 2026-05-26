@@ -618,7 +618,7 @@ with right:
                       annotation_position="right")
 
         fig.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             legend=dict(font=dict(color="#8b949e",size=11), bgcolor="#161b22",
                         bordercolor="#21262d", orientation="h", x=0, y=1.06),
             margin=dict(l=10, r=80, t=30, b=10),
@@ -659,7 +659,7 @@ with right:
         ))
         fig2.add_hline(y=0, line_dash="solid", line_color="#484f58", line_width=1.5)
         fig2.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             margin=dict(l=10,r=10,t=10,b=10), height=260,
             xaxis=dict(tickfont=dict(color="#8b949e",size=9), tickangle=-40, showgrid=False),
             yaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True,

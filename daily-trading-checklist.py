@@ -288,7 +288,7 @@ def build_trend_chart(df: pd.DataFrame, pair: str) -> go.Figure:
                   col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["MACDSig"], name="Signal", line=dict(color="#e17055", width=1.8)), row=3,
                   col=1)
-    fig.update_layout(height=700, template="plotly_dark", paper_bgcolor="#0f1117", plot_bgcolor="#0f1117",
+    fig.update_layout(height=700, template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0f1117",
                       showlegend=True, xaxis_rangeslider_visible=False)
     fig.update_yaxes(gridcolor="rgba(255,255,255,0.05)")
     fig.update_xaxes(gridcolor="rgba(255,255,255,0.05)")
@@ -1232,7 +1232,7 @@ if st.session_state.current_page == "checklist":
                                         gridcolor='#21262d'),
                        radialaxis=dict(range=[0, 1], tickvals=[0, .5, 1], ticktext=['', '', ''], gridcolor='#21262d',
                                        linecolor='#21262d')),
-            paper_bgcolor='#161b22', plot_bgcolor='#161b22',
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#161b22',
             showlegend=False, margin=dict(l=40, r=40, t=20, b=20), height=270,
         )
         st.markdown('<div class="card"><div class="card-header">🕸️ Confluence Radar</div>', unsafe_allow_html=True)
