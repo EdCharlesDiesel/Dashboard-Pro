@@ -208,7 +208,7 @@ def check_ema_proximity(price: float, ema_vals: dict, tol_pct: float) -> dict:
     }
 
 
-def evaluate_confluence(price, fib_res, pivot_res, ema_res) -> dict:
+def evaluate_confluence(price, fib_res, pivot_res, ema_res, pdh_pdl_bonus=False) -> dict:
     elements = {
         "Fibonacci": fib_res["within"],
         "Pivot":     pivot_res["within"],
@@ -223,7 +223,26 @@ def evaluate_confluence(price, fib_res, pivot_res, ema_res) -> dict:
         verdict, grade = "1/3 — INSUFFICIENT", "wait"
     else:
         verdict, grade = "0/3 — NO CONFLUENCE", "fail"
-    return {"elements": elements, "passed": passed, "verdict": verdict, "grade": grade}
+    if pdh_pdl_bonus and passed >= 2:
+        verdict += " + PDH/PDL KEY LEVEL"
+    return {"elements": elements, "passed": passed, "verdict": verdict, "grade": grade,
+            "pdh_pdl_bonus": pdh_pdl_bonus}
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_pdh_pdl(ticker: str):
+    """Return previous day High/Low from daily data."""
+    try:
+        df = yf.download(ticker, period="5d", interval="1d",
+                         progress=False, auto_adjust=True)
+        if df.empty or len(df) < 2:
+            return None
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        prev = df.iloc[-2]
+        return {"pdh": float(prev["High"]), "pdl": float(prev["Low"])}
+    except Exception:
+        return None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -611,7 +630,21 @@ with tab_detail:
         fib_res   = nearest_level(price, fib_levels, tol_pct)
         pivot_res = nearest_level(price, pivots,     tol_pct)
         ema_res   = check_ema_proximity(price, ema_vals, tol_pct)
-        result    = evaluate_confluence(price, fib_res, pivot_res, ema_res)
+
+        # PDH/PDL bonus check
+        _pdh_pdl = get_pdh_pdl(ticker)
+        _pdh_pdl_bonus = False
+        _pdh_pdl_label = ""
+        if _pdh_pdl:
+            _tol = price * tol_pct
+            if abs(price - _pdh_pdl["pdh"]) <= _tol:
+                _pdh_pdl_bonus = True
+                _pdh_pdl_label = f"PDH @ {_pdh_pdl['pdh']:.5f}"
+            elif abs(price - _pdh_pdl["pdl"]) <= _tol:
+                _pdh_pdl_bonus = True
+                _pdh_pdl_label = f"PDL @ {_pdh_pdl['pdl']:.5f}"
+
+        result = evaluate_confluence(price, fib_res, pivot_res, ema_res, _pdh_pdl_bonus)
 
         # ── Verdict banner ───────────────────────────
         VERDICT_STYLE = {
@@ -632,11 +665,19 @@ with tab_detail:
             for i in range(3)
         )
 
+        _key_badge_html = (
+            f'<div style="margin-top:10px;">'
+            f'<span style="background:rgba(255,215,0,.2);border:1px solid rgba(255,215,0,.6);'
+            f'border-radius:6px;padding:5px 16px;font-size:13px;font-weight:700;color:#ffd700;">'
+            f'📌 KEY LEVEL: {_pdh_pdl_label}</span></div>'
+        ) if _pdh_pdl_bonus else ""
+
         st.markdown(f"""
         <div class="{vcls}">
           <div style="font-size:23px; font-weight:800; color:{vcolor};
                       letter-spacing:1px; margin-bottom:8px;">{vtitle}</div>
           <div style="margin:8px 0;">{dots}</div>
+          {_key_badge_html}
           <div style="font-size:13px; color:#8b949e; margin-top:8px;">{vdesc}</div>
           <div style="font-size:12px; color:#484f58; margin-top:10px;">
             Current price &nbsp;

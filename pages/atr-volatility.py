@@ -84,6 +84,16 @@ INSTRUMENTS = {
     "🪙 Platinum":{"ticker": "PL=F",  "pip_size": 0.10,  "pip_label": "0.10"},
 }
 
+# Typical retail broker spreads in pips (used for Spread/ATR ratio check; >5% = caution)
+TYPICAL_SPREADS = {
+    "EUR/USD": 1.2, "GBP/USD": 1.5, "AUD/USD": 1.5, "NZD/USD": 2.0,
+    "USD/JPY": 1.2, "USD/CHF": 2.0, "USD/CAD": 2.0, "EUR/GBP": 1.5,
+    "EUR/JPY": 2.0, "GBP/JPY": 3.0, "AUD/JPY": 2.5, "EUR/AUD": 3.0,
+    "GBP/AUD": 3.5, "EUR/CAD": 3.0, "GBP/CAD": 3.5, "USD/ZAR": 80.0,
+    "EUR/ZAR": 90.0, "GBP/ZAR": 90.0,
+    "🥇 Gold": 3.0, "🥈 Silver": 5.0, "🪙 Platinum": 8.0,
+}
+
 # ── ATR Calculation ────────────────────────────────────────────────────────────
 def calc_atr(high, low, close, period):
     prev  = close.shift(1)
@@ -211,6 +221,14 @@ for idx, (pair, cfg) in enumerate(INSTRUMENTS.items()):
     results[pair] = data
 
 progress_bar.empty()
+
+# Augment results with spread/ATR ratio
+for _pair, _data in results.items():
+    if _data is not None:
+        _spread = TYPICAL_SPREADS.get(_pair, 0)
+        _atr_pips = _data.get("atr14_pips", 0)
+        _data["spread_pips"] = _spread
+        _data["spread_pct"] = round(_spread / _atr_pips * 100, 1) if _atr_pips > 0 else 0
 
 # Separate loaded vs failed
 loaded  = {p: d for p, d in results.items() if d is not None}
@@ -369,6 +387,17 @@ with left:
         bar_pct = min(100, max(0, int((d["ratio"] - 0.8) / 0.4 * 100)))
         bar_c   = "#3fb950" if atr_ok else "#f85149"
 
+        # Spread/ATR badge
+        spread_pct = d.get("spread_pct", 0)
+        spread_warn = spread_pct > 5
+        spread_badge_html = (
+            f'<span style="background:rgba(248,81,73,.15);border:1px solid rgba(248,81,73,.5);'
+            f'border-radius:4px;padding:2px 7px;font-size:10px;color:#f85149;font-weight:600;margin-left:6px;">'
+            f'⚠️ Spread {spread_pct:.1f}% ATR</span>'
+        ) if spread_warn else (
+            f'<span style="font-size:10px;color:#484f58;margin-left:6px;">Spread {spread_pct:.1f}%</span>'
+        )
+
         # Highlight selected focus pair
         highlight = "border-color:#388bfd!important;" if pair == focus_pair else ""
 
@@ -379,6 +408,7 @@ with left:
               <span class="pair-name">{pair}</span>
               <span style="font-size:11px;color:#8b949e;margin-left:8px;">@ {d['close']}</span>
               <span style="font-size:11px;color:{chg_c};margin-left:6px;">{chg_icon} {chg:+.1f}% (5d)</span>
+              {spread_badge_html}
             </div>
             <span class="check-badge {badge_cls}">{badge_txt}</span>
           </div>
@@ -587,20 +617,22 @@ with right:
         rank_rows = []
         for rank, pair in enumerate(pairs_loaded, 1):
             d2 = loaded[pair]
+            _sp = d2.get("spread_pct", 0)
             rank_rows.append({
-                "Rank":       rank,
-                "Pair":       pair,
-                "ATR14":      d2["atr14"],
-                "ATR20":      d2["atr20"],
-                "ATR14 Pips": d2["atr14_pips"],
-                "ATR20 Pips": d2["atr20_pips"],
-                "Ratio":      d2["ratio"],
-                "Diff %":     f"{d2['pct_diff']:+.1f}%",
-                "SL Pips":    d2["sl_pips"],
-                "TP1 Pips":   d2["tp1_pips"],
-                "TP2 Pips":   d2["tp2_pips"],
-                "5d Chg":     f"{d2['atr14_chg']:+.1f}%",
-                "Status":     "✅ Pass" if d2["atr_ok"] else "❌ Caution",
+                "Rank":          rank,
+                "Pair":          pair,
+                "ATR14":         d2["atr14"],
+                "ATR20":         d2["atr20"],
+                "ATR14 Pips":    d2["atr14_pips"],
+                "ATR20 Pips":    d2["atr20_pips"],
+                "Ratio":         d2["ratio"],
+                "Diff %":        f"{d2['pct_diff']:+.1f}%",
+                "Spread/ATR %":  _sp,
+                "SL Pips":       d2["sl_pips"],
+                "TP1 Pips":      d2["tp1_pips"],
+                "TP2 Pips":      d2["tp2_pips"],
+                "5d Chg":        f"{d2['atr14_chg']:+.1f}%",
+                "Status":        "✅ Pass" if d2["atr_ok"] else "❌ Caution",
             })
 
         df_rank = pd.DataFrame(rank_rows)
@@ -615,9 +647,10 @@ with right:
                 "ATR20":      st.column_config.NumberColumn("ATR20",      format="%.5f"),
                 "ATR14 Pips": st.column_config.NumberColumn("ATR14 Pips", format="%.1f"),
                 "ATR20 Pips": st.column_config.NumberColumn("ATR20 Pips", format="%.1f"),
-                "Ratio":      st.column_config.NumberColumn("Ratio",      format="%.3f"),
-                "Diff %":     st.column_config.TextColumn("Diff %"),
-                "SL Pips":    st.column_config.NumberColumn("SL Pips",    format="%.1f"),
+                "Ratio":         st.column_config.NumberColumn("Ratio",        format="%.3f"),
+                "Diff %":        st.column_config.TextColumn("Diff %"),
+                "Spread/ATR %":  st.column_config.NumberColumn("Spread/ATR %",  format="%.1f"),
+                "SL Pips":       st.column_config.NumberColumn("SL Pips",       format="%.1f"),
                 "TP1 Pips":   st.column_config.NumberColumn("TP1 Pips",   format="%.1f"),
                 "TP2 Pips":   st.column_config.NumberColumn("TP2 Pips",   format="%.1f"),
                 "5d Chg":     st.column_config.TextColumn("5d Chg"),

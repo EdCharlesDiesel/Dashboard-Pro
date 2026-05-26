@@ -293,66 +293,47 @@ def get_db_connection(cfg):
 
 
 def init_db(cfg):
-    """Create trades table if it doesn't exist."""
+    """Create trades table and migrate new outcome-tracking columns if absent."""
     try:
         conn = get_db_connection(cfg)
-        cur = conn.cursor()
+        cur  = conn.cursor()
         cur.execute("""
-                    CREATE TABLE IF NOT EXISTS trade_setups
-                    (
-                        id
-                        SERIAL
-                        PRIMARY
-                        KEY,
-                        logged_at
-                        TIMESTAMP
-                        NOT
-                        NULL
-                        DEFAULT
-                        NOW
-                    (
-                    ),
-                        instrument VARCHAR
-                    (
-                        30
-                    ),
-                        ticker VARCHAR
-                    (
-                        20
-                    ),
-                        direction VARCHAR
-                    (
-                        10
-                    ),
-                        session VARCHAR
-                    (
-                        20
-                    ),
-                        score VARCHAR
-                    (
-                        20
-                    ),
-                        verdict VARCHAR
-                    (
-                        20
-                    ),
-                        atr14 FLOAT,
-                        atr20 FLOAT,
-                        sl_pips FLOAT,
-                        tp1_pips FLOAT,
-                        tp2_pips FLOAT,
-                        lot_size FLOAT,
-                        risk_amount FLOAT,
-                        rr_tp1 FLOAT,
-                        rr_tp2 FLOAT,
-                        account_bal FLOAT,
-                        risk_pct FLOAT,
-                        checks_passed INT,
-                        checks_total INT,
-                        checks_detail JSONB,
-                        notes TEXT
-                        );
-                    """)
+            CREATE TABLE IF NOT EXISTS trade_setups (
+                id            SERIAL PRIMARY KEY,
+                logged_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+                instrument    VARCHAR(30),
+                ticker        VARCHAR(20),
+                direction     VARCHAR(10),
+                session       VARCHAR(20),
+                score         VARCHAR(20),
+                verdict       VARCHAR(20),
+                atr14         FLOAT,
+                atr20         FLOAT,
+                sl_pips       FLOAT,
+                tp1_pips      FLOAT,
+                tp2_pips      FLOAT,
+                lot_size      FLOAT,
+                risk_amount   FLOAT,
+                rr_tp1        FLOAT,
+                rr_tp2        FLOAT,
+                account_bal   FLOAT,
+                risk_pct      FLOAT,
+                checks_passed INT,
+                checks_total  INT,
+                checks_detail JSONB,
+                notes         TEXT
+            )
+        """)
+        # Outcome-tracking columns — safe to run on existing tables
+        for col_def in [
+            "entry_price FLOAT",
+            "outcome     VARCHAR(10)",
+            "close_price FLOAT",
+            "pips_gained FLOAT",
+            "r_multiple  FLOAT",
+            "is_open     BOOLEAN DEFAULT TRUE",
+        ]:
+            cur.execute(f"ALTER TABLE trade_setups ADD COLUMN IF NOT EXISTS {col_def}")
         conn.commit()
         cur.close()
         conn.close()
@@ -407,6 +388,71 @@ def delete_trade(cfg, trade_id):
     conn.close()
 
 
+def close_trade(cfg, trade_id: int, entry_price: float, close_price: float,
+                pips_gained: float, r_multiple: float, outcome: str):
+    conn = get_db_connection(cfg)
+    cur  = conn.cursor()
+    cur.execute("""
+        UPDATE trade_setups
+        SET entry_price = %s, close_price = %s, pips_gained = %s,
+            r_multiple = %s, outcome = %s, is_open = FALSE
+        WHERE id = %s
+    """, (entry_price, close_price, pips_gained, r_multiple, outcome, trade_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def load_open_trades(cfg):
+    conn = get_db_connection(cfg)
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT id, logged_at, instrument, direction, sl_pips, tp1_pips, tp2_pips, lot_size
+        FROM trade_setups
+        WHERE is_open IS TRUE OR is_open IS NULL
+        ORDER BY logged_at DESC LIMIT 20
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def load_stats(cfg, n: int = 20) -> Optional[Dict]:
+    conn = get_db_connection(cfg)
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT outcome, r_multiple, pips_gained
+        FROM trade_setups
+        WHERE is_open = FALSE AND outcome IS NOT NULL
+        ORDER BY logged_at DESC LIMIT %s
+    """, (n,))
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    if not rows:
+        return None
+    wins      = [r for r in rows if r["outcome"] == "WIN"]
+    losses    = [r for r in rows if r["outcome"] == "LOSS"]
+    be_trades = [r for r in rows if r["outcome"] == "BE"]
+    total     = len(rows)
+    win_rate  = len(wins) / total * 100 if total else 0
+    win_rs    = [r["r_multiple"] for r in wins   if r["r_multiple"]]
+    loss_rs   = [abs(r["r_multiple"]) for r in losses if r["r_multiple"]]
+    avg_win_r  = sum(win_rs)  / len(win_rs)  if win_rs  else 0
+    avg_loss_r = sum(loss_rs) / len(loss_rs) if loss_rs else 1.0
+    loss_rate  = len(losses) / total if total else 0
+    expectancy = (win_rate / 100 * avg_win_r) - (loss_rate * avg_loss_r)
+    pf         = (len(wins) * avg_win_r) / (len(losses) * avg_loss_r) \
+                 if losses and avg_loss_r else 0.0
+    return {
+        "total": total, "wins": len(wins), "losses": len(losses),
+        "be": len(be_trades), "win_rate": win_rate,
+        "avg_win_r": avg_win_r, "avg_loss_r": avg_loss_r,
+        "expectancy": expectancy, "profit_factor": pf,
+    }
+
+
 # ══════════════════════════════════════════════════════════════════
 # ATR FETCHER
 # ══════════════════════════════════════════════════════════════════
@@ -447,6 +493,38 @@ def fetch_atr(ticker: str, pip_size: float):
         }
     except Exception:
         return None
+
+
+# ══════════════════════════════════════════════════════════════════
+# SESSION KILL ZONE DETECTOR
+# ══════════════════════════════════════════════════════════════════
+
+def get_session_status() -> dict:
+    now = datetime.now(timezone.utc)
+    h = now.hour + now.minute / 60
+    t = now.strftime("%H:%M UTC")
+    if 7.0 <= h < 9.0:
+        return {"window": "London Kill Zone", "prime": True, "color": "#3fb950",
+                "icon": "🟢", "desc": "07:00–09:00 UTC — highest order flow", "time": t}
+    if 12.0 <= h < 14.0:
+        return {"window": "NY Kill Zone", "prime": True, "color": "#3fb950",
+                "icon": "🟢", "desc": "12:00–14:00 UTC — NY open sweep", "time": t}
+    if 15.0 <= h < 17.0:
+        return {"window": "London Close", "prime": False, "color": "#e3b341",
+                "icon": "🟡", "desc": "15:00–17:00 UTC — trend continuation", "time": t}
+    if 0.0 <= h < 3.0:
+        return {"window": "Tokyo Session", "prime": False, "color": "#f85149",
+                "icon": "🔴", "desc": "00:00–03:00 UTC — low probability, avoid", "time": t}
+    # Compute wait to next prime window
+    next_windows = [(7.0, "London KZ"), (12.0, "NY KZ"), (15.0, "London Close"), (24.0, "London KZ")]
+    next_name, wait_mins = "London KZ", 0
+    for start, name in next_windows:
+        if h < start:
+            wait_mins = int((start - h) * 60)
+            next_name = name
+            break
+    return {"window": "Dead Zone", "prime": False, "color": "#484f58",
+            "icon": "⚫", "desc": f"Between sessions — {wait_mins}m until {next_name}", "time": t}
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -717,14 +795,15 @@ if st.session_state.current_page == "checklist":
     rr_tp1 = round(tp1_pips / sl_pips, 2) if sl_pips else 0.0
     rr_tp2 = round(tp2_pips / sl_pips, 2) if sl_pips else 0.0
 
-    if pct >= 80:
+    critical_ok = all(st.session_state[f"check_{i}"] for i in [11, 12, 13, 14, 15, 16])
+    if checked >= 16 and critical_ok:
         signal = ("🟢 GO", "chip-go", "#3fb950")
     elif pct >= 55:
         signal = ("🟡 WAIT", "chip-wait", "#e3b341")
     else:
         signal = ("🔴 PASS", "chip-no", "#f85149")
 
-    prog_color = "#3fb950" if pct >= 80 else "#e3b341" if pct >= 55 else "#f85149"
+    prog_color = "#3fb950" if (checked >= 16 and critical_ok) else "#e3b341" if pct >= 55 else "#f85149"
     direction_icon = "🔼" if st.session_state.trade_direction == "LONG" else "🔽"
     direction_col = "#3fb950" if st.session_state.trade_direction == "LONG" else "#f85149"
     display_name = st.session_state.selected_instrument.split(" ", 1)[-1] if st.session_state.selected_instrument[
@@ -807,6 +886,24 @@ if st.session_state.current_page == "checklist":
         render_check(4, "ATR above 20-period avg", atr_hint)
 
         st.markdown('<div class="section-title">📅 Weekly Timeframe Bias</div>', unsafe_allow_html=True)
+        if st.button("🔗 Auto-fill from Trend Signals", key="auto_trend"):
+            with st.spinner("Fetching trend signals…"):
+                _dir = st.session_state.trade_direction
+                _df_w = fetch_trend_data(inst_data["ticker"], "1d", "2y", "1W")
+                _df_d = fetch_trend_data(inst_data["ticker"], "1d", "2y", None)
+                if _df_w is not None and len(_df_w) > 10:
+                    _, _, _, _, _dw = evaluate_trend_signal(_df_w)
+                    if (_dw in ("BUY", "STRONG_BUY") and _dir == "LONG") or \
+                       (_dw in ("SELL", "STRONG_SELL") and _dir == "SHORT"):
+                        for i in [5, 6, 7]:
+                            st.session_state[f"check_{i}"] = True
+                if _df_d is not None and len(_df_d) > 10:
+                    _, _, _, _, _dd = evaluate_trend_signal(_df_d)
+                    if (_dd in ("BUY", "STRONG_BUY") and _dir == "LONG") or \
+                       (_dd in ("SELL", "STRONG_SELL") and _dir == "SHORT"):
+                        for i in [8, 9]:
+                            st.session_state[f"check_{i}"] = True
+            st.rerun()
         render_check(5, "Weekly EMA aligned", "Weekly EMA direction matches your trade direction")
         render_check(6, "Weekly RSI has room", "RSI not already overbought (>70) or oversold (<30)")
         render_check(7, "Weekly Swing ✅ Aligned", "Weekly Swing tab daily confirmation shows ✅ Aligned · <a href='/weekly-swing' target='_self' style='color:#58a6ff;'>Open Weekly Swing →</a>")
@@ -814,7 +911,10 @@ if st.session_state.current_page == "checklist":
         st.markdown('<div class="section-title">📆 Daily Trend Confirmation</div>', unsafe_allow_html=True)
         render_check(8, "Daily trend intact", "EMA20 > EMA50 for longs / EMA20 < EMA50 for shorts")
         render_check(9, "Daily MACD momentum", "MACD histogram turning in the direction of the trade · <a href='/daily-macd' target='_self' style='color:#58a6ff;'>Open MACD Scanner →</a>")
-        render_check(10, "Entry within session open", "Entry window within first 2 hours of preferred session")
+        sess = get_session_status()
+        render_check(10, "Entry in session kill zone",
+                     f"London KZ: 07–09 UTC · NY KZ: 12–14 UTC · London Close: 15–17 UTC · "
+                     f"Now: {sess['icon']} {sess['window']} ({sess['time']}) — {sess['desc']}")
 
         st.markdown('<div class="section-title">⏱️ 4H Confluence Zone</div>', unsafe_allow_html=True)
         render_check(11, "Price at 4H confluence zone", "Price at overlap of Fibonacci + Pivot + EMA on 4H chart")
@@ -826,25 +926,33 @@ if st.session_state.current_page == "checklist":
         render_check(15, "Stop below/above structure", f"SL = {sl_pips} pips (1.5 × ATR14) below/above structure · <a href='/stop-structure' target='_self' style='color:#58a6ff;'>Open Stop Calculator →</a>")
         render_check(16, "R:R ≥ 2:1 to TP1",
                      f"TP1 = {tp1_pips} pips → R:R {rr_tp1}:1 {'✅' if rr_tp1 >= 2 else '❌ Below minimum'} · <a href='/rr-calculator' target='_self' style='color:#58a6ff;'>Open R:R Calculator →</a>")
-        render_check(17, "Partial TP plan defined",
-                     f"TP1 = {tp1_pips} pips · TP2 = {tp2_pips} pips · 50% closed at TP1")
+        render_check(17, "Partial TP + breakeven rule set",
+                     f"50% close at TP1 ({tp1_pips} pips) → SL immediately to entry (BE) · "
+                     f"Runner 50% trails to TP2 ({tp2_pips} pips) · Never hold through −1R on open trade")
         render_check(18, "Position size within limit",
                      f"Lot size: {lot_size:.2f} · Risk: ${risk_amount:.2f} ({st.session_state.risk_pct}% of ${st.session_state.account_bal:,.0f})")
 
     # RIGHT: Dashboard
     with right:
         # Verdict
-        verdict_text = ("All minimum checks met — trade has edge" if pct >= 80 else
-                        "Partial confluence — reassess key levels" if pct >= 55 else
-                        "Insufficient confirmation — stay flat")
-        verdict_icon = "🟢" if pct >= 80 else "🟡" if pct >= 55 else "🔴"
+        if checked >= 16 and critical_ok:
+            verdict_text = f"All {checked}/18 checks passed + critical path clear — trade has edge"
+        elif not critical_ok:
+            miss = [i for i in [11, 12, 13, 14, 15, 16] if not st.session_state[f"check_{i}"]]
+            verdict_text = f"Critical path incomplete: checks {', '.join(f'#{i}' for i in miss)} — no entry"
+        elif pct >= 55:
+            verdict_text = "Building confluence — complete critical checks 11–16 before entry"
+        else:
+            verdict_text = "Insufficient confirmation — stay flat, wait for setup"
+        verdict_icon = "🟢" if (checked >= 16 and critical_ok) else "🟡" if pct >= 55 else "🔴"
+        critical_badge = "✅ Critical clear" if critical_ok else "⚠️ Critical incomplete"
         st.markdown(f"""
         <div class="card" style="border-color:{prog_color}33;">
           <div class="card-header">🧭 Trade Verdict</div>
           <div style="text-align:center;padding:8px 0;">
             <div style="font-size:46px;margin-bottom:6px;">{verdict_icon}</div>
             <div style="font-size:22px;font-weight:700;color:{prog_color};margin-bottom:10px;">{signal[0].split(None, 1)[1]}</div>
-            <div class="{signal[1]}" style="font-size:14px;padding:5px 18px;">{pct}% confluence met</div>
+            <div class="{signal[1]}" style="font-size:14px;padding:5px 18px;">{checked}/18 · {critical_badge}</div>
             <div style="margin-top:12px;font-size:12px;color:#8b949e;">{verdict_text}</div>
           </div>
         </div>
@@ -987,7 +1095,109 @@ if st.session_state.current_page == "checklist":
                 except Exception as e:
                     st.error(f"❌ Save failed: {e}")
 
-    # Trade Log
+    # ── Performance Stats ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📊 Performance Stats — Last 20 Closed Trades")
+
+    if st.session_state.db_ok:
+        try:
+            stats = load_stats(db_cfg, n=20)
+            if stats:
+                target = 66.0
+                wr = stats["win_rate"]
+                banner_color = "#0d4a2f" if wr >= target else "#4a0d0d"
+                banner_border = "#238636" if wr >= target else "#8b2d2d"
+                banner_text_color = "#3fb950" if wr >= target else "#f85149"
+                banner_icon = "🎯" if wr >= target else "⚠️"
+                st.markdown(f"""
+                <div style="background:{banner_color};border:1px solid {banner_border};border-radius:10px;
+                            padding:12px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+                  <span style="font-size:22px;">{banner_icon}</span>
+                  <div>
+                    <span style="color:{banner_text_color};font-weight:700;font-size:15px;">
+                      {wr:.1f}% Win Rate {'≥' if wr >= target else '<'} 66% target
+                    </span>
+                    <span style="color:#8b949e;font-size:12px;margin-left:12px;">
+                      {stats['wins']}W / {stats['losses']}L / {stats['be']}BE — last {stats['total']} closed trades
+                    </span>
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                sc1, sc2, sc3, sc4, sc5 = st.columns(5)
+                stat_items = [
+                    (sc1, f"{wr:.1f}%", "Win Rate", banner_text_color),
+                    (sc2, f"{stats['wins']}/{stats['total']}", "W / Total", "#c9d1d9"),
+                    (sc3, f"{stats['expectancy']:+.2f}R", "Expectancy", "#3fb950" if stats["expectancy"] > 0 else "#f85149"),
+                    (sc4, f"{stats['profit_factor']:.2f}", "Profit Factor", "#3fb950" if stats["profit_factor"] >= 1.5 else "#e3b341"),
+                    (sc5, f"{stats['avg_win_r']:.2f}R", "Avg Win R", "#c9d1d9"),
+                ]
+                for col, val, lbl, color in stat_items:
+                    with col:
+                        st.markdown(
+                            f'<div class="metric-box"><div class="metric-value" style="color:{color};">{val}</div>'
+                            f'<div class="metric-label">{lbl}</div></div>',
+                            unsafe_allow_html=True)
+            else:
+                st.info("No closed trades yet. Close a trade below to begin tracking performance.")
+        except Exception as e:
+            st.error(f"❌ Could not load stats: {e}")
+    else:
+        st.info("🔌 Connect to PostgreSQL in the sidebar to view stats.")
+
+    # ── Close Trade Form ───────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### ✅ Close Trade — Record Outcome")
+
+    if st.session_state.db_ok:
+        try:
+            open_trades = load_open_trades(db_cfg)
+            if open_trades:
+                trade_labels = {
+                    f"#{t['id']} · {t['instrument']} {t['direction']} · logged {str(t['logged_at'])[:16]}": t["id"]
+                    for t in open_trades
+                }
+                chosen_label = st.selectbox("Select open trade to close:", list(trade_labels.keys()),
+                                            key="close_trade_select")
+                chosen_id = trade_labels[chosen_label]
+                chosen = next(t for t in open_trades if t["id"] == chosen_id)
+
+                cf1, cf2, cf3 = st.columns(3)
+                with cf1:
+                    ct_entry = st.number_input("Entry Price", value=0.0, format="%.5f", step=0.00001,
+                                               key="ct_entry")
+                with cf2:
+                    ct_close = st.number_input("Close Price", value=0.0, format="%.5f", step=0.00001,
+                                               key="ct_close")
+                with cf3:
+                    ct_pips = st.number_input("Pips Gained (−ve = loss)", value=0.0, step=0.1,
+                                              key="ct_pips")
+
+                cf4, cf5 = st.columns(2)
+                with cf4:
+                    ct_outcome = st.selectbox("Outcome", ["WIN", "LOSS", "BE"], key="ct_outcome")
+                with cf5:
+                    sl_p = chosen.get("sl_pips") or 1.0
+                    ct_r = round(ct_pips / sl_p, 2) if sl_p else 0.0
+                    st.markdown(
+                        f'<div class="metric-box" style="margin-top:8px;">'
+                        f'<div class="metric-value" style="color:{"#3fb950" if ct_r >= 0 else "#f85149"};">'
+                        f'{ct_r:+.2f}R</div><div class="metric-label">R Multiple</div></div>',
+                        unsafe_allow_html=True)
+
+                if st.button("💾 Save Trade Outcome", type="primary", use_container_width=True,
+                             key="save_outcome_btn"):
+                    close_trade(db_cfg, chosen_id, ct_entry, ct_close, ct_pips, ct_r, ct_outcome)
+                    st.success(f"✅ Trade #{chosen_id} closed — {ct_outcome} · {ct_r:+.2f}R · {ct_pips:+.1f} pips")
+                    st.rerun()
+            else:
+                st.info("No open trades to close. Save a trade setup above first.")
+        except Exception as e:
+            st.error(f"❌ Could not load open trades: {e}")
+    else:
+        st.info("🔌 Connect to PostgreSQL in the sidebar to close trades.")
+
+    # ── Trade Log Table ────────────────────────────────────────────
     st.markdown("---")
     st.markdown("### 📚 Trade Log — PostgreSQL")
 
