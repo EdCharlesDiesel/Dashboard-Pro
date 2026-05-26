@@ -226,6 +226,22 @@ def safe_rgba(hex_color: str, opacity: float) -> str:
     return f"rgba({r}, {g}, {b}, {opacity})"
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def get_pdh_pdl(ticker: str):
+    """Return previous day High/Low from daily data."""
+    try:
+        df = yf.download(ticker, period="5d", interval="1d",
+                         progress=False, auto_adjust=True)
+        if df.empty or len(df) < 2:
+            return None
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        prev = df.iloc[-2]
+        return {"pdh": float(prev["High"]), "pdl": float(prev["Low"])}
+    except Exception:
+        return None
+
+
 # ─────────────────────────────────────────────
 #  Sidebar
 # ─────────────────────────────────────────────
@@ -358,6 +374,17 @@ with tab_scan:
             }
             zones_s  = find_confluence_zones(cp_s, fib_s, piv_s, ema_s, 0.005)
             strong_s = sum(1 for z in zones_s if z["strength"] >= 3)
+            pdh_pdl_s = get_pdh_pdl(info["ticker"])
+            has_key_s = False
+            if pdh_pdl_s:
+                _tol_s = cp_s * 0.005
+                for z in zones_s:
+                    for _k, _v in [("PDH", pdh_pdl_s["pdh"]), ("PDL", pdh_pdl_s["pdl"])]:
+                        if abs(z["value"] - _v) <= _tol_s:
+                            z["labels"].append(f"Key:{_k}@{_v:.4f}")
+                            z["strength"] += 1
+                            z["key_level"] = True
+                            has_key_s = True
             scan_results.append({
                 "pair":          pair_name,
                 "ok":            True,
@@ -365,6 +392,7 @@ with tab_scan:
                 "zones":         zones_s,
                 "num_zones":     len(zones_s),
                 "strong":        strong_s,
+                "has_key_level": has_key_s,
             })
         except Exception:
             scan_results.append({"pair": pair_name, "ok": False})
@@ -431,13 +459,19 @@ with tab_scan:
             price_html = f'{r["current_price"]:,.4f}'
             zone_html  = str(num_z)
 
+        key_badge = (
+            '<span style="background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.5);'
+            'border-radius:4px;padding:2px 7px;font-size:10px;color:#ffd700;font-weight:600;margin-left:4px;">'
+            '📌 KEY</span>'
+        ) if r.get("has_key_level") else ""
+
         with cols3[i % 3]:
             st.markdown(
                 f'<div style="background:#161b22;{border_style}border-radius:8px;'
                 f'padding:12px 14px;margin-bottom:8px;">'
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
                 f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
-                f'{badge_html}'
+                f'<span>{badge_html}{key_badge}</span>'
                 f'</div>'
                 f'<div style="display:flex;gap:16px;margin-top:8px;">'
                 f'<span style="font-size:11px;color:#8b949e;">Price: <span style="color:#e6edf3;font-family:monospace;">{price_html}</span></span>'
@@ -506,6 +540,17 @@ with tab_detail:
             tolerance_pct=confluence_tol,
         )
 
+        # PDH/PDL zone augmentation
+        pdh_pdl = get_pdh_pdl(ticker)
+        if pdh_pdl:
+            _tol = current_price * confluence_tol
+            for z in zones:
+                for _k, _v in [("PDH", pdh_pdl["pdh"]), ("PDL", pdh_pdl["pdl"])]:
+                    if abs(z["value"] - _v) <= _tol:
+                        z["labels"].append(f"Key:{_k}@{_v:.4f}")
+                        z["strength"] += 1
+                        z["key_level"] = True
+
         # ── Top metrics ──────────────────────────
         col1, col2, col3, col4 = st.columns(4)
         for col_, val_, lbl_, c_ in [
@@ -535,6 +580,11 @@ with tab_detail:
                 extra_badge  = "strong-badge" if zone["strength"] >= 3 else ""
                 strength_label = "STRONG" if zone["strength"] >= 3 else "MODERATE"
                 labels_text  = "  ·  ".join(zone["labels"])
+                key_zone_badge = (
+                    '<span style="background:rgba(255,215,0,.2);border:1px solid rgba(255,215,0,.6);'
+                    'border-radius:4px;padding:2px 8px;font-size:11px;color:#ffd700;font-weight:700;margin-left:8px;">'
+                    '📌 PDH/PDL</span>'
+                ) if zone.get("key_level") else ""
 
                 st.markdown(
                     f"""
@@ -548,6 +598,7 @@ with tab_detail:
                                 <span style="color:#6b7a99; font-size:0.85em;">
                                     {direction} {abs(zone["distance_pct"]):.2f}% from price
                                 </span>
+                                {key_zone_badge}
                             </div>
                             <span class="confluence-badge {extra_badge}">
                                 {strength_label} · {len(zone["sources"])} sources
@@ -708,6 +759,24 @@ with tab_detail:
             row=1,
             col=1,
         )
+
+        if pdh_pdl:
+            fig.add_hline(
+                y=pdh_pdl["pdh"],
+                line_dash="dash", line_color="#58a6ff", line_width=1.5, opacity=0.75,
+                annotation_text=f"  PDH {pdh_pdl['pdh']:,.4f}",
+                annotation_position="right",
+                annotation_font=dict(size=9, color="#58a6ff"),
+                row=1, col=1,
+            )
+            fig.add_hline(
+                y=pdh_pdl["pdl"],
+                line_dash="dash", line_color="#e3b341", line_width=1.5, opacity=0.75,
+                annotation_text=f"  PDL {pdh_pdl['pdl']:,.4f}",
+                annotation_position="right",
+                annotation_font=dict(size=9, color="#e3b341"),
+                row=1, col=1,
+            )
 
         colors_vol = [
             safe_rgba("#f85149", 0.53) if close < open_ else safe_rgba("#3fb950", 0.53)
