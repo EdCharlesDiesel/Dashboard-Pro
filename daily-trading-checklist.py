@@ -35,6 +35,15 @@ INSTRUMENTS = {
     "🪙 Platinum": {"ticker": "PL=F", "pip": 10.0, "pip_size": 0.10, "corr": "Industrial demand"},
 }
 
+# Correlated instrument groups — pairs in the same group share directional exposure
+CORR_GROUPS = {
+    "USD vs majors (same dir = stacked USD risk)": {"EUR/USD", "GBP/USD", "AUD/USD", "NZD/USD"},
+    "USD-base pairs (same dir = stacked USD risk)": {"USD/JPY", "USD/CHF", "USD/CAD"},
+    "JPY crosses (same dir = stacked JPY risk)": {"USD/JPY", "EUR/JPY", "GBP/JPY", "AUD/JPY"},
+    "Gold / Silver (highly correlated)": {"🥇 Gold", "🥈 Silver"},
+    "ZAR pairs (same dir = stacked ZAR risk)": {"USD/ZAR", "EUR/ZAR", "GBP/ZAR"},
+}
+
 # Trend Following specific commodities
 TREND_COMMODITIES = {"🥇 Gold", "🥈 Silver", "🪙 Platinum"}
 TREND_TIMEFRAMES = {
@@ -403,6 +412,31 @@ def close_trade(cfg, trade_id: int, entry_price: float, close_price: float,
     conn.close()
 
 
+def load_daily_losses(cfg, max_losses: int = 2) -> dict:
+    """Count today's closed losing trades and return limit status."""
+    try:
+        conn = get_db_connection(cfg)
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT COUNT(*) AS cnt
+            FROM trade_setups
+            WHERE outcome = 'LOSS'
+              AND is_open = FALSE
+              AND DATE(logged_at) = CURRENT_DATE
+        """)
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        count = int(row["cnt"]) if row else 0
+        return {
+            "losses_today": count,
+            "limit": max_losses,
+            "blocked": count >= max_losses,
+        }
+    except Exception:
+        return {"losses_today": 0, "limit": max_losses, "blocked": False}
+
+
 def load_open_trades(cfg):
     conn = get_db_connection(cfg)
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -527,6 +561,71 @@ def get_session_status() -> dict:
             "icon": "⚫", "desc": f"Between sessions — {wait_mins}m until {next_name}", "time": t}
 
 
+def check_correlation_exposure(open_trades: list, direction: str, instrument: str) -> list:
+    """
+    Check if the proposed trade stacks correlated exposure with existing open trades.
+    Returns a list of warning dicts: {group, conflicting, count}
+    """
+    warnings = []
+    for group_name, group_instruments in CORR_GROUPS.items():
+        if instrument not in group_instruments:
+            continue
+        conflicts = [
+            t for t in open_trades
+            if t.get("instrument") in group_instruments
+            and t.get("direction") == direction
+            and t.get("instrument") != instrument
+        ]
+        if conflicts:
+            warnings.append({
+                "group": group_name,
+                "conflicting": ", ".join(t["instrument"] for t in conflicts),
+                "count": len(conflicts),
+            })
+    return warnings
+
+
+def get_mtf_alignment(ticker: str, direction: str) -> dict:
+    """
+    Check Weekly / Daily / 4H EMA alignment for the selected direction.
+    Reuses fetch_trend_data() so no extra API calls if data is already cached.
+    """
+    res = {}
+    try:
+        df_w = fetch_trend_data(ticker, "1d", "2y", "1W")
+        if df_w is not None and len(df_w) > 10:
+            r = df_w.iloc[-1]
+            c, e50, e200 = float(r["Close"]), float(r["EMA50"]), float(r["EMA200"])
+            res["weekly"] = "BULL" if c > e50 > e200 else ("BEAR" if c < e50 < e200 else "NEUTRAL")
+        else:
+            res["weekly"] = None
+    except Exception:
+        res["weekly"] = None
+    try:
+        df_d = fetch_trend_data(ticker, "1d", "2y", None)
+        if df_d is not None and len(df_d) > 10:
+            r = df_d.iloc[-1]
+            c, e50 = float(r["Close"]), float(r["EMA50"])
+            res["daily"] = "BULL" if c > e50 else "BEAR"
+        else:
+            res["daily"] = None
+    except Exception:
+        res["daily"] = None
+    try:
+        df_4h = fetch_trend_data(ticker, "60m", "59d", "4h")
+        if df_4h is not None and len(df_4h) > 10:
+            r = df_4h.iloc[-1]
+            c, e50 = float(r["Close"]), float(r["EMA50"])
+            res["4h"] = "BULL" if c > e50 else "BEAR"
+        else:
+            res["4h"] = None
+    except Exception:
+        res["4h"] = None
+    target = "BULL" if direction == "LONG" else "BEAR"
+    aligned = sum(1 for v in res.values() if v == target)
+    return {**res, "aligned": aligned, "total": 3, "target": target}
+
+
 # ══════════════════════════════════════════════════════════════════
 # SESSION STATE
 # ══════════════════════════════════════════════════════════════════
@@ -612,6 +711,7 @@ with st.sidebar:
         st.page_link("pages/15m-entry-signal.py",     label="13. 15M Entry Signal",     icon="⚡")
         st.page_link("pages/stop-structure.py",       label="14. Stop Structure",       icon="🛡️")
         st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",       icon="⚖️")
+        st.page_link("pages/trade-journal.py",        label="16. Trade Journal",         icon="📓")
         st.divider()
 
         # Instrument selection
@@ -857,6 +957,42 @@ if st.session_state.current_page == "checklist":
     </div>
     """, unsafe_allow_html=True)
 
+    # MTF Alignment Strip
+    with st.spinner("Checking MTF alignment…"):
+        mtf = get_mtf_alignment(inst_data["ticker"], st.session_state.trade_direction)
+
+    def _mtf_badge(label, val, target):
+        if val is None:
+            return f'<span style="background:#1c2128;color:#484f58;border:1px solid #30363d;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;margin-right:6px;">{label} —</span>'
+        color = "#3fb950" if val == target else ("#f85149" if val != "NEUTRAL" else "#8b949e")
+        icon  = "✅" if val == target else ("❌" if val != "NEUTRAL" else "⚪")
+        bg    = "#0d4a2f" if val == target else ("#4a0d0d" if val != "NEUTRAL" else "#1c2128")
+        disp  = "BULL" if val == "BULL" else ("BEAR" if val == "BEAR" else "~")
+        return (f'<span style="background:{bg};color:{color};border:1px solid {color}55;'
+                f'border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;margin-right:6px;">'
+                f'{icon} {label} {disp}</span>')
+
+    mtf_score = mtf["aligned"]
+    mtf_bonus_badge = ""
+    if mtf_score == 3:
+        mtf_bonus_badge = '<span style="background:#2a1e00;color:#e3b341;border:1px solid #e3b34155;border-radius:6px;padding:3px 12px;font-size:12px;font-weight:700;">⭐ FULLY ALIGNED</span>'
+    elif mtf_score == 2:
+        mtf_bonus_badge = '<span style="background:#1c2128;color:#fdcb6e;border:1px solid #fdcb6e55;border-radius:6px;padding:3px 12px;font-size:12px;font-weight:700;">🔶 2/3 ALIGNED</span>'
+    else:
+        mtf_bonus_badge = '<span style="background:#1c2128;color:#484f58;border:1px solid #30363d;border-radius:6px;padding:3px 12px;font-size:12px;font-weight:600;">⬛ {}/3 ALIGNED</span>'.format(mtf_score)
+
+    target = mtf["target"]
+    st.markdown(
+        f'<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;'
+        f'padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+        f'<span style="font-size:12px;color:#8b949e;font-weight:600;letter-spacing:.06em;margin-right:4px;">MTF ALIGNMENT</span>'
+        f'{_mtf_badge("Weekly", mtf.get("weekly"), target)}'
+        f'{_mtf_badge("Daily", mtf.get("daily"), target)}'
+        f'{_mtf_badge("4H", mtf.get("4h"), target)}'
+        f'<span style="margin-left:auto;">{mtf_bonus_badge}</span>'
+        f'</div>',
+        unsafe_allow_html=True)
+
     # Main Layout
     left, right = st.columns([3, 2], gap="large")
 
@@ -934,6 +1070,85 @@ if st.session_state.current_page == "checklist":
 
     # RIGHT: Dashboard
     with right:
+        # ── Daily Loss Limit Banner ──────────────────────────────────
+        db_cfg = {
+            "host": st.session_state.db_host,
+            "port": int(st.session_state.db_port),
+            "dbname": st.session_state.db_name,
+            "user": st.session_state.db_user,
+            "password": st.session_state.db_pass,
+        }
+        daily_loss_limit = 2
+        if st.session_state.db_ok:
+            try:
+                dll = load_daily_losses(db_cfg, max_losses=daily_loss_limit)
+                losses_today = dll["losses_today"]
+                dl_blocked = dll["blocked"]
+            except Exception:
+                dll = {"losses_today": 0, "limit": daily_loss_limit, "blocked": False}
+                losses_today, dl_blocked = 0, False
+        else:
+            dll = {"losses_today": 0, "limit": daily_loss_limit, "blocked": False}
+            losses_today, dl_blocked = 0, False
+
+        if dl_blocked:
+            st.markdown(f"""
+            <div style="background:#4a0d0d;border:2px solid #f85149;border-radius:10px;
+                        padding:14px 20px;margin-bottom:14px;text-align:center;">
+              <div style="font-size:20px;font-weight:800;color:#f85149;letter-spacing:1px;">
+                🚫 DAILY LOSS LIMIT HIT
+              </div>
+              <div style="font-size:13px;color:#8b949e;margin-top:4px;">
+                {losses_today}/{daily_loss_limit} losses today — no new trades allowed
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+        elif losses_today == daily_loss_limit - 1:
+            st.markdown(f"""
+            <div style="background:#2a1500;border:1px solid #e3b341;border-radius:10px;
+                        padding:10px 18px;margin-bottom:14px;text-align:center;">
+              <div style="font-size:14px;font-weight:700;color:#e3b341;">
+                ⚠️ {losses_today}/{daily_loss_limit} losses today — 1 more triggers daily limit
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+        elif st.session_state.db_ok:
+            st.markdown(f"""
+            <div style="background:#0a1a0a;border:1px solid #238636;border-radius:10px;
+                        padding:8px 18px;margin-bottom:14px;text-align:center;">
+              <div style="font-size:12px;color:#3fb950;">
+                ✅ {losses_today}/{daily_loss_limit} losses today — daily limit clear
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ── Correlation Exposure Check ───────────────────────────────
+        if st.session_state.db_ok:
+            try:
+                _open = load_open_trades(db_cfg)
+                _corr_warns = check_correlation_exposure(
+                    _open, st.session_state.trade_direction,
+                    st.session_state.selected_instrument
+                )
+                if _corr_warns:
+                    warns_html = "".join(
+                        f'<div style="margin:4px 0;font-size:12px;color:#fdcb6e;">'
+                        f'⚠️ <b>{w["group"]}</b><br>'
+                        f'&nbsp;&nbsp;Also open: {w["conflicting"]}</div>'
+                        for w in _corr_warns
+                    )
+                    st.markdown(f"""
+                    <div style="background:#2a1f00;border:1px solid #fdcb6e55;border-radius:10px;
+                                padding:10px 16px;margin-bottom:14px;">
+                      <div style="font-size:12px;font-weight:700;color:#fdcb6e;margin-bottom:4px;">
+                        🔗 CORRELATED EXPOSURE
+                      </div>
+                      {warns_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+            except Exception:
+                pass
+
         # Verdict
         if checked >= 16 and critical_ok:
             verdict_text = f"All {checked}/18 checks passed + critical path clear — trade has edge"
@@ -1051,17 +1266,11 @@ if st.session_state.current_page == "checklist":
                                               height=90, label_visibility="collapsed")
 
         # Log button
-        db_cfg = {
-            "host": st.session_state.db_host,
-            "port": int(st.session_state.db_port),
-            "dbname": st.session_state.db_name,
-            "user": st.session_state.db_user,
-            "password": st.session_state.db_pass,
-        }
-
         if st.button("💾 Save Trade Setup to PostgreSQL", type="primary", use_container_width=True):
             if not st.session_state.db_ok:
                 st.error("❌ Not connected to PostgreSQL. Configure & connect in the sidebar first.")
+            elif dl_blocked:
+                st.error(f"🚫 Daily loss limit hit ({losses_today}/{daily_loss_limit}) — no new trades allowed today. Come back tomorrow.")
             else:
                 checks_detail = {f"check_{i}": st.session_state[f"check_{i}"] for i in range(1, CHECKS_TOTAL + 1)}
                 row = {
