@@ -287,6 +287,9 @@ with st.sidebar:
     st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
     st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
     st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
+    st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
+    st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
+    st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
     st.divider()
     st.markdown("### ⚙️ Settings")
 

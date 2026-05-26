@@ -106,6 +106,22 @@ def fetch_15m(ticker: str, days: int = 5) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_pdh_pdl(ticker: str) -> dict:
+    """Previous day high/low — key liquidity levels."""
+    try:
+        raw = yf.download(ticker, period="5d", interval="1d", progress=False, auto_adjust=True)
+        if isinstance(raw.columns, pd.MultiIndex):
+            raw.columns = raw.columns.get_level_values(0)
+        raw = raw.dropna()
+        if len(raw) < 2:
+            return {"pdh": None, "pdl": None}
+        prev = raw.iloc[-2]
+        return {"pdh": float(prev["High"]), "pdl": float(prev["Low"])}
+    except Exception:
+        return {"pdh": None, "pdl": None}
+
+
 # ══════════════════════════════════════════════════════════════════
 # PATTERN DETECTION ENGINE
 # ══════════════════════════════════════════════════════════════════
@@ -262,6 +278,42 @@ def detect_structure(df: pd.DataFrame, lookback: int = 10) -> pd.DataFrame:
     return df
 
 
+def detect_liquidity_sweeps(df: pd.DataFrame, levels: list) -> pd.DataFrame:
+    """
+    Mark candles where price wicked through a key level and reversed.
+    Bullish sweep: Low < level, Close > level (stop-hunt below support, rejected higher)
+    Bearish sweep: High > level, Close < level (stop-hunt above resistance, rejected lower)
+    """
+    df = df.copy()
+    n = len(df)
+    sweep_bull = np.zeros(n, bool)
+    sweep_bear = np.zeros(n, bool)
+    sweep_lvl_bull = np.full(n, np.nan)
+    sweep_lvl_bear = np.full(n, np.nan)
+
+    H = df["High"].values
+    L = df["Low"].values
+    C = df["Close"].values
+
+    for level in levels:
+        if level is None or np.isnan(float(level)):
+            continue
+        lv = float(level)
+        for i in range(n):
+            if L[i] < lv < C[i]:        # wick below, body closed above
+                sweep_bull[i] = True
+                sweep_lvl_bull[i] = lv
+            if C[i] < lv < H[i]:        # wick above, body closed below
+                sweep_bear[i] = True
+                sweep_lvl_bear[i] = lv
+
+    df["sweep_bull"] = sweep_bull
+    df["sweep_bear"] = sweep_bear
+    df["sweep_lvl_bull"] = sweep_lvl_bull
+    df["sweep_lvl_bear"] = sweep_lvl_bear
+    return df
+
+
 def latest_verdict(df: pd.DataFrame) -> dict:
     """Summarise signals on the last 3 candles."""
     tail = df.tail(3)
@@ -303,12 +355,18 @@ def latest_verdict(df: pd.DataFrame) -> dict:
     else:
         verdict = "NONE"
 
+    tail5 = df.tail(5)
+    recent_sweep_bull = bool(tail5["sweep_bull"].any()) if "sweep_bull" in tail5.columns else False
+    recent_sweep_bear = bool(tail5["sweep_bear"].any()) if "sweep_bear" in tail5.columns else False
+
     return {
         "verdict": verdict,
         "bull_patterns": bull_patterns,
         "bear_patterns": bear_patterns,
         "last_close": float(df["Close"].iloc[-1]),
         "last_time":  df.index[-1],
+        "sweep_bull": recent_sweep_bull,
+        "sweep_bear": recent_sweep_bear,
     }
 
 
@@ -316,7 +374,8 @@ def latest_verdict(df: pd.DataFrame) -> dict:
 # CHART BUILDER
 # ══════════════════════════════════════════════════════════════════
 
-def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80) -> go.Figure:
+def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
+                pdh: float = None, pdl: float = None) -> go.Figure:
     plot_df = df.tail(show_candles).copy()
 
     fig = make_subplots(
@@ -373,6 +432,48 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80) -> go.Figur
     add_markers("bearish_engulf", "square",        "#f85149", "high", 1, "Bear Engulf")
     add_markers("tweezer_top",    "diamond",       "#fdcb6e", "high", 1, "Tweezer Top")
     add_markers("doji",           "circle",        "#8b949e", "high", 1, "Doji")
+
+    # ── Liquidity sweep markers ───────────────────────────────────
+    if "sweep_bull" in plot_df.columns:
+        sb_pts = plot_df[plot_df["sweep_bull"]]
+        if not sb_pts.empty:
+            fig.add_trace(go.Scatter(
+                x=sb_pts.index,
+                y=sb_pts["Low"] - (sb_pts["High"] - sb_pts["Low"]) * 0.5,
+                mode="markers+text",
+                marker=dict(symbol="star", size=16, color="#00d4ff",
+                            line=dict(color="#0d1117", width=1)),
+                text=["🔄 SWEEP"] * len(sb_pts),
+                textposition="bottom center",
+                textfont=dict(size=9, color="#00d4ff"),
+                name="Liq. Sweep ↑", showlegend=True,
+            ), row=1, col=1)
+    if "sweep_bear" in plot_df.columns:
+        sb_pts = plot_df[plot_df["sweep_bear"]]
+        if not sb_pts.empty:
+            fig.add_trace(go.Scatter(
+                x=sb_pts.index,
+                y=sb_pts["High"] + (sb_pts["High"] - sb_pts["Low"]) * 0.5,
+                mode="markers+text",
+                marker=dict(symbol="star", size=16, color="#fdcb6e",
+                            line=dict(color="#0d1117", width=1)),
+                text=["🔄 SWEEP"] * len(sb_pts),
+                textposition="top center",
+                textfont=dict(size=9, color="#fdcb6e"),
+                name="Liq. Sweep ↓", showlegend=True,
+            ), row=1, col=1)
+
+    # PDH / PDL horizontal levels
+    if pdh is not None:
+        fig.add_hline(y=pdh, line_color="#58a6ff", line_dash="dash", line_width=1.2,
+                      row=1, col=1,
+                      annotation_text="PDH", annotation_font=dict(size=9, color="#58a6ff"),
+                      annotation_position="right")
+    if pdl is not None:
+        fig.add_hline(y=pdl, line_color="#e3b341", line_dash="dash", line_width=1.2,
+                      row=1, col=1,
+                      annotation_text="PDL", annotation_font=dict(size=9, color="#e3b341"),
+                      annotation_position="right")
 
     # BOS lines
     for i, row in plot_df.iterrows():
@@ -440,6 +541,9 @@ with st.sidebar:
     st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
     st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
     st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
+    st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
+    st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
+    st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
     st.divider()
 
     inst_keys = list(INSTRUMENTS.keys())
@@ -551,6 +655,10 @@ with tab_scan:
                 continue
             df_s = detect_patterns(df_s)
             df_s = detect_structure(df_s, lookback=4)
+            # Sweep detection using recent swing levels from 15M data
+            sh_levels = df_s[df_s["swing_high"]]["High"].values[-4:].tolist() if "swing_high" in df_s.columns else []
+            sl_levels = df_s[df_s["swing_low"]]["Low"].values[-4:].tolist() if "swing_low" in df_s.columns else []
+            df_s = detect_liquidity_sweeps(df_s, sh_levels + sl_levels)
             v_s  = latest_verdict(df_s)
             scan_results.append({
                 "pair":         pair_name,
@@ -561,6 +669,8 @@ with tab_scan:
                 "bull_patterns":v_s["bull_patterns"],
                 "bear_patterns":v_s["bear_patterns"],
                 "last_close":   v_s["last_close"],
+                "sweep_bull":   v_s.get("sweep_bull", False),
+                "sweep_bear":   v_s.get("sweep_bear", False),
             })
         except Exception:
             scan_results.append({"pair": pair_name, "ok": False})
@@ -568,17 +678,19 @@ with tab_scan:
     prog.empty()
 
     # ── Summary counts ──────────────────────────
-    cnt_bull  = sum(1 for r in scan_results if r.get("verdict") == "BULL")
-    cnt_bear  = sum(1 for r in scan_results if r.get("verdict") == "BEAR")
-    cnt_mixed = sum(1 for r in scan_results if r.get("verdict") == "MIXED")
-    cnt_none  = sum(1 for r in scan_results if r.get("ok") and r.get("verdict") == "NONE")
+    cnt_bull   = sum(1 for r in scan_results if r.get("verdict") == "BULL")
+    cnt_bear   = sum(1 for r in scan_results if r.get("verdict") == "BEAR")
+    cnt_mixed  = sum(1 for r in scan_results if r.get("verdict") == "MIXED")
+    cnt_none   = sum(1 for r in scan_results if r.get("ok") and r.get("verdict") == "NONE")
+    cnt_sweeps = sum(1 for r in scan_results if r.get("sweep_bull") or r.get("sweep_bear"))
 
-    sc1, sc2, sc3, sc4 = st.columns(4)
+    sc1, sc2, sc3, sc4, sc5 = st.columns(5)
     for col_, val_, lbl_, c_ in [
-        (sc1, cnt_bull,  "Bullish Rejection", "#3fb950"),
-        (sc2, cnt_bear,  "Bearish Rejection", "#f85149"),
-        (sc3, cnt_mixed, "Mixed Signals",     "#e3b341"),
-        (sc4, cnt_none,  "No Pattern",        "#484f58"),
+        (sc1, cnt_bull,   "Bullish Rejection", "#3fb950"),
+        (sc2, cnt_bear,   "Bearish Rejection", "#f85149"),
+        (sc3, cnt_sweeps, "Liq. Sweeps",       "#00d4ff"),
+        (sc4, cnt_mixed,  "Mixed Signals",     "#e3b341"),
+        (sc5, cnt_none,   "No Pattern",        "#484f58"),
     ]:
         with col_:
             st.markdown(
@@ -610,16 +722,22 @@ with tab_scan:
             bulls  = r["bull_count"]
             bears  = r["bear_count"]
             label  = {"BULL": "BULL", "BEAR": "BEAR", "MIXED": "MIXED", "NONE": "NONE"}.get(vrd, vrd)
+            sweep_badge = ""
+            if r.get("sweep_bull"):
+                sweep_badge += '<span style="background:#002233;color:#00d4ff;border:1px solid #00d4ff55;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;">🔄 SWEEP↑</span>'
+            if r.get("sweep_bear"):
+                sweep_badge += '<span style="background:#2a1f00;color:#fdcb6e;border:1px solid #fdcb6e55;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;">🔄 SWEEP↓</span>'
             card_body = (
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
                 f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
                 f'<span style="background:{bg};border:1px solid {color}44;border-radius:4px;'
                 f'padding:2px 8px;font-size:11px;color:{color};font-weight:700;">{label}</span>'
                 f'</div>'
-                f'<div style="display:flex;gap:14px;margin-top:6px;">'
+                f'<div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;align-items:center;">'
                 f'<span style="font-size:11px;color:#8b949e;">🟢 <span style="color:#3fb950;">{bulls}</span></span>'
                 f'<span style="font-size:11px;color:#8b949e;">🔴 <span style="color:#f85149;">{bears}</span></span>'
                 f'<span style="font-size:11px;color:#8b949e;font-family:monospace;">{r["last_close"]:,.5f}</span>'
+                f'{sweep_badge}'
                 f'</div>'
             )
 
@@ -659,8 +777,19 @@ with tab_detail:
         detail_ok = False
 
     if detail_ok:
+        # Fetch PDH/PDL for liquidity sweep detection
+        pdh_pdl = get_pdh_pdl(ticker)
+        pdh = pdh_pdl.get("pdh")
+        pdl = pdh_pdl.get("pdl")
+
         df = detect_patterns(df_raw)
         df = detect_structure(df, lookback=pivot_lb)
+
+        # Build sweep levels: PDH/PDL + recent swing highs/lows
+        sh_levels = df[df["swing_high"]]["High"].values[-5:].tolist() if "swing_high" in df.columns else []
+        sl_levels = df[df["swing_low"]]["Low"].values[-5:].tolist() if "swing_low" in df.columns else []
+        sweep_levels = [x for x in [pdh, pdl] if x is not None] + sh_levels + sl_levels
+        df = detect_liquidity_sweeps(df, sweep_levels)
         v  = latest_verdict(df)
 
         # ── Verdict banner ───────────────────────────
@@ -669,14 +798,26 @@ with tab_detail:
         bear_pills = "".join(f'<span class="pill-bear">{p}</span>' for p in v["bear_patterns"])
         all_pills  = bull_pills + bear_pills or '<span class="pill-neutral">No patterns on last 3 candles</span>'
 
+        sweep_html = ""
+        if v.get("sweep_bull"):
+            sweep_html += '<span style="background:#002233;color:#00d4ff;border:1px solid #00d4ff55;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:700;margin:2px;">🔄 BULLISH SWEEP — stop-hunt below support, reversal expected</span>'
+        if v.get("sweep_bear"):
+            sweep_html += '<span style="background:#2a1f00;color:#fdcb6e;border:1px solid #fdcb6e55;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:700;margin:2px;">🔄 BEARISH SWEEP — stop-hunt above resistance, reversal expected</span>'
+
+        pdh_info = f"PDH {pdh:.5f}" if pdh else "PDH —"
+        pdl_info = f"PDL {pdl:.5f}" if pdl else "PDL —"
+
         st.markdown(f"""
         <div class="{vcls}">
           <div style="font-size:22px;font-weight:800;color:{vcolor};letter-spacing:1px;">{vtitle}</div>
           <div style="font-size:13px;color:#8b949e;margin:6px 0 10px 0;">{vdesc}</div>
           <div>{all_pills}</div>
+          {f'<div style="margin-top:8px;">{sweep_html}</div>' if sweep_html else ''}
           <div style="margin-top:10px;font-size:12px;color:#484f58;">
             Last candle: {v['last_time'].strftime('%Y-%m-%d %H:%M')} &nbsp;·&nbsp;
-            Close: <code style="color:#c9d1d9;">{v['last_close']:.5f}</code>
+            Close: <code style="color:#c9d1d9;">{v['last_close']:.5f}</code> &nbsp;·&nbsp;
+            <span style="color:#58a6ff;">{pdh_info}</span> &nbsp;·&nbsp;
+            <span style="color:#e3b341;">{pdl_info}</span>
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -687,14 +828,16 @@ with tab_detail:
         total_bos       = int(df["bos_bull"].sum() + df["bos_bear"].sum())
         total_doji      = int(df["doji"].sum())
         last_3_patterns = len(v["bull_patterns"]) + len(v["bear_patterns"])
+        total_sweeps    = int(df["sweep_bull"].sum() + df["sweep_bear"].sum()) if "sweep_bull" in df.columns else 0
 
-        k1, k2, k3, k4, k5 = st.columns(5)
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
         for col_, val_, lbl_, color_ in [
             (k1, str(total_bull),      "Bull Signals",    "#3fb950"),
             (k2, str(total_bear),      "Bear Signals",    "#f85149"),
             (k3, str(total_bos),       "BOS Events",      "#388bfd"),
             (k4, str(total_doji),      "Doji Candles",    "#8b949e"),
-            (k5, str(last_3_patterns), "Last 3 Patterns", "#e3b341"),
+            (k5, str(total_sweeps),    "Liq. Sweeps",     "#00d4ff"),
+            (k6, str(last_3_patterns), "Last 3 Patterns", "#e3b341"),
         ]:
             with col_:
                 st.markdown(
@@ -708,7 +851,7 @@ with tab_detail:
 
         # ── Chart ────────────────────────────────────
         st.markdown('<div class="section-title">📊 15M Chart — Pattern Overlay</div>', unsafe_allow_html=True)
-        fig = build_chart(df, selected_pair, show_candles)
+        fig = build_chart(df, selected_pair, show_candles, pdh=pdh, pdl=pdl)
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
