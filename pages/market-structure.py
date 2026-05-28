@@ -324,6 +324,8 @@ with st.sidebar:
     st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",       icon="⚖️")
     st.page_link("pages/trade-journal.py",        label="16. Trade Journal",        icon="📓")
     st.page_link("pages/market-structure.py",     label="17. Market Structure",     icon="🏗️")
+    st.page_link("pages/setup-ranker.py",         label="18. Setup Ranker",         icon="🎰")
+    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.divider()
 
     tf_options = {

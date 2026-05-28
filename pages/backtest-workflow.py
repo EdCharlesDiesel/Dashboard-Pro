@@ -561,6 +561,27 @@ def check_pass_rate_chart(trades: list, daily: pd.DataFrame, weekly: pd.DataFram
 # ══════════════════════════════════════════════════════════════════
 
 with st.sidebar:
+    st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
+    st.page_link("pages/macro-bias.py",           label="01. Macro Bias",           icon="🌐")
+    st.page_link("pages/news-filter.py",          label="02. News Filter",          icon="📰")
+    st.page_link("pages/correlations.py",         label="03. Correlations",         icon="🔗")
+    st.page_link("pages/atr-volatility.py",       label="04. ATR Volatility",       icon="📊")
+    st.page_link("pages/weekly-ema.py",           label="05. Weekly EMA",           icon="📉")
+    st.page_link("pages/weekly-rsi.py",           label="06. Weekly RSI",           icon="📡")
+    st.page_link("pages/weekly-swing.py",         label="07. Weekly Swing",         icon="🔄")
+    st.page_link("pages/daily-trend.py",          label="08. Daily Trend",          icon="📈")
+    st.page_link("pages/daily-macd.py",           label="09. Daily MACD",           icon="📊")
+    st.page_link("pages/4H-confluence-zone.py",   label="10. 4H Confluence Zone",   icon="🎯")
+    st.page_link("pages/confluence-checker.py",   label="11. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py",        label="12. 15M Rejection",        icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py",     label="13. 15M Entry Signal",     icon="⚡")
+    st.page_link("pages/stop-structure.py",       label="14. Stop Structure",       icon="🛡️")
+    st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",       icon="⚖️")
+    st.page_link("pages/trade-journal.py",        label="16. Trade Journal",        icon="📓")
+    st.page_link("pages/market-structure.py",     label="17. Market Structure",     icon="🏗️")
+    st.page_link("pages/setup-ranker.py",         label="18. Setup Ranker",         icon="🎰")
+    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
+    st.markdown("---")
     st.markdown("### 🧪 Workflow Backtest")
     st.markdown("---")
 
@@ -746,8 +767,8 @@ if 'bt_trades' in st.session_state:
         styled = (
             df_log[['date', 'score', 'entry', 'exit', 'sl', 'tp1', 'r', 'pips', 'outcome']]
             .style
-            .applymap(colour_outcome, subset=['outcome'])
-            .applymap(colour_r,       subset=['r'])
+            .map(colour_outcome, subset=['outcome'])
+            .map(colour_r,       subset=['r'])
             .format({'entry': '{:.5f}', 'exit': '{:.5f}', 'sl': '{:.5f}', 'tp1': '{:.5f}',
                      'r': '{:+.2f}R', 'pips': '{:.0f}'})
         )

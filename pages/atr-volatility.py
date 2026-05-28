@@ -185,6 +185,7 @@ with st.sidebar:
     st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
     st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
     st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
+    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.divider()
 
     period_options = {"30 Days": "30d", "60 Days": "60d", "90 Days": "90d", "6 Months": "6mo"}
