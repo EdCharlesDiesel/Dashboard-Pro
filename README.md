@@ -206,171 +206,147 @@ If any of steps 1–4 conflict with the trade direction, skip it entirely. If st
 
 ---
 
+## Daily Trading Routine — SAST (UTC+2)
+
+You wake up exactly at the London Kill Zone open — your highest-probability window of the day.
+
+### Kill Zone Schedule
+
+| Session | UTC | SAST | Priority |
+|---------|-----|------|----------|
+| London Kill Zone | 07:00–09:00 | 09:00–11:00 | 🟢 Prime |
+| NY Kill Zone | 12:00–14:00 | 14:00–16:00 | 🟢 Prime |
+| London Close | 15:00–17:00 | 17:00–19:00 | 🟡 Secondary |
+| Tokyo | 00:00–03:00 | 02:00–05:00 | 🔴 Avoid |
+
+You have two prime windows — morning and afternoon. Most days one clean trade is enough.
+
+---
+
+### ☕ 08:30–09:00 SAST — Pre-Market Prep (30 min)
+
+Work top-down through the higher timeframes before price starts moving.
+
+| Page | What you're deciding |
+|------|----------------------|
+| 01. Macro Bias | Is the fundamental backdrop bullish or bearish for your target pairs today? |
+| 02. News Filter | Any red-folder news in the next 2 hours? If yes, wait or skip. |
+| 03. Correlations | Is DXY, Gold, S&P moving in a way that confirms your bias? |
+| 05. Weekly EMA | Which pairs have clean weekly trend alignment? |
+| 06. Weekly RSI | Is RSI extended (avoid) or has room (favour)? |
+| 08. Daily Trend | Daily EMA tells you the directional bias for today. |
+| 09. Daily MACD | MACD histogram — is momentum building or fading? |
+
+**Output:** 2–4 pairs on your watchlist with a clear LONG or SHORT bias for each.
+
+---
+
+### 🔎 09:00–09:15 SAST — Find the Best Setup
+
+| Page | What you're deciding |
+|------|----------------------|
+| 18. Setup Ranker | Run it — pick pairs scoring 7+/10 in your bias direction. |
+| 10. 4H Confluence Zone | Is price at a 4H zone right now? PDH/PDL in the area? |
+| 04. ATR Volatility | Is spread/ATR ratio ≤5%? Is volatility ok to trade? |
+| 11. Confluence Checker | Do 2 of 3 key confluences line up? |
+
+**Output:** One pair, one direction, confirmed at a key level.
+
+---
+
+### ⚡ 09:15–11:00 SAST — Watch for the Entry (London Kill Zone)
+
+This is the execution window. Open the checklist on your target pair.
+
+**Step 1 — Fill the checklist (00. Checklist)**
+- Checks 1–10 you can tick from your pre-market work.
+- The MTF Alignment strip tells you instantly if Weekly/Daily/4H all agree.
+- Watch the correlation exposure warning — if you already have a correlated position open, skip.
+
+**Step 2 — Wait for the trigger**
+
+| Page | What fires the entry |
+|------|----------------------|
+| 12. 15M Rejection | A pin bar, engulf, or tweezer at the 4H zone + PDH/PDL sweep marker 🔄 |
+| 13. 15M Entry Signal | Stochastic crossover + RSI reset — ideally LONG CONFIRMED / SHORT CONFIRMED (vol spike too) |
+
+> **Rule:** Only take the trade when the checklist hits 16/18+ AND all checks 11–16 are ticked. The signal chip must show 🟢 GO.
+
+---
+
+### 🛡️ Before You Click — 2-Minute Checks
+
+| Page | Quick check |
+|------|-------------|
+| 14. Stop Structure | Is the stop behind a real structure level? |
+| 15. R:R Calculator | Is R:R ≥ 2:1 to TP1? |
+| Daily Loss Limit | Already 1 loss today? Trade smaller. Already 2? Close the laptop. |
+
+---
+
+### 📋 Log the Trade
+
+In **00. Checklist → Save Trade Setup to PostgreSQL**. This captures everything for the journal.
+
+---
+
+### 🌇 14:00–16:00 SAST — NY Kill Zone (Second Opportunity)
+
+If the London window gave no clean GO signal:
+- Re-run pages 10 → 11 → 12 → 13 for the NY open.
+- Same checklist process.
+- Price often re-tests the London session level — this is a second entry chance.
+
+---
+
+### 📓 19:00 SAST — End of Day Review (10 min)
+
+| Page | What to review |
+|------|----------------|
+| 16. Trade Journal | Did equity curve move up? Win rate trending toward 66%? |
+| 17. Market Structure | Did the pairs you traded break structure as expected? |
+| Close any open trades | 00. Checklist → Close Trade — record outcome, pips, R multiple. |
+
+---
+
+### The 66% Win Rate Formula
+
+The system is designed around this logic:
+
+```
+High-probability setup =
+  Weekly bias aligned          ✅
+  Daily trend confirmed        ✅
+  4H zone + PDH/PDL            ✅
+  MTF FULLY ALIGNED            ⭐
+  London/NY kill zone          ✅
+  Rejection candle             ✅
+  Entry signal CONFIRMED
+  (vol spike)                  ✅
+  ≥16/18 checks + critical
+  path                         ✅
+```
+
+When all of those are present: take the trade.
+When even one critical check (11–16) is missing: sit on your hands.
+
+The Trade Journal page tracks your win rate in real time against the 66% target — if you're below it, filter the journal by session and pair to find where you're leaking (wrong session, wrong pair, skipping the checklist).
+
+---
+
+### Discipline Rules Baked Into the System
+
+- **2 losses today** → system blocks new entries (daily loss limit tracker).
+- **Correlated pairs open** → system warns you (stacked risk).
+- **Not in a kill zone** → Check #10 shows red (session enforcement).
+- **Setup ranks below 7/10** → skip it (Setup Ranker filter).
+
+One focused trade in the London window, reviewed that evening — done consistently, that's the path to 66%.
+
+---
+
 ## Notes
 
 - The `archive/` folder contains earlier iterations and is not imported by the production dashboard.
 - Macro fallback data in `data_provider.py` is static as of 2024-Q1. Add a FRED API key to get live values.
 - The Trading Ideas tab auto-refreshes every 5 minutes using Streamlit's `@st.fragment` — no manual refresh needed.
-
-
-Your Daily Trading Routine — SAST (UTC+2)
-
-  The good news: 09:00 SAST = 07:00 UTC — you wake up exactly at the London Kill Zone open. That's
-  your highest-probability window of the day.
-
-  ---
-  Kill Zone Schedule (SAST)
-
-  ┌──────────────────┬─────────────┬─────────────┬──────────────┐
-  │     Session      │     UTC     │    SAST     │   Priority   │
-  ├──────────────────┼─────────────┼─────────────┼──────────────┤
-  │ London Kill Zone │ 07:00–09:00 │ 09:00–11:00 │ 🟢 Prime     │
-  ├──────────────────┼─────────────┼─────────────┼──────────────┤
-  │ NY Kill Zone     │ 12:00–14:00 │ 14:00–16:00 │ 🟢 Prime     │
-  ├──────────────────┼─────────────┼─────────────┼──────────────┤
-  │ London Close     │ 15:00–17:00 │ 17:00–19:00 │ 🟡 Secondary │
-  ├──────────────────┼─────────────┼─────────────┼──────────────┤
-  │ Tokyo            │ 00:00–03:00 │ 02:00–05:00 │ 🔴 Avoid     │
-  └──────────────────┴─────────────┴─────────────┴──────────────┘
-
-  You have two prime windows — morning and afternoon. Most days one clean trade is enough.
-
-  ---
-  Daily Routine — Page by Page
-
-  ☕  08:30–09:00 SAST — Pre-market prep (30 min)
-
-  Work top-down through the higher timeframes before price starts moving:
-
-  ┌──────────────────┬─────────────────────────────────────────────────────────────────────────────┐
-  │       Page       │                            What you're deciding                             │
-  ├──────────────────┼─────────────────────────────────────────────────────────────────────────────┤
-  │ 01. Macro Bias   │ Is the fundamental backdrop bullish or bearish for your target pairs today? │
-  ├──────────────────┼─────────────────────────────────────────────────────────────────────────────┤
-  │ 02. News Filter  │ Any red-folder news in the next 2 hours? If yes, wait or skip               │
-  ├──────────────────┼─────────────────────────────────────────────────────────────────────────────┤
-  │ 03. Correlations │ Is DXY, Gold, S&P moving in a way that confirms your bias?                  │
-  ├──────────────────┼─────────────────────────────────────────────────────────────────────────────┤
-  │ 05. Weekly EMA   │ Which pairs have clean weekly trend alignment?                              │
-  ├──────────────────┼─────────────────────────────────────────────────────────────────────────────┤
-  │ 06. Weekly RSI   │ Is RSI extended (avoid) or has room (favour)?                               │
-  ├──────────────────┼─────────────────────────────────────────────────────────────────────────────┤
-  │ 08. Daily Trend  │ Daily EMA tells you the directional bias for today                          │
-  ├──────────────────┼─────────────────────────────────────────────────────────────────────────────┤
-  │ 09. Daily MACD   │ MACD histogram — is momentum building or fading?                            │
-  └──────────────────┴─────────────────────────────────────────────────────────────────────────────┘
-
-  Output: You should have 2–4 pairs on your watchlist and a clear LONG or SHORT bias for each.
-
-  ---
-  🔎 09:00–09:15 SAST — Find the best setup
-
-  ┌────────────────────────┬────────────────────────────────────────────────────────────┐
-  │          Page          │                    What you're deciding                    │
-  ├────────────────────────┼────────────────────────────────────────────────────────────┤
-  │ 18. Setup Ranker       │ Run it — pick the pairs scoring 7+/10, your bias direction │
-  ├────────────────────────┼────────────────────────────────────────────────────────────┤
-  │ 10. 4H Confluence Zone │ Is price at a 4H zone right now? PDH/PDL in the area?      │
-  ├────────────────────────┼────────────────────────────────────────────────────────────┤
-  │ 04. ATR Volatility     │ Is spread/ATR ratio ≤5%? Is volatility ok to trade?        │
-  ├────────────────────────┼────────────────────────────────────────────────────────────┤
-  │ 11. Confluence Checker │ Do 2 of 3 key confluences line up?                         │
-  └────────────────────────┴────────────────────────────────────────────────────────────┘
-
-  Output: One pair, one direction, confirmed at a key level.
-
-  ---
-  ⚡  09:15–11:00 SAST — Watch for the entry (London Kill Zone)
-
-  This is the execution window. Open the checklist on your target pair.
-
-  Step 1 — Fill the checklist (00. Checklist)
-  - Checks 1–10 you can tick from your pre-market work
-  - The MTF Alignment strip tells you instantly if Weekly/Daily/4H all agree
-  - Watch the correlation exposure warning — if you already have a correlated position open, skip
-
-  Step 2 — Wait for the trigger
-
-  ┌───────────────────┬───────────────────────────────────────────────────────────────────────────┐
-  │       Page        │                           What fires the entry                            │
-  ├───────────────────┼───────────────────────────────────────────────────────────────────────────┤
-  │ 12. 15M Rejection │ A pin bar, engulf, or tweezer at the 4H zone + PDH/PDL sweep marker 🔄    │
-  ├───────────────────┼───────────────────────────────────────────────────────────────────────────┤
-  │ 13. 15M Entry     │ Stochastic crossover + RSI reset — ideally LONG CONFIRMED / SHORT         │
-  │ Signal            │ CONFIRMED (vol spike too)                                                 │
-  └───────────────────┴───────────────────────────────────────────────────────────────────────────┘
-
-  Rule: Only take the trade when the checklist hits 16/18+ AND all checks 11–16 are ticked. The signal
-   chip must show 🟢 GO.
-
-  ---
-  🛡️Before you click — 2-minute checks
-
-  ┌────────────────────┬───────────────────────────────────────────────────────────────────┐
-  │        Page        │                            Quick check                            │
-  ├────────────────────┼───────────────────────────────────────────────────────────────────┤
-  │ 14. Stop Structure │ Is the stop behind a real structure level?                        │
-  ├────────────────────┼───────────────────────────────────────────────────────────────────┤
-  │ 15. R:R Calculator │ Is R:R ≥ 2:1 to TP1?                                              │
-  ├────────────────────┼───────────────────────────────────────────────────────────────────┤
-  │ Daily Loss Limit   │ Already 1 loss today? Trade smaller. Already 2? Close the laptop. │
-  └────────────────────┴───────────────────────────────────────────────────────────────────┘
-
-  ---
-  📋 Log the trade
-
-  In 00. Checklist → Save Trade Setup to PostgreSQL. This captures everything for the journal.
-
-  ---
-  🌇 14:00–16:00 SAST — NY Kill Zone (second opportunity)
-
-  If the London window gave no clean GO signal:
-  - Re-run pages 10 → 11 → 12 → 13 for the NY open
-  - Same checklist process
-  - Price often re-tests the London session level — this is a second entry chance
-
-  ---
-  📓 19:00 SAST — End of day review (10 min)
-
-  ┌───────────────────────┬────────────────────────────────────────────────────────────────┐
-  │         Page          │                         What to review                         │
-  ├───────────────────────┼────────────────────────────────────────────────────────────────┤
-  │ 16. Trade Journal     │ Did equity curve move up? Win rate trending toward 66%?        │
-  ├───────────────────────┼────────────────────────────────────────────────────────────────┤
-  │ 17. Market Structure  │ Did the pairs you traded break structure as expected?          │
-  ├───────────────────────┼────────────────────────────────────────────────────────────────┤
-  │ Close any open trades │ 00. Checklist → Close Trade — record outcome, pips, R multiple │
-  └───────────────────────┴────────────────────────────────────────────────────────────────┘
-
-  ---
-  The 66% Win Rate Formula
-
-  The system is designed around this logic:
-
-  High-probability setup =
-    Weekly bias aligned  ✅
-    Daily trend confirmed ✅
-    4H zone + PDH/PDL    ✅
-    MTF FULLY ALIGNED    ⭐
-    London/NY kill zone  ✅
-    Rejection candle     ✅
-    Entry signal CONFIRMED (vol spike) ✅
-    ≥16/18 checks + critical path      ✅
-
-  When all of those are present: take the trade.
-  When even one critical check (11–16) is missing: sit on your hands.
-
-  The Trade Journal page tracks your win rate in real time against the 66% target — if you're below
-  it, filter the journal by session and pair to find where you're leaking (wrong session, wrong pair,
-  skipping the checklist).
-
-  ---
-  Discipline rules baked into the system
-
-  - 2 losses today → system blocks new entries (daily loss limit tracker)
-  - Correlated pairs open → system warns you (stacked risk)
-  - Not in a kill zone → Check #10 shows red (session enforcement)
-  - Setup ranks below 7/10 → skip it (Setup Ranker filter)
-
-  One focused trade in the London window, reviewed that evening — done consistently, that's the path
-  to 66%.
