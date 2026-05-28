@@ -39,7 +39,9 @@
       "Bash(python -m py_compile pages/15m-rejection.py)",
       "Bash(sed -n '426,450p' pages/macro-bias.py)",
       "Bash(sed -n '200,208p' pages/weekly-ema.py)",
-      "Bash(python -m py_compile daily-trading-checklist.py pages/15m-entry-signal.py pages/15m-rejection.py pages/macro-bias.py pages/weekly-ema.py pages/setup-ranker.py pages/trade-journal.py pages/market-structure.py)"
+      "Bash(python -m py_compile daily-trading-checklist.py pages/15m-entry-signal.py pages/15m-rejection.py pages/macro-bias.py pages/weekly-ema.py pages/setup-ranker.py pages/trade-journal.py pages/market-structure.py)",
+      "Bash(python *)",
+      "Bash(streamlit run *)"
     ]
   }
 }
