@@ -69,19 +69,19 @@ CHECK_META = [
     ("news_filter",      "02. News Filter Clear",            "auto",  True),
     ("correlations",     "03. Correlation Exposure OK",      "auto",  False),
     ("atr_volatility",   "04. ATR Volatility OK",            "calc",  False),
-    ("weekly_ema",       "05. Weekly EMA Aligned",           "calc",  True),
-    ("weekly_rsi",       "06. Weekly RSI has Room",          "calc",  True),
-    ("weekly_swing",     "07. Weekly Swing Structure",       "calc",  True),
-    ("daily_trend",      "08. Daily Trend Intact",           "calc",  True),
-    ("daily_macd",       "09. Daily MACD Momentum",          "calc",  True),
-    ("4h_confluence",    "10. 4H Confluence Zone",           "calc",  True),
-    ("confluence_check", "11. 2/3 Confluences Met",          "calc",  True),
-    ("rejection",        "12. 15M Rejection Candle",         "calc",  True),
-    ("entry_signal",     "13. 15M Entry Signal",             "calc",  True),
-    ("stop_structure",   "14. Stop Below Structure",         "calc",  True),
-    ("rr_check",         "15. R:R ≥ 2:1",                   "calc",  True),
+    ("weekly_ema",       "05. Weekly EMA Aligned",           "calc",  True),   # hard block: macro direction
+    ("weekly_rsi",       "06. Weekly RSI has Room",          "calc",  False),  # score contributor
+    ("weekly_swing",     "07. Weekly Swing Structure",       "calc",  False),  # score contributor
+    ("daily_trend",      "08. Daily Trend Intact",           "calc",  True),   # hard block: must trade with trend
+    ("daily_macd",       "09. Daily MACD Momentum",          "calc",  False),  # score contributor
+    ("4h_confluence",    "10. 4H Confluence Zone",           "calc",  False),  # score contributor
+    ("confluence_check", "11. 2/3 Confluences Met",          "calc",  False),  # score contributor
+    ("rejection",        "12. 15M Rejection Candle",         "calc",  False),  # score contributor
+    ("entry_signal",     "13. 15M Entry Signal",             "calc",  False),  # score contributor
+    ("stop_structure",   "14. Stop Below Structure",         "calc",  True),   # hard block: must have a stop
+    ("rr_check",         "15. R:R ≥ 2:1",                   "calc",  True),   # hard block: minimum RR
     ("loss_limit",       "16. Daily Loss Limit OK",          "auto",  False),
-    ("mkt_structure",    "17. Market Structure Intact",      "calc",  True),
+    ("mkt_structure",    "17. Market Structure Intact",      "calc",  False),  # score contributor
     ("setup_rank",       "18. Setup Score ≥ 14/18",          "calc",  False),
 ]
 
