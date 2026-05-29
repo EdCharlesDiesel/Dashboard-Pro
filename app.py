@@ -643,7 +643,7 @@ def render_macro_pro_tab(fred_key: str):
             ), row=row + 1, col=col + 1)
 
         fig.update_layout(
-            template="plotly_dark", paper_bgcolor="#0a0e17", plot_bgcolor="#0a0e17",
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0e17",
             font=dict(family="JetBrains Mono", size=9, color="#8899bb"),
             showlegend=False, height=400, margin=dict(l=10, r=10, t=35, b=10),
         )

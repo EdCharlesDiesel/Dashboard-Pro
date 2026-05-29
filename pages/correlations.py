@@ -127,24 +127,25 @@ def fetch_prices(tickers: tuple, period: str, interval: str):
 with st.sidebar:
     st.markdown("### 🔗 Correlation Settings")
     st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
-    st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
+    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
+    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
+    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
+    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
+    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
+    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
+    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
+    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
+    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.divider()
     st.markdown("")
 
@@ -290,7 +291,7 @@ with left:
         hovertemplate="<b>%{y}</b> vs <b>%{x}</b><br>Correlation: <b>%{z:.3f}</b><extra></extra>",
     ))
     fig_heat.update_layout(
-        paper_bgcolor="#161b22", plot_bgcolor="#161b22",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         margin=dict(l=10, r=10, t=10, b=10),
         height=520,
         xaxis=dict(tickfont=dict(color="#8b949e", size=10), side="bottom",
@@ -407,7 +408,7 @@ if focus_pair in returns.columns:
         fig_roll.add_hrect(y0=-1,   y1=-0.7, fillcolor="#8b2d2d", opacity=0.05, line_width=0)
 
         fig_roll.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             margin=dict(l=20, r=80, t=20, b=20), height=400,
             legend=dict(font=dict(color="#8b949e", size=10), bgcolor="#161b22",
                         bordercolor="#21262d", borderwidth=1, orientation="v",
