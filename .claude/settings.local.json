@@ -44,7 +44,10 @@
       "Bash(streamlit run *)",
       "Bash(Get-ChildItem -Path \"C:\\\\x\\\\Practice\\\\Dashboard-Pro\\\\pages\" -File)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('pages/backtest-workflow.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")"
+      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('pages/backtest-workflow.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(python3 -c ' *)",
+      "Skill(update-config)"
     ]
   }
 }
