@@ -64,7 +64,7 @@ st.markdown("""
     .slope-arrow-down{color:#f85149;font-size:14px;font-weight:900;}
     .slope-arrow-flat{color:#e3b341;font-size:14px;font-weight:900;}
 
-    .prog-track{background:#21262d;border-radius:6px;height:5px;overflow:hidden;margin:4px 0;}
+    .prog-track{background:var(--border,#21262d);border-radius:6px;height:5px;overflow:hidden;margin:4px 0;}
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
@@ -190,24 +190,25 @@ def fetch_weekly(ticker: str, pip_size: float, lookback: str = "2y"):
 with st.sidebar:
     st.markdown("### 📉 Weekly EMA")
     st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
-    st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
+    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
+    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
+    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
+    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
+    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
+    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
+    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
+    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
+    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
 
     st.divider()
 
@@ -509,7 +510,7 @@ with right:
                       annotation_text="Falling",  annotation_font_color="#8b2d2d", annotation_position="right")
 
         fig.update_layout(
-            paper_bgcolor="#161b22", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
             legend=dict(font=dict(color="#8b949e", size=11), bgcolor="#161b22",
                         bordercolor="#21262d", orientation="h", x=0, y=1.06),
             margin=dict(l=10, r=80, t=30, b=10),

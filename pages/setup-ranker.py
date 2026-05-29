@@ -290,7 +290,7 @@ def score_pair(pair: str, info: dict, direction: str) -> dict:
         close_4h = float(df_4h["Close"].iloc[-1])
         e20_4h   = float(ema(df_4h["Close"], 20).iloc[-1])
         e50_4h   = float(ema(df_4h["Close"], 50).iloc[-1])
-        tol      = close_4h * 0.005
+        tol      = atr14(df_4h) * 0.5 if len(df_4h) > 14 else close_4h * 0.005
         near_ema = abs(close_4h - e20_4h) <= tol or abs(close_4h - e50_4h) <= tol
         # Pivot PP
         prev_candle = df_4h.iloc[-2]
@@ -350,24 +350,25 @@ def score_pair(pair: str, info: dict, direction: str) -> dict:
 with st.sidebar:
     st.markdown("### 🎰 Setup Ranker")
     st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
-    st.page_link("pages/macro-bias.py",           label="01. Macro Bias",           icon="🌐")
-    st.page_link("pages/news-filter.py",          label="02. News Filter",          icon="📰")
-    st.page_link("pages/correlations.py",         label="03. Correlations",         icon="🔗")
-    st.page_link("pages/atr-volatility.py",       label="04. ATR Volatility",       icon="📊")
-    st.page_link("pages/weekly-ema.py",           label="05. Weekly EMA",           icon="📉")
-    st.page_link("pages/weekly-rsi.py",           label="06. Weekly RSI",           icon="📡")
-    st.page_link("pages/weekly-swing.py",         label="07. Weekly Swing",         icon="🔄")
-    st.page_link("pages/daily-trend.py",          label="08. Daily Trend",          icon="📈")
-    st.page_link("pages/daily-macd.py",           label="09. Daily MACD",           icon="📊")
-    st.page_link("pages/4H-confluence-zone.py",   label="10. 4H Confluence Zone",   icon="🎯")
-    st.page_link("pages/confluence-checker.py",   label="11. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py",        label="12. 15M Rejection",        icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py",     label="13. 15M Entry Signal",     icon="⚡")
-    st.page_link("pages/stop-structure.py",       label="14. Stop Structure",       icon="🛡️")
-    st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",       icon="⚖️")
-    st.page_link("pages/trade-journal.py",        label="16. Trade Journal",        icon="📓")
-    st.page_link("pages/market-structure.py",     label="17. Market Structure",     icon="🏗️")
-    st.page_link("pages/setup-ranker.py",         label="18. Setup Ranker",         icon="🎰")
+    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
+    st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
+    st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
+    st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
+    st.page_link("pages/atr-volatility.py",       label="05. ATR Volatility",       icon="📊")
+    st.page_link("pages/weekly-ema.py",           label="06. Weekly EMA",           icon="📉")
+    st.page_link("pages/weekly-rsi.py",           label="07. Weekly RSI",           icon="📡")
+    st.page_link("pages/weekly-swing.py",         label="08. Weekly Swing",         icon="🔄")
+    st.page_link("pages/daily-trend.py",          label="09. Daily Trend",          icon="📈")
+    st.page_link("pages/daily-macd.py",           label="10. Daily MACD",           icon="📊")
+    st.page_link("pages/4H-confluence-zone.py",   label="11. 4H Confluence Zone",   icon="🎯")
+    st.page_link("pages/confluence-checker.py",   label="12. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py",        label="13. 15M Rejection",        icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py",     label="14. 15M Entry Signal",     icon="⚡")
+    st.page_link("pages/stop-structure.py",       label="15. Stop Structure",       icon="🛡️")
+    st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
+    st.page_link("pages/trade-journal.py",        label="17. Trade Journal",        icon="📓")
+    st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
+    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.divider()
 
     direction = st.radio("Scan direction", ["LONG", "SHORT", "Both"], horizontal=True)
@@ -491,7 +492,7 @@ with tab_cards:
             f'⚠️ Spread {r["spread_pct"]:.1f}%</span>'
         ) if r["spread_pct"] > 5 else ""
 
-        st.markdown(f"""
+        card_html = f"""
         <div style="background:{bg};border:1px solid {border_c};border-left:4px solid {color};
                     border-radius:10px;padding:16px 18px;margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
@@ -513,7 +514,10 @@ with tab_cards:
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:2px;">{pills}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """
+
+        card_html = "\n".join(line.strip() for line in card_html.splitlines())
+        st.markdown(card_html, unsafe_allow_html=True)
 
 # ── TABLE ─────────────────────────────────────────────────────────
 with tab_table:
@@ -559,7 +563,7 @@ with tab_chart:
     fig.add_vline(x=6, line_dash="dot", line_color="#388bfd", line_width=1,
                   annotation_text="Grade B", annotation_font_color="#388bfd")
     fig.update_layout(
-        paper_bgcolor="#0d1117", plot_bgcolor="#161b22",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
         height=max(400, len(top) * 30),
         xaxis=dict(range=[0, 12], showgrid=True, gridcolor="#21262d", title="Score / 10"),
         yaxis=dict(showgrid=False),

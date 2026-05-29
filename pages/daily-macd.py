@@ -24,7 +24,7 @@ st.markdown("""
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
-    .stApp{ background:#0d1117; }
+    .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
@@ -42,7 +42,7 @@ st.markdown("""
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color);
                     margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:#21262d; border-radius:8px; height:10px;
+    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px;
                  margin:6px 0 2px 0; overflow:hidden; }
 
     /* Verdict banners */
@@ -87,9 +87,9 @@ st.markdown("""
     .cond-badge-warn{ background:#2a1f00; color:#e3b341; border:1px solid #9e6a03;
                       border-radius:20px; padding:3px 12px; font-size:11px; font-weight:700; }
 
-    .explainer{ background:#0d1117; border:1px solid #1e3a5f;
+    .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
                 border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:#8b949e; line-height:1.7; }
+                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -398,7 +398,7 @@ def build_chart(m: dict, pair: str,
 
     fig.update_layout(
         height=700,
-        paper_bgcolor="#0d1117",
+        paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#161b22",
         font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
         xaxis_rangeslider_visible=False,
@@ -422,24 +422,25 @@ def build_chart(m: dict, pair: str,
 with st.sidebar:
     st.markdown("### 📊 Daily MACD Momentum")
     st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/macro-bias.py", label="01. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="02. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="03. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="04. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="05. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="06. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="07. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="08. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="09. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="10. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="11. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="12. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="13. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="14. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="15. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="16. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="17. Market Structure",  icon="🏗️")
-    st.page_link("pages/setup-ranker.py",      label="18. Setup Ranker",      icon="🏆")
+    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
+    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
+    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
+    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
+    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
+    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
+    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
+    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
+    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
+    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
+    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
+    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
+    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
+    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
+    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
+    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
+    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
