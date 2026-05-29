@@ -86,6 +86,7 @@ def load_journal_trades(cfg, limit: int = 500):
 with st.sidebar:
     st.markdown("### 📓 Trade Journal")
     st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
+    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
     st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
     st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
     st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
@@ -103,7 +104,6 @@ with st.sidebar:
     st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
     st.page_link("pages/trade-journal.py",        label="17. Trade Journal",        icon="📓")
     st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
-    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
     st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.divider()
 

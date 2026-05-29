@@ -243,7 +243,7 @@ def evaluate_trend_signal(df: pd.DataFrame, min_conditions: int = 4) -> Tuple[st
         "Price below 200 EMA": close < e200,
         "50 EMA below 200 EMA (Death X)": e50 < e200,
         "Price at/below 50 EMA": close <= e50 * 1.0015,
-        "RSI 30–55 (bearish momentum)": 30 <= rsi_val <= 55,
+        "RSI 30–45 (bearish momentum)": 30 <= rsi_val <= 45,
         "MACD below Signal line": macd_v < macd_s,
         "Strong trend (ADX > 25)": adx_v > 25,
     }
@@ -382,7 +382,7 @@ def load_trades(cfg, limit=50):
                        logged_at,
                        instrument,
                        ticker,
-                       direction, session, score, verdict, atr14, atr20, sl_pips, tp1_pips, tp2_pips, lot_size, risk_amount, rr_tp1, rr_tp2, account_bal, risk_pct, checks_passed, checks_total, notes
+                       direction, session, score, verdict, atr14, atr20, sl_pips, tp1_pips, tp2_pips, lot_size, risk_amount, rr_tp1, rr_tp2, account_bal, risk_pct, checks_passed, checks_total, checks_detail, notes
                 FROM trade_setups
                 ORDER BY logged_at DESC
                     LIMIT %s
@@ -590,6 +590,7 @@ def check_correlation_exposure(open_trades: list, direction: str, instrument: st
     return warnings
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def get_mtf_alignment(ticker: str, direction: str) -> dict:
     """
     Check Weekly / Daily / 4H EMA alignment for the selected direction.
@@ -701,6 +702,7 @@ with st.sidebar:
     if st.session_state.current_page == "checklist":
         # Original checklist sidebar
         st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
+        st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
         st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
         st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
         st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
@@ -718,7 +720,6 @@ with st.sidebar:
         st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
         st.page_link("pages/trade-journal.py",        label="17. Trade Journal",         icon="📓")
         st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
-        st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
         st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
         st.divider()
 
@@ -1424,6 +1425,10 @@ if st.session_state.current_page == "checklist":
             if trades:
                 df_log = pd.DataFrame(trades)
                 df_log["logged_at"] = pd.to_datetime(df_log["logged_at"]).dt.strftime("%Y-%m-%d %H:%M")
+                if "checks_detail" in df_log.columns:
+                    df_log["checks_detail"] = df_log["checks_detail"].apply(
+                        lambda x: str(x) if x else ""
+                    )
                 st.dataframe(df_log, use_container_width=True, column_config={
                     "id": st.column_config.NumberColumn("ID", width="small"),
                     "logged_at": st.column_config.TextColumn("Logged", width="medium"),
@@ -1444,6 +1449,8 @@ if st.session_state.current_page == "checklist":
                     "account_bal": st.column_config.NumberColumn("Balance", format="%.2f"),
                     "risk_pct": st.column_config.NumberColumn("Risk %", format="%.2f"),
                     "checks_passed": st.column_config.NumberColumn("✅ Checks"),
+                    "checks_total": st.column_config.NumberColumn("Total Checks"),
+                    "checks_detail": st.column_config.TextColumn("Check Detail", width="large"),
                     "notes": st.column_config.TextColumn("Notes", width="large"),
                 })
             else:

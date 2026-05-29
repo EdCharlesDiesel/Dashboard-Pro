@@ -290,7 +290,7 @@ def score_pair(pair: str, info: dict, direction: str) -> dict:
         close_4h = float(df_4h["Close"].iloc[-1])
         e20_4h   = float(ema(df_4h["Close"], 20).iloc[-1])
         e50_4h   = float(ema(df_4h["Close"], 50).iloc[-1])
-        tol      = close_4h * 0.005
+        tol      = atr14(df_4h) * 0.5 if len(df_4h) > 14 else close_4h * 0.005
         near_ema = abs(close_4h - e20_4h) <= tol or abs(close_4h - e50_4h) <= tol
         # Pivot PP
         prev_candle = df_4h.iloc[-2]
@@ -350,6 +350,7 @@ def score_pair(pair: str, info: dict, direction: str) -> dict:
 with st.sidebar:
     st.markdown("### 🎰 Setup Ranker")
     st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
+    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
     st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
     st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
     st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
@@ -367,7 +368,6 @@ with st.sidebar:
     st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
     st.page_link("pages/trade-journal.py",        label="17. Trade Journal",        icon="📓")
     st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
-    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
     st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.divider()
 
