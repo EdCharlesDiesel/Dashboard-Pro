@@ -225,30 +225,30 @@ You have two prime windows — morning and afternoon. Most days one clean trade 
 
 ### ☕ 08:30–09:00 SAST — Pre-Market Prep (30 min)
 
-Work top-down through the higher timeframes before price starts moving.
+Start with the Setup Ranker to build your candidate shortlist, then validate direction top-down.
 
 | Page | What you're deciding |
 |------|----------------------|
-| 01. Macro Bias | Is the fundamental backdrop bullish or bearish for your target pairs today? |
-| 02. News Filter | Any red-folder news in the next 2 hours? If yes, wait or skip. |
-| 03. Correlations | Is DXY, Gold, S&P moving in a way that confirms your bias? |
-| 05. Weekly EMA | Which pairs have clean weekly trend alignment? |
-| 06. Weekly RSI | Is RSI extended (avoid) or has room (favour)? |
-| 08. Daily Trend | Daily EMA tells you the directional bias for today. |
-| 09. Daily MACD | MACD histogram — is momentum building or fading? |
+| 01. Setup Ranker | Run in **Both** direction mode — which pairs score 7+/10? These are your candidates for today. |
+| 02. Macro Bias | For each candidate, confirm the fundamental direction — rates, GDP, inflation back the bias? |
+| 03. News Filter | Any red-folder news in the next 2 hours? If yes, wait or skip. |
+| 04. Correlations | Is DXY, Gold, S&P moving in a way that confirms your bias? |
+| 06. Weekly EMA | Which pairs have clean weekly trend alignment? |
+| 07. Weekly RSI | Is RSI extended (avoid) or has room (favour)? |
+| 09. Daily Trend | Daily EMA tells you the directional bias for today. |
+| 10. Daily MACD | MACD histogram — is momentum building or fading? |
 
-**Output:** 2–4 pairs on your watchlist with a clear LONG or SHORT bias for each.
+**Output:** 1–2 pairs confirmed by both technical score and macro fundamentals, with direction set.
 
 ---
 
-### 🔎 09:00–09:15 SAST — Find the Best Setup
+### 🔎 09:00–09:15 SAST — Confirm the Entry Zone
 
 | Page | What you're deciding |
 |------|----------------------|
-| 18. Setup Ranker | Run it — pick pairs scoring 7+/10 in your bias direction. |
-| 10. 4H Confluence Zone | Is price at a 4H zone right now? PDH/PDL in the area? |
-| 04. ATR Volatility | Is spread/ATR ratio ≤5%? Is volatility ok to trade? |
-| 11. Confluence Checker | Do 2 of 3 key confluences line up? |
+| 11. 4H Confluence Zone | Is price at a 4H zone right now? PDH/PDL in the area? |
+| 05. ATR Volatility | Is spread/ATR ratio ≤5%? Is volatility ok to trade? |
+| 12. Confluence Checker | Do 2 of 3 key confluences line up? |
 
 **Output:** One pair, one direction, confirmed at a key level.
 
@@ -267,8 +267,8 @@ This is the execution window. Open the checklist on your target pair.
 
 | Page | What fires the entry |
 |------|----------------------|
-| 12. 15M Rejection | A pin bar, engulf, or tweezer at the 4H zone + PDH/PDL sweep marker 🔄 |
-| 13. 15M Entry Signal | Stochastic crossover + RSI reset — ideally LONG CONFIRMED / SHORT CONFIRMED (vol spike too) |
+| 13. 15M Rejection | A pin bar, engulf, or tweezer at the 4H zone + PDH/PDL sweep marker 🔄 |
+| 14. 15M Entry Signal | Stochastic crossover + RSI reset — ideally LONG CONFIRMED / SHORT CONFIRMED (vol spike too) |
 
 > **Rule:** Only take the trade when the checklist hits 16/18+ AND all checks 11–16 are ticked. The signal chip must show 🟢 GO.
 
@@ -278,8 +278,8 @@ This is the execution window. Open the checklist on your target pair.
 
 | Page | Quick check |
 |------|-------------|
-| 14. Stop Structure | Is the stop behind a real structure level? |
-| 15. R:R Calculator | Is R:R ≥ 2:1 to TP1? |
+| 15. Stop Structure | Is the stop behind a real structure level? |
+| 16. R:R Calculator | Is R:R ≥ 2:1 to TP1? |
 | Daily Loss Limit | Already 1 loss today? Trade smaller. Already 2? Close the laptop. |
 
 ---
@@ -293,7 +293,7 @@ In **00. Checklist → Save Trade Setup to PostgreSQL**. This captures everythin
 ### 🌇 14:00–16:00 SAST — NY Kill Zone (Second Opportunity)
 
 If the London window gave no clean GO signal:
-- Re-run pages 10 → 11 → 12 → 13 for the NY open.
+- Re-run pages 11 → 12 → 13 → 14 for the NY open.
 - Same checklist process.
 - Price often re-tests the London session level — this is a second entry chance.
 
@@ -303,8 +303,8 @@ If the London window gave no clean GO signal:
 
 | Page | What to review |
 |------|----------------|
-| 16. Trade Journal | Did equity curve move up? Win rate trending toward 66%? |
-| 17. Market Structure | Did the pairs you traded break structure as expected? |
+| 17. Trade Journal | Did equity curve move up? Win rate trending toward 66%? |
+| 18. Market Structure | Did the pairs you traded break structure as expected? |
 | Close any open trades | 00. Checklist → Close Trade — record outcome, pips, R multiple. |
 
 ---

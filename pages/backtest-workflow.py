@@ -65,23 +65,23 @@ INSTRUMENTS = {
 }
 
 CHECK_META = [
-    ("macro_bias",       "01. Macro Bias Confirmed",         "auto",  True),
-    ("news_filter",      "02. News Filter Clear",            "auto",  True),
+    ("macro_bias",       "02. Macro Bias Confirmed",         "auto",  True),
+    ("news_filter",      "03. News Filter Clear",            "auto",  True),
     ("correlations",     "03. Correlation Exposure OK",      "auto",  False),
-    ("atr_volatility",   "04. ATR Volatility OK",            "calc",  False),
-    ("weekly_ema",       "05. Weekly EMA Aligned",           "calc",  True),   # hard block: macro direction
-    ("weekly_rsi",       "06. Weekly RSI has Room",          "calc",  False),  # score contributor
-    ("weekly_swing",     "07. Weekly Swing Structure",       "calc",  False),  # score contributor
-    ("daily_trend",      "08. Daily Trend Intact",           "calc",  True),   # hard block: must trade with trend
-    ("daily_macd",       "09. Daily MACD Momentum",          "calc",  False),  # score contributor
-    ("4h_confluence",    "10. 4H Confluence Zone",           "calc",  False),  # score contributor
+    ("atr_volatility",   "05. ATR Volatility OK",            "calc",  False),
+    ("weekly_ema",       "06. Weekly EMA Aligned",           "calc",  True),   # hard block: macro direction
+    ("weekly_rsi",       "07. Weekly RSI has Room",          "calc",  False),  # score contributor
+    ("weekly_swing",     "08. Weekly Swing Structure",       "calc",  False),  # score contributor
+    ("daily_trend",      "09. Daily Trend Intact",           "calc",  True),   # hard block: must trade with trend
+    ("daily_macd",       "10. Daily MACD Momentum",          "calc",  False),  # score contributor
+    ("4h_confluence",    "11. 4H Confluence Zone",           "calc",  False),  # score contributor
     ("confluence_check", "11. 2/3 Confluences Met",          "calc",  False),  # score contributor
-    ("rejection",        "12. 15M Rejection Candle",         "calc",  False),  # score contributor
-    ("entry_signal",     "13. 15M Entry Signal",             "calc",  False),  # score contributor
+    ("rejection",        "13. 15M Rejection Candle",         "calc",  False),  # score contributor
+    ("entry_signal",     "14. 15M Entry Signal",             "calc",  False),  # score contributor
     ("stop_structure",   "14. Stop Below Structure",         "calc",  True),   # hard block: must have a stop
     ("rr_check",         "15. R:R ≥ 2:1",                   "calc",  True),   # hard block: minimum RR
     ("loss_limit",       "16. Daily Loss Limit OK",          "auto",  False),
-    ("mkt_structure",    "17. Market Structure Intact",      "calc",  False),  # score contributor
+    ("mkt_structure",    "18. Market Structure Intact",      "calc",  False),  # score contributor
     ("setup_rank",       "18. Setup Score ≥ 14/18",          "calc",  False),
 ]
 
@@ -562,24 +562,24 @@ def check_pass_rate_chart(trades: list, daily: pd.DataFrame, weekly: pd.DataFram
 
 with st.sidebar:
     st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
-    st.page_link("pages/macro-bias.py",           label="01. Macro Bias",           icon="🌐")
-    st.page_link("pages/news-filter.py",          label="02. News Filter",          icon="📰")
-    st.page_link("pages/correlations.py",         label="03. Correlations",         icon="🔗")
-    st.page_link("pages/atr-volatility.py",       label="04. ATR Volatility",       icon="📊")
-    st.page_link("pages/weekly-ema.py",           label="05. Weekly EMA",           icon="📉")
-    st.page_link("pages/weekly-rsi.py",           label="06. Weekly RSI",           icon="📡")
-    st.page_link("pages/weekly-swing.py",         label="07. Weekly Swing",         icon="🔄")
-    st.page_link("pages/daily-trend.py",          label="08. Daily Trend",          icon="📈")
-    st.page_link("pages/daily-macd.py",           label="09. Daily MACD",           icon="📊")
-    st.page_link("pages/4H-confluence-zone.py",   label="10. 4H Confluence Zone",   icon="🎯")
-    st.page_link("pages/confluence-checker.py",   label="11. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py",        label="12. 15M Rejection",        icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py",     label="13. 15M Entry Signal",     icon="⚡")
-    st.page_link("pages/stop-structure.py",       label="14. Stop Structure",       icon="🛡️")
-    st.page_link("pages/rr-calculator.py",        label="15. R:R Calculator",       icon="⚖️")
-    st.page_link("pages/trade-journal.py",        label="16. Trade Journal",        icon="📓")
-    st.page_link("pages/market-structure.py",     label="17. Market Structure",     icon="🏗️")
-    st.page_link("pages/setup-ranker.py",         label="18. Setup Ranker",         icon="🎰")
+    st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
+    st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
+    st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
+    st.page_link("pages/atr-volatility.py",       label="05. ATR Volatility",       icon="📊")
+    st.page_link("pages/weekly-ema.py",           label="06. Weekly EMA",           icon="📉")
+    st.page_link("pages/weekly-rsi.py",           label="07. Weekly RSI",           icon="📡")
+    st.page_link("pages/weekly-swing.py",         label="08. Weekly Swing",         icon="🔄")
+    st.page_link("pages/daily-trend.py",          label="09. Daily Trend",          icon="📈")
+    st.page_link("pages/daily-macd.py",           label="10. Daily MACD",           icon="📊")
+    st.page_link("pages/4H-confluence-zone.py",   label="11. 4H Confluence Zone",   icon="🎯")
+    st.page_link("pages/confluence-checker.py",   label="12. 2/3 Confluence Check", icon="🔀")
+    st.page_link("pages/15m-rejection.py",        label="13. 15M Rejection",        icon="🕯️")
+    st.page_link("pages/15m-entry-signal.py",     label="14. 15M Entry Signal",     icon="⚡")
+    st.page_link("pages/stop-structure.py",       label="15. Stop Structure",       icon="🛡️")
+    st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
+    st.page_link("pages/trade-journal.py",        label="17. Trade Journal",        icon="📓")
+    st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
+    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
     st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
     st.markdown("---")
     st.markdown("### 🧪 Workflow Backtest")
