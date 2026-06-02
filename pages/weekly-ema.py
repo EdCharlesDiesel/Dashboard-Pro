@@ -104,6 +104,17 @@ SLOPE_BARS  = 3              # How many bars back to measure slope
 # ══════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════
+def html_block(html: str) -> str:
+    """Collapse leading indentation and blank lines.
+
+    Streamlit's Markdown parser treats any line indented 4+ spaces (and any
+    HTML following a blank/whitespace-only line) as a literal *code block*.
+    Inside `with`/`for` blocks our f-string HTML is indented, so without this
+    the markup is shown as raw text instead of rendering. Flattening every line
+    to a single, un-indented string guarantees it is parsed as an HTML block.
+    """
+    return "".join(line.strip() for line in html.splitlines())
+
 def ema(series: pd.Series, period: int) -> pd.Series:
     return series.ewm(span=period, adjust=False).mean()
 
@@ -341,12 +352,12 @@ with left:
         d = loaded.get(pair)
 
         if d is None:
-            st.markdown(f"""
+            st.markdown(html_block(f"""
             <div class="ema-card ema-card-na">
               <span class="pair-label">{pair}</span>
               <span class="badge badge-na" style="float:right;">⚠️ No Data</span>
             </div>
-            """, unsafe_allow_html=True)
+            """), unsafe_allow_html=True)
             continue
 
         if not passes_filter(pair, d):
@@ -389,7 +400,7 @@ with left:
         # Highlight if it's the focus pair
         focus_border = "border-color:#388bfd!important;" if pair == focus_pair else ""
 
-        st.markdown(f"""
+        st.markdown(html_block(f"""
         <div class="ema-card {card_cls}" style="{focus_border}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <div>
@@ -401,7 +412,7 @@ with left:
           </div>
           {ema_rows_html}
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
 # RIGHT: FOCUS PAIR CHART
