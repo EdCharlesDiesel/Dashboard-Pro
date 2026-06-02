@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 import yfinance as yf
 from datetime import datetime, timedelta
 import pytz
+
+from src.core.signals import score_setup
 
 st.set_page_config(
     page_title="Setup Ranker · Trading System",
@@ -82,6 +83,61 @@ TYPICAL_SPREADS = {
 
 
 # ══════════════════════════════════════════════════════════════════
+# TRADE-LEVEL HELPERS
+# ══════════════════════════════════════════════════════════════════
+
+def fmt_price(p) -> str:
+    """Format a price the same way the rest of the page does (5dp for FX, 3dp for big numbers)."""
+    if p is None:
+        return "—"
+    try:
+        p = float(p)
+    except (TypeError, ValueError):
+        return "—"
+    return f"{p:.5f}" if abs(p) < 100 else f"{p:.3f}"
+
+
+def trade_levels(entry, sl_pips, pip_size, direction, rr) -> dict:
+    """Reconstruct stop-loss and take-profit *prices* from the scorer's stop distance.
+
+    The scoring engine (src/core/signals.py) only surfaces ``sl_pips`` — the stop
+    distance in pips — not an explicit SL/TP price, and there is no separate entry
+    price, so the current close is used as the entry proxy. SL price is the entry
+    offset by the stop distance against the trade; TP price is the stop distance
+    times the chosen risk:reward ratio in the trade's favour.
+
+    Returns a dict with None values when the stop distance or pip size is missing,
+    so the caller can render a dash instead of crashing.
+    """
+    try:
+        entry    = float(entry)
+        sl_pips  = float(sl_pips)
+        pip_size = float(pip_size)
+        rr       = float(rr)
+    except (TypeError, ValueError):
+        return {"sl_price": None, "tp_price": None, "tp_pips": None}
+
+    if sl_pips <= 0 or pip_size <= 0:
+        return {"sl_price": None, "tp_price": None, "tp_pips": None}
+
+    sl_dist = sl_pips * pip_size
+    tp_dist = sl_dist * rr
+
+    if direction == "LONG":
+        sl_price = entry - sl_dist
+        tp_price = entry + tp_dist
+    else:  # SHORT
+        sl_price = entry + sl_dist
+        tp_price = entry - tp_dist
+
+    return {
+        "sl_price": sl_price,
+        "tp_price": tp_price,
+        "tp_pips":  round(sl_pips * rr, 1),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
 # DATA FETCHERS
 # ══════════════════════════════════════════════════════════════════
 
@@ -138,209 +194,23 @@ def fetch_weekly(ticker: str) -> pd.DataFrame:
 
 
 # ══════════════════════════════════════════════════════════════════
-# SCORING FUNCTIONS
+# SCORING  (delegates to the shared engine in src/core/signals.py so this
+# page and the app's Trading Ideas tab always agree for a given pair/direction)
 # ══════════════════════════════════════════════════════════════════
 
-def ema(s: pd.Series, n: int) -> pd.Series:
-    return s.ewm(span=n, adjust=False).mean()
-
-def rsi_series(s: pd.Series, n: int = 14) -> pd.Series:
-    d = s.diff()
-    g = d.clip(lower=0).ewm(alpha=1/n, adjust=False).mean()
-    l = (-d.clip(upper=0)).ewm(alpha=1/n, adjust=False).mean()
-    return 100 - 100 / (1 + g / l.replace(0, np.nan))
-
-def macd_cross(s: pd.Series) -> bool:
-    m = ema(s, 12) - ema(s, 26)
-    sig = ema(m, 9)
-    return bool(m.iloc[-1] > sig.iloc[-1])
-
-def atr14(df: pd.DataFrame) -> float:
-    prev = df["Close"].shift(1)
-    tr = pd.concat([df["High"] - df["Low"],
-                    (df["High"] - prev).abs(),
-                    (df["Low"]  - prev).abs()], axis=1).max(axis=1)
-    return float(tr.ewm(alpha=1/14, min_periods=14, adjust=False).mean().iloc[-1])
-
-def swing_structure(df: pd.DataFrame, n: int = 3) -> str:
-    """Return BULLISH, BEARISH, or NEUTRAL based on last 2 swing HH/HL."""
-    if len(df) < 20:
-        return "NEUTRAL"
-    highs = df["High"].values
-    lows  = df["Low"].values
-    sh, sl = [], []
-    for i in range(n, len(df) - n):
-        if highs[i] == max(highs[i - n: i + n + 1]):
-            sh.append(highs[i])
-        if lows[i] == min(lows[i - n: i + n + 1]):
-            sl.append(lows[i])
-    if len(sh) >= 2 and len(sl) >= 2:
-        hh = sh[-1] > sh[-2]
-        hl = sl[-1] > sl[-2]
-        lh = sh[-1] < sh[-2]
-        ll = sl[-1] < sl[-2]
-        if hh and hl:
-            return "BULLISH"
-        if lh and ll:
-            return "BEARISH"
-    return "NEUTRAL"
-
-
 def score_pair(pair: str, info: dict, direction: str) -> dict:
-    """Score a pair 0–10 against the simplified checklist criteria."""
+    """Fetch this page's data and score it with the unified checklist."""
     ticker   = info["ticker"]
     pip_size = info["pip_size"]
 
-    scores   = {}
-    details  = {}
-
-    # ── 1. Weekly EMA alignment ────────────────────────────────────
-    df_w = fetch_weekly(ticker)
-    if not df_w.empty and len(df_w) > 50:
-        e50_w  = float(ema(df_w["Close"], 50).iloc[-1])
-        e200_w = float(ema(df_w["Close"], 200).iloc[-1])
-        close_w = float(df_w["Close"].iloc[-1])
-        if direction == "LONG":
-            ok = close_w > e50_w > e200_w
-        else:
-            ok = close_w < e50_w < e200_w
-        scores["Weekly EMA"] = 1 if ok else 0
-        details["Weekly EMA"] = "✅" if ok else "❌"
-    else:
-        scores["Weekly EMA"] = 0
-        details["Weekly EMA"] = "—"
-
-    # ── 2. Weekly RSI has room ─────────────────────────────────────
-    if not df_w.empty and len(df_w) > 20:
-        rsi_w = float(rsi_series(df_w["Close"]).iloc[-1])
-        if direction == "LONG":
-            ok = rsi_w < 70
-        else:
-            ok = rsi_w > 30
-        scores["Weekly RSI"] = 1 if ok else 0
-        details["Weekly RSI"] = f"{'✅' if ok else '❌'} {rsi_w:.1f}"
-    else:
-        scores["Weekly RSI"] = 0
-        details["Weekly RSI"] = "—"
-
-    # ── 3. Weekly structure ────────────────────────────────────────
-    if not df_w.empty and len(df_w) > 20:
-        ws = swing_structure(df_w, 3)
-        ok = (ws == "BULLISH" and direction == "LONG") or \
-             (ws == "BEARISH" and direction == "SHORT")
-        scores["Weekly Structure"] = 1 if ok else 0
-        details["Weekly Structure"] = f"{'✅' if ok else '❌'} {ws}"
-    else:
-        scores["Weekly Structure"] = 0
-        details["Weekly Structure"] = "—"
-
-    # ── 4. Daily trend ────────────────────────────────────────────
-    df_d = fetch_daily(ticker)
-    daily_struct = "NEUTRAL"
-    if not df_d.empty and len(df_d) > 50:
-        e20_d  = float(ema(df_d["Close"], 20).iloc[-1])
-        e50_d  = float(ema(df_d["Close"], 50).iloc[-1])
-        if direction == "LONG":
-            ok = e20_d > e50_d
-        else:
-            ok = e20_d < e50_d
-        scores["Daily Trend"] = 1 if ok else 0
-        details["Daily Trend"] = "✅ EMA20>50" if ok else "❌ EMA20<50"
-        daily_struct = swing_structure(df_d, 3)
-    else:
-        scores["Daily Trend"] = 0
-        details["Daily Trend"] = "—"
-
-    # ── 5. Daily structure (HH/HL or LH/LL) ───────────────────────
-    ok_ds = (daily_struct == "BULLISH" and direction == "LONG") or \
-            (daily_struct == "BEARISH" and direction == "SHORT")
-    scores["Daily Structure"] = 1 if ok_ds else 0
-    details["Daily Structure"] = f"{'✅' if ok_ds else '❌'} {daily_struct}"
-
-    # ── 6. Daily MACD ─────────────────────────────────────────────
-    if not df_d.empty and len(df_d) > 50:
-        mc = macd_cross(df_d["Close"])
-        ok = (mc and direction == "LONG") or (not mc and direction == "SHORT")
-        scores["Daily MACD"] = 1 if ok else 0
-        details["Daily MACD"] = "✅ Above sig" if ok else "❌ Below sig"
-    else:
-        scores["Daily MACD"] = 0
-        details["Daily MACD"] = "—"
-
-    # ── 7. ATR volatility ─────────────────────────────────────────
-    if not df_d.empty and len(df_d) > 25:
-        prev  = df_d["Close"].shift(1)
-        tr    = pd.concat([df_d["High"] - df_d["Low"],
-                           (df_d["High"] - prev).abs(),
-                           (df_d["Low"]  - prev).abs()], axis=1).max(axis=1)
-        a14   = float(tr.ewm(alpha=1/14, min_periods=14, adjust=False).mean().iloc[-1])
-        a20   = float(tr.ewm(alpha=1/20, min_periods=20, adjust=False).mean().iloc[-1])
-        ok    = a14 > a20
-        a14p  = round(a14 / pip_size, 1)
-        scores["ATR Volatile"] = 1 if ok else 0
-        details["ATR Volatile"] = f"{'✅' if ok else '❌'} {a14p}p"
-    else:
-        scores["ATR Volatile"] = 0
-        details["ATR Volatile"] = "—"
-        a14p = 0
-
-    # ── 8. 4H confluence zone ─────────────────────────────────────
+    df_w  = fetch_weekly(ticker)
+    df_d  = fetch_daily(ticker)
     df_4h = fetch_4h(ticker)
-    if not df_4h.empty and len(df_4h) > 30:
-        close_4h = float(df_4h["Close"].iloc[-1])
-        e20_4h   = float(ema(df_4h["Close"], 20).iloc[-1])
-        e50_4h   = float(ema(df_4h["Close"], 50).iloc[-1])
-        tol      = atr14(df_4h) * 0.5 if len(df_4h) > 14 else close_4h * 0.005
-        near_ema = abs(close_4h - e20_4h) <= tol or abs(close_4h - e50_4h) <= tol
-        # Pivot PP
-        prev_candle = df_4h.iloc[-2]
-        H, L, C = float(prev_candle["High"]), float(prev_candle["Low"]), float(prev_candle["Close"])
-        pp = (H + L + C) / 3
-        near_pivot = abs(close_4h - pp) <= tol * 2
-        ok = near_ema or near_pivot
-        scores["4H Zone"] = 1 if ok else 0
-        details["4H Zone"] = "✅ At zone" if ok else "❌ Not at zone"
-    else:
-        scores["4H Zone"] = 0
-        details["4H Zone"] = "—"
 
-    # ── 9. 4H structure aligned ───────────────────────────────────
-    if not df_4h.empty and len(df_4h) > 20:
-        struct_4h = swing_structure(df_4h, 3)
-        ok = (struct_4h == "BULLISH" and direction == "LONG") or \
-             (struct_4h == "BEARISH" and direction == "SHORT")
-        scores["4H Structure"] = 1 if ok else 0
-        details["4H Structure"] = f"{'✅' if ok else '❌'} {struct_4h}"
-    else:
-        scores["4H Structure"] = 0
-        details["4H Structure"] = "—"
-
-    # ── 10. Spread/ATR ratio ──────────────────────────────────────
-    spread = TYPICAL_SPREADS.get(pair, 0)
-    atr_pips = a14p if a14p > 0 else 1
-    spread_pct = spread / atr_pips * 100
-    ok = spread_pct <= 5
-    scores["Spread/ATR"] = 1 if ok else 0
-    details["Spread/ATR"] = f"{'✅' if ok else '❌'} {spread_pct:.1f}%"
-
-    total = sum(scores.values())
-    grade = "A" if total >= 8 else "B" if total >= 6 else "C" if total >= 4 else "D"
-    close_price = float(df_d["Close"].iloc[-1]) if not df_d.empty else 0
-    sl_pips = round(a14p * 1.5, 1) if a14p else 0
-
-    return {
-        "pair":        pair,
-        "direction":   direction,
-        "score":       total,
-        "max_score":   10,
-        "pct":         int(total / 10 * 100),
-        "grade":       grade,
-        "scores":      scores,
-        "details":     details,
-        "close":       close_price,
-        "sl_pips":     sl_pips,
-        "spread_pct":  spread_pct,
-    }
+    spread = TYPICAL_SPREADS.get(pair, 0.0)
+    result = score_setup(df_w, df_d, df_4h, direction, pip_size, spread)
+    result["pair"] = pair
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -373,6 +243,13 @@ with st.sidebar:
 
     direction = st.radio("Scan direction", ["LONG", "SHORT", "Both"], horizontal=True)
     min_score = st.slider("Min score to show", 0, 10, 5)
+    rr_ratio  = st.select_slider(
+        "Take-profit R:R",
+        options=[1.0, 1.5, 2.0, 2.5, 3.0],
+        value=2.0,
+        help="Take-profit distance = stop distance × this ratio. "
+             "Stop distance comes from the scoring engine's structural SL.",
+    )
     st.divider()
     if st.button("🔄 Rescan All Pairs", use_container_width=True, type="primary"):
         st.cache_data.clear()
@@ -391,7 +268,7 @@ st.markdown(f"""
     Scores all 21 instruments across 10 criteria · Weekly + Daily + 4H · Ranks by readiness
   </div>
   <div style="font-size:12px;color:#388bfd;margin-top:6px;">
-    🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · Direction: {direction}
+    🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · Direction: {direction} · TP {rr_ratio:.1f}R
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -447,6 +324,10 @@ if not all_results:
     st.stop()
 
 st.markdown("---")
+st.caption(
+    f"Trade levels — entry ≈ current price (proxy) · stop = scorer's structural SL distance · "
+    f"take-profit = stop × {rr_ratio:.1f} R:R. Confirm against your real 15M entry before trading."
+)
 
 # ══════════════════════════════════════════════════════════════════
 # RESULTS
@@ -469,6 +350,14 @@ with tab_cards:
         d_color = "#388bfd" if r["direction"] == "LONG" else "#a371f7"
         bar_pct = r["pct"]
         price_fmt = f"{r['close']:.5f}" if r["close"] < 100 else f"{r['close']:.3f}"
+
+        # Trade levels (entry proxy = current close, stop distance from scorer, TP at chosen R:R)
+        pip_size = INSTRUMENTS.get(r["pair"], {}).get("pip_size")
+        lv       = trade_levels(r["close"], r.get("sl_pips"), pip_size, r["direction"], rr_ratio)
+        sl_price_fmt = fmt_price(lv["sl_price"])
+        tp_price_fmt = fmt_price(lv["tp_price"])
+        tp_pips_txt  = f"{lv['tp_pips']:g}" if lv["tp_pips"] is not None else "—"
+        sl_pips_txt  = f"{r['sl_pips']}" if r.get("sl_pips") not in (None, "") else "—"
 
         # Score dots
         dots = "".join(
@@ -508,9 +397,12 @@ with tab_cards:
             </div>
           </div>
           <div style="margin:10px 0 6px 0;">{dots}</div>
-          <div style="font-size:11px;color:#8b949e;margin-bottom:8px;">
-            Price: <span style="color:#e6edf3;font-family:monospace;">{price_fmt}</span>
-            &nbsp;·&nbsp; SL: <span style="color:#f85149;">{r["sl_pips"]} pips</span>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11px;margin-bottom:10px;align-items:center;">
+            <span style="color:#8b949e;">Entry ≈ <span style="color:#e6edf3;font-family:monospace;">{price_fmt}</span></span>
+            <span style="color:#8b949e;">🛑 SL <span style="color:#f85149;font-family:monospace;font-weight:600;">{sl_price_fmt}</span>
+              <span style="color:#484f58;">({sl_pips_txt} pips)</span></span>
+            <span style="color:#8b949e;">🎯 TP <span style="color:#3fb950;font-family:monospace;font-weight:600;">{tp_price_fmt}</span>
+              <span style="color:#484f58;">({tp_pips_txt} pips · {rr_ratio:.1f}R)</span></span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:2px;">{pills}</div>
         </div>
@@ -524,6 +416,8 @@ with tab_table:
     criteria_keys = list(all_results[0]["scores"].keys()) if all_results else []
     table_rows = []
     for r in all_results:
+        pip_size = INSTRUMENTS.get(r["pair"], {}).get("pip_size")
+        lv       = trade_levels(r["close"], r.get("sl_pips"), pip_size, r["direction"], rr_ratio)
         row = {
             "Rank":      all_results.index(r) + 1,
             "Pair":      r["pair"],
@@ -531,7 +425,11 @@ with tab_table:
             "Score":     f"{r['score']}/10",
             "Grade":     r["grade"],
             "Price":     f"{r['close']:.5f}" if r["close"] < 100 else f"{r['close']:.3f}",
+            "SL Price":  fmt_price(lv["sl_price"]),
             "SL Pips":   r["sl_pips"],
+            "TP Price":  fmt_price(lv["tp_price"]),
+            "TP Pips":   lv["tp_pips"] if lv["tp_pips"] is not None else "—",
+            "R:R":       f"{rr_ratio:.1f}",
         }
         for k in criteria_keys:
             row[k] = "✅" if r["scores"][k] else "❌"
@@ -575,6 +473,6 @@ with tab_chart:
 # Footer
 st.markdown("""
 <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
-  🎰 Setup Ranker · 10-point multi-timeframe scoring · Not financial advice
+  🎰 Setup Ranker · 10-point multi-timeframe scoring · SL/TP for planning only · Not financial advice
 </div>
 """, unsafe_allow_html=True)

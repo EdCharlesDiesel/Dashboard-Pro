@@ -240,102 +240,260 @@ sl_calculator = StopLossCalculator()
 tp_calculator = TakeProfitCalculator()
 
 
-def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: pd.DataFrame, df_15m: pd.DataFrame,
+# ═══════════════════════════════════════════════════════════════════════════
+# UNIFIED SETUP SCORING
+# Single source of truth for the 10-point multi-timeframe checklist used by
+# BOTH the Setup Ranker page (pages/setup-ranker.py) and the Trading Ideas tab
+# (app.py). Keeping the math here guarantees the two surfaces agree for a given
+# pair + direction. The helpers below intentionally recompute indicators from
+# raw OHLC so the score is identical regardless of which caller supplied the
+# data (and whether it already had indicator columns attached).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Typical spreads (in pips) for the app's instrument universe. The Setup Ranker
+# page keeps its own wider list (incl. metals/crosses); both feed score_setup.
+TYPICAL_SPREADS: Dict[str, float] = {
+    "EUR/USD": 1.2, "GBP/USD": 1.5, "USD/JPY": 1.2, "USD/ZAR": 80.0,
+    "AUD/USD": 1.5, "NZD/USD": 2.0, "USD/CAD": 2.0, "USD/CHF": 2.0,
+    "XAU/USD": 3.0, "BTC/USD": 20.0,
+}
+
+
+def typical_spread(pair: str) -> float:
+    return TYPICAL_SPREADS.get(pair, 0.0)
+
+
+def ema(s: pd.Series, n: int) -> pd.Series:
+    return s.ewm(span=n, adjust=False).mean()
+
+
+def rsi_series(s: pd.Series, n: int = 14) -> pd.Series:
+    d = s.diff()
+    g = d.clip(lower=0).ewm(alpha=1 / n, adjust=False).mean()
+    l = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False).mean()
+    return 100 - 100 / (1 + g / l.replace(0, np.nan))
+
+
+def macd_cross(s: pd.Series) -> bool:
+    m = ema(s, 12) - ema(s, 26)
+    sig = ema(m, 9)
+    return bool(m.iloc[-1] > sig.iloc[-1])
+
+
+def atr14(df: pd.DataFrame) -> float:
+    prev = df["Close"].shift(1)
+    tr = pd.concat([df["High"] - df["Low"],
+                    (df["High"] - prev).abs(),
+                    (df["Low"] - prev).abs()], axis=1).max(axis=1)
+    return float(tr.ewm(alpha=1 / 14, min_periods=14, adjust=False).mean().iloc[-1])
+
+
+def swing_structure(df: pd.DataFrame, n: int = 3) -> str:
+    """Return BULLISH, BEARISH, or NEUTRAL based on last 2 swing HH/HL."""
+    if len(df) < 20:
+        return "NEUTRAL"
+    highs = df["High"].values
+    lows = df["Low"].values
+    sh, sl = [], []
+    for i in range(n, len(df) - n):
+        if highs[i] == max(highs[i - n: i + n + 1]):
+            sh.append(highs[i])
+        if lows[i] == min(lows[i - n: i + n + 1]):
+            sl.append(lows[i])
+    if len(sh) >= 2 and len(sl) >= 2:
+        hh = sh[-1] > sh[-2]
+        hl = sl[-1] > sl[-2]
+        lh = sh[-1] < sh[-2]
+        ll = sl[-1] < sl[-2]
+        if hh and hl:
+            return "BULLISH"
+        if lh and ll:
+            return "BEARISH"
+    return "NEUTRAL"
+
+
+def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataFrame,
+                direction: str, pip_size: float, spread_pips: float = 0.0) -> Dict:
+    """Score a pair 0–10 against the 10-point multi-timeframe checklist.
+
+    direction: "LONG" or "SHORT". Returns a dict with the per-criterion scores,
+    a total, a letter grade, and presentation helpers (price, SL pips, spread%).
+    Data-source agnostic — pass whatever Weekly/Daily/4H frames the caller has.
+    """
+    df_w = df_weekly if df_weekly is not None else pd.DataFrame()
+    df_d = df_daily if df_daily is not None else pd.DataFrame()
+    df_4h = df_4h if df_4h is not None else pd.DataFrame()
+
+    scores: Dict[str, int] = {}
+    details: Dict[str, str] = {}
+
+    # ── 1. Weekly EMA alignment ──────────────────────────────────────────────
+    if not df_w.empty and len(df_w) > 50:
+        e50_w = float(ema(df_w["Close"], 50).iloc[-1])
+        e200_w = float(ema(df_w["Close"], 200).iloc[-1])
+        close_w = float(df_w["Close"].iloc[-1])
+        ok = close_w > e50_w > e200_w if direction == "LONG" else close_w < e50_w < e200_w
+        scores["Weekly EMA"] = 1 if ok else 0
+        details["Weekly EMA"] = "✅" if ok else "❌"
+    else:
+        scores["Weekly EMA"] = 0
+        details["Weekly EMA"] = "—"
+
+    # ── 2. Weekly RSI has room ───────────────────────────────────────────────
+    if not df_w.empty and len(df_w) > 20:
+        rsi_w = float(rsi_series(df_w["Close"]).iloc[-1])
+        ok = rsi_w < 70 if direction == "LONG" else rsi_w > 30
+        scores["Weekly RSI"] = 1 if ok else 0
+        details["Weekly RSI"] = f"{'✅' if ok else '❌'} {rsi_w:.1f}"
+    else:
+        scores["Weekly RSI"] = 0
+        details["Weekly RSI"] = "—"
+
+    # ── 3. Weekly structure ──────────────────────────────────────────────────
+    if not df_w.empty and len(df_w) > 20:
+        ws = swing_structure(df_w, 3)
+        ok = (ws == "BULLISH" and direction == "LONG") or (ws == "BEARISH" and direction == "SHORT")
+        scores["Weekly Structure"] = 1 if ok else 0
+        details["Weekly Structure"] = f"{'✅' if ok else '❌'} {ws}"
+    else:
+        scores["Weekly Structure"] = 0
+        details["Weekly Structure"] = "—"
+
+    # ── 4. Daily trend ───────────────────────────────────────────────────────
+    daily_struct = "NEUTRAL"
+    if not df_d.empty and len(df_d) > 50:
+        e20_d = float(ema(df_d["Close"], 20).iloc[-1])
+        e50_d = float(ema(df_d["Close"], 50).iloc[-1])
+        ok = e20_d > e50_d if direction == "LONG" else e20_d < e50_d
+        scores["Daily Trend"] = 1 if ok else 0
+        details["Daily Trend"] = "✅ EMA20>50" if ok else "❌ EMA20<50"
+        daily_struct = swing_structure(df_d, 3)
+    else:
+        scores["Daily Trend"] = 0
+        details["Daily Trend"] = "—"
+
+    # ── 5. Daily structure (HH/HL or LH/LL) ──────────────────────────────────
+    ok_ds = (daily_struct == "BULLISH" and direction == "LONG") or \
+            (daily_struct == "BEARISH" and direction == "SHORT")
+    scores["Daily Structure"] = 1 if ok_ds else 0
+    details["Daily Structure"] = f"{'✅' if ok_ds else '❌'} {daily_struct}"
+
+    # ── 6. Daily MACD ────────────────────────────────────────────────────────
+    if not df_d.empty and len(df_d) > 50:
+        mc = macd_cross(df_d["Close"])
+        ok = (mc and direction == "LONG") or (not mc and direction == "SHORT")
+        scores["Daily MACD"] = 1 if ok else 0
+        details["Daily MACD"] = "✅ Above sig" if ok else "❌ Below sig"
+    else:
+        scores["Daily MACD"] = 0
+        details["Daily MACD"] = "—"
+
+    # ── 7. ATR volatility ────────────────────────────────────────────────────
+    a14p = 0.0
+    if not df_d.empty and len(df_d) > 25 and pip_size > 0:
+        prev = df_d["Close"].shift(1)
+        tr = pd.concat([df_d["High"] - df_d["Low"],
+                        (df_d["High"] - prev).abs(),
+                        (df_d["Low"] - prev).abs()], axis=1).max(axis=1)
+        a14 = float(tr.ewm(alpha=1 / 14, min_periods=14, adjust=False).mean().iloc[-1])
+        a20 = float(tr.ewm(alpha=1 / 20, min_periods=20, adjust=False).mean().iloc[-1])
+        ok = a14 > a20
+        a14p = round(a14 / pip_size, 1)
+        scores["ATR Volatile"] = 1 if ok else 0
+        details["ATR Volatile"] = f"{'✅' if ok else '❌'} {a14p}p"
+    else:
+        scores["ATR Volatile"] = 0
+        details["ATR Volatile"] = "—"
+
+    # ── 8. 4H confluence zone ────────────────────────────────────────────────
+    if not df_4h.empty and len(df_4h) > 30:
+        close_4h = float(df_4h["Close"].iloc[-1])
+        e20_4h = float(ema(df_4h["Close"], 20).iloc[-1])
+        e50_4h = float(ema(df_4h["Close"], 50).iloc[-1])
+        tol = atr14(df_4h) * 0.5 if len(df_4h) > 14 else close_4h * 0.005
+        near_ema = abs(close_4h - e20_4h) <= tol or abs(close_4h - e50_4h) <= tol
+        prev_candle = df_4h.iloc[-2]
+        H, L, C = float(prev_candle["High"]), float(prev_candle["Low"]), float(prev_candle["Close"])
+        pp = (H + L + C) / 3
+        near_pivot = abs(close_4h - pp) <= tol * 2
+        ok = near_ema or near_pivot
+        scores["4H Zone"] = 1 if ok else 0
+        details["4H Zone"] = "✅ At zone" if ok else "❌ Not at zone"
+    else:
+        scores["4H Zone"] = 0
+        details["4H Zone"] = "—"
+
+    # ── 9. 4H structure aligned ──────────────────────────────────────────────
+    if not df_4h.empty and len(df_4h) > 20:
+        struct_4h = swing_structure(df_4h, 3)
+        ok = (struct_4h == "BULLISH" and direction == "LONG") or \
+             (struct_4h == "BEARISH" and direction == "SHORT")
+        scores["4H Structure"] = 1 if ok else 0
+        details["4H Structure"] = f"{'✅' if ok else '❌'} {struct_4h}"
+    else:
+        scores["4H Structure"] = 0
+        details["4H Structure"] = "—"
+
+    # ── 10. Spread/ATR ratio ─────────────────────────────────────────────────
+    atr_pips = a14p if a14p > 0 else 1
+    spread_pct = spread_pips / atr_pips * 100
+    ok = spread_pct <= 5
+    scores["Spread/ATR"] = 1 if ok else 0
+    details["Spread/ATR"] = f"{'✅' if ok else '❌'} {spread_pct:.1f}%"
+
+    total = sum(scores.values())
+    grade = "A" if total >= 8 else "B" if total >= 6 else "C" if total >= 4 else "D"
+    close_price = float(df_d["Close"].iloc[-1]) if not df_d.empty else 0.0
+    sl_pips = round(a14p * 1.5, 1) if a14p else 0.0
+
+    return {
+        "direction": direction,
+        "score": total,
+        "max_score": 10,
+        "pct": int(total / 10 * 100),
+        "grade": grade,
+        "scores": scores,
+        "details": details,
+        "close": close_price,
+        "sl_pips": sl_pips,
+        "spread_pct": spread_pct,
+        "atr_pips": a14p,
+    }
+
+
+def analyze_multi_timeframe(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataFrame,
+                            df_1h: pd.DataFrame, df_15m: pd.DataFrame,
                             pair_name: str) -> Optional[Dict]:
     if any(df.empty for df in [df_daily, df_4h, df_1h, df_15m]):
         return None
 
-    daily = df_daily.iloc[-1]
-    four_hour = df_4h.iloc[-1]
     one_hour = df_1h.iloc[-1]
     fifteen_m = df_15m.iloc[-1]
 
-    if 'Close' not in daily.index or 'Close' not in four_hour.index:
+    if 'Close' not in df_daily.iloc[-1].index or 'Close' not in df_4h.iloc[-1].index:
         return None
 
-    d_close = safe_get(daily, 'Close')
-    d_ema20 = safe_get(daily, 'EMA_20', d_close)
-    d_trend = 'Long' if d_close > d_ema20 else 'Short'
-    d_rsi = safe_get(daily, 'RSI', 50.0)
-    d_adx = safe_get(daily, 'ADX', 0.0)
+    # ── Directional bias from the unified 10-point checklist ─────────────────
+    # Score both directions with the SAME function the Setup Ranker uses, then
+    # take whichever side scores higher. This is what makes the Trading Ideas
+    # tab and the Setup Ranker agree for a given pair + direction.
+    pip_size = sl_calculator.pip_size(pair_name)
+    spread = typical_spread(pair_name)
+    long_res = score_setup(df_weekly, df_daily, df_4h, "LONG", pip_size, spread)
+    short_res = score_setup(df_weekly, df_daily, df_4h, "SHORT", pip_size, spread)
 
-    h4_close = safe_get(four_hour, 'Close')
-    h4_ema20 = safe_get(four_hour, 'EMA_20', h4_close)
-    h4_ema50 = safe_get(four_hour, 'EMA_50', h4_close)
-    h4_trend = 'Long' if h4_ema20 > h4_ema50 else 'Short'
-    h4_macd = safe_get(four_hour, 'MACD', 0.0)
-    h4_sig = safe_get(four_hour, 'MACD_Signal', 0.0)
-    h4_macd_bull = h4_macd > h4_sig
-
-    h1_close = safe_get(one_hour, 'Close')
-    h1_ema20 = safe_get(one_hour, 'EMA_20', h1_close)
-    h1_ema50 = safe_get(one_hour, 'EMA_50', h1_close)
-    h1_trend = 'Long' if h1_ema20 > h1_ema50 else 'Short'
-    h1_rsi = safe_get(one_hour, 'RSI', 50.0)
-
-    long_s = short_s = 0
-    reasons: List[str] = []
-
-    if d_trend == 'Long':
-        long_s += 2;
-        reasons.append("Daily: Bullish EMA alignment")
+    if long_res["score"] > short_res["score"]:
+        final_bias, res = 'Long', long_res
+    elif short_res["score"] > long_res["score"]:
+        final_bias, res = 'Short', short_res
     else:
-        short_s += 2;
-        reasons.append("Daily: Bearish EMA alignment")
+        return None  # no clear directional edge
 
-    if d_rsi < 40:
-        long_s += 1;
-        reasons.append(f"Daily RSI oversold ({d_rsi:.1f})")
-    elif d_rsi > 60:
-        short_s += 1;
-        reasons.append(f"Daily RSI overbought ({d_rsi:.1f})")
+    # strength_score IS the unified checklist score (0-10). Conviction is keyed
+    # to the same A/B/C/D grade bands as the Setup Ranker (A→High, B→Medium).
+    strength_score = res["score"]
+    conviction = "High" if strength_score >= 8 else ("Medium" if strength_score >= 6 else "Low")
 
-    if d_adx > config.adx_trend_min:
-        if d_trend == 'Long':
-            long_s += 1
-        else:
-            short_s += 1
-        reasons.append(f"Strong trend (ADX={d_adx:.1f})")
-
-    if h4_trend == 'Long':
-        long_s += 1;
-        reasons.append("4H: EMA20 > EMA50")
-    else:
-        short_s += 1;
-        reasons.append("4H: EMA20 < EMA50")
-
-    if h4_macd_bull:
-        long_s += 1;
-        reasons.append("4H: MACD bullish")
-    else:
-        short_s += 1;
-        reasons.append("4H: MACD bearish")
-
-    if h1_trend == 'Long':
-        long_s += 1;
-        reasons.append("1H: Bullish EMA alignment")
-    else:
-        short_s += 1;
-        reasons.append("1H: Bearish EMA alignment")
-
-    if h1_rsi < 45:
-        long_s += 1;
-        reasons.append(f"1H RSI supportive ({h1_rsi:.1f})")
-    elif h1_rsi > 55:
-        short_s += 1;
-        reasons.append(f"1H RSI resistive ({h1_rsi:.1f})")
-
-    if long_s > short_s:
-        final_bias, strength = 'Long', long_s
-    elif short_s > long_s:
-        final_bias, strength = 'Short', short_s
-    else:
-        return None
-
-    # strength_score = MTF alignment strength (how many timeframes agree), scaled 1-10
-    normalized_score = min(int(strength * 1.25), 10)
-
-    conviction = "High" if strength >= 6 else ("Medium" if strength >= 3 else "Low")
     entry_signal = entry_generator.get_entry_signal(df_15m, final_bias)
 
     # confidence = 15-min entry trigger quality (0-5 from entry_signal, scaled to 0-10).
@@ -343,6 +501,7 @@ def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: 
     # alignment but a poor entry setup (low confidence), or vice versa.
     entry_conf = entry_signal.get('confidence', 0) if entry_signal else 0
     confidence = min(entry_conf * 2, 10)
+    h1_close = safe_get(one_hour, 'Close')
     atr = safe_get(one_hour, 'ATR', 0.0)
     if atr <= 0:
         atr = h1_close * 0.005 if h1_close > 0 else 0.001
@@ -358,7 +517,10 @@ def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: 
     tp_result = tp_calculator.calculate(df_4h, pair_name, final_bias, current_price, atr, sl_result["stop"],
                                         pivots=pivots)
 
-    thesis = " | ".join(reasons)
+    passed = [k for k, v in res["scores"].items() if v]
+    thesis = f"{final_bias} setup {strength_score}/10 (Grade {res['grade']})"
+    if passed:
+        thesis += " — " + ", ".join(passed)
     if entry_signal and entry_signal['signal'] != 0:
         thesis += f" | Entry: {', '.join(entry_signal['reasons'][:2])}"
 
@@ -366,7 +528,10 @@ def analyze_multi_timeframe(df_daily: pd.DataFrame, df_4h: pd.DataFrame, df_1h: 
         "pair": pair_name,
         "bias": final_bias,
         "conviction": conviction,
-        "strength_score": normalized_score,
+        "strength_score": strength_score,
+        "grade": res["grade"],
+        "setup_scores": res["scores"],
+        "setup_details": res["details"],
         "confidence": confidence,
         "thesis": thesis,
         "entry": current_price,
@@ -391,19 +556,22 @@ def generate_trading_ideas(data_by_timeframe: Dict) -> Tuple[List[Dict], List[st
     skipped: List[str] = []
 
     for pair_name in config.assets:
+        # Weekly feeds the unified setup score but is not required for a trade
+        # plan, so it is excluded from the "thin bars" gate below.
         frames = {
             tf: data_by_timeframe.get(tf, {}).get(pair_name, pd.DataFrame())
-            for tf in ['Daily', '4 Hour', 'Hourly', '15 Minute']
+            for tf in ['Weekly', 'Daily', '4 Hour', 'Hourly', '15 Minute']
         }
-        thin = [tf for tf, df in frames.items() if df.empty or len(df) < 20]
+        thin = [tf for tf in ['Daily', '4 Hour', 'Hourly', '15 Minute']
+                if frames[tf].empty or len(frames[tf]) < 20]
         if thin:
             skipped.append(f"{pair_name} — insufficient bars in: {', '.join(thin)}")
             continue
 
         frames = {tf: analyzer.add_indicators(df) for tf, df in frames.items()}
 
-        idea = analyze_multi_timeframe(frames['Daily'], frames['4 Hour'], frames['Hourly'], frames['15 Minute'],
-                                       pair_name)
+        idea = analyze_multi_timeframe(frames['Weekly'], frames['Daily'], frames['4 Hour'], frames['Hourly'],
+                                       frames['15 Minute'], pair_name)
         if idea and idea['bias'] != 'Neutral':
             ideas.append(idea)
 
