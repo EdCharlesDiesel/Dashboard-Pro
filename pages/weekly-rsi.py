@@ -96,6 +96,18 @@ INSTRUMENTS = {
     "🪙 Platinum":{"ticker": "PL=F",     "pip_size": 0.10},
 }
 
+# ── HTML helper ────────────────────────────────────────────────────────────────
+def html_block(html: str) -> str:
+    """Collapse leading indentation and blank lines.
+
+    Streamlit's Markdown parser treats any line indented 4+ spaces (and any
+    HTML following a blank/whitespace-only line) as a literal *code block*.
+    Inside `with`/`for` blocks our f-string HTML is indented, so without this
+    the markup is shown as raw text instead of rendering. Flattening every line
+    to a single, un-indented string guarantees it is parsed as an HTML block.
+    """
+    return "".join(line.strip() for line in html.splitlines())
+
 # ── RSI Calculation ────────────────────────────────────────────────────────────
 def calc_rsi(close: pd.Series, period: int = 14) -> pd.Series:
     delta = close.diff()
@@ -358,13 +370,13 @@ with left:
         c = classes.get(pair)
 
         if d is None:
-            st.markdown(f"""
+            st.markdown(html_block(f"""
             <div class="pair-card rsi-neut" style="opacity:.45;">
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <span class="pair-name">{pair}</span>
                 <span class="badge badge-neut">⚠️ No Data</span>
               </div>
-            </div>""", unsafe_allow_html=True)
+            </div>"""), unsafe_allow_html=True)
             continue
 
         rsi      = d["rsi"]
@@ -379,7 +391,7 @@ with left:
         needle_pct = min(max(rsi, 0), 100)
         highlight  = "border-color:#388bfd!important;" if pair == focus_pair else ""
 
-        st.markdown(f"""
+        st.markdown(html_block(f"""
         <div class="pair-card {c['card_cls']}" style="{highlight}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
             <div>
@@ -429,7 +441,7 @@ with left:
 
           <div style="font-size:11px;color:{c['color']};font-weight:600;">{c['detail']}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
 # RIGHT: DETAIL + CHARTS
