@@ -83,6 +83,61 @@ TYPICAL_SPREADS = {
 
 
 # ══════════════════════════════════════════════════════════════════
+# TRADE-LEVEL HELPERS
+# ══════════════════════════════════════════════════════════════════
+
+def fmt_price(p) -> str:
+    """Format a price the same way the rest of the page does (5dp for FX, 3dp for big numbers)."""
+    if p is None:
+        return "—"
+    try:
+        p = float(p)
+    except (TypeError, ValueError):
+        return "—"
+    return f"{p:.5f}" if abs(p) < 100 else f"{p:.3f}"
+
+
+def trade_levels(entry, sl_pips, pip_size, direction, rr) -> dict:
+    """Reconstruct stop-loss and take-profit *prices* from the scorer's stop distance.
+
+    The scoring engine (src/core/signals.py) only surfaces ``sl_pips`` — the stop
+    distance in pips — not an explicit SL/TP price, and there is no separate entry
+    price, so the current close is used as the entry proxy. SL price is the entry
+    offset by the stop distance against the trade; TP price is the stop distance
+    times the chosen risk:reward ratio in the trade's favour.
+
+    Returns a dict with None values when the stop distance or pip size is missing,
+    so the caller can render a dash instead of crashing.
+    """
+    try:
+        entry    = float(entry)
+        sl_pips  = float(sl_pips)
+        pip_size = float(pip_size)
+        rr       = float(rr)
+    except (TypeError, ValueError):
+        return {"sl_price": None, "tp_price": None, "tp_pips": None}
+
+    if sl_pips <= 0 or pip_size <= 0:
+        return {"sl_price": None, "tp_price": None, "tp_pips": None}
+
+    sl_dist = sl_pips * pip_size
+    tp_dist = sl_dist * rr
+
+    if direction == "LONG":
+        sl_price = entry - sl_dist
+        tp_price = entry + tp_dist
+    else:  # SHORT
+        sl_price = entry + sl_dist
+        tp_price = entry - tp_dist
+
+    return {
+        "sl_price": sl_price,
+        "tp_price": tp_price,
+        "tp_pips":  round(sl_pips * rr, 1),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
 # DATA FETCHERS
 # ══════════════════════════════════════════════════════════════════
 
@@ -188,6 +243,13 @@ with st.sidebar:
 
     direction = st.radio("Scan direction", ["LONG", "SHORT", "Both"], horizontal=True)
     min_score = st.slider("Min score to show", 0, 10, 5)
+    rr_ratio  = st.select_slider(
+        "Take-profit R:R",
+        options=[1.0, 1.5, 2.0, 2.5, 3.0],
+        value=2.0,
+        help="Take-profit distance = stop distance × this ratio. "
+             "Stop distance comes from the scoring engine's structural SL.",
+    )
     st.divider()
     if st.button("🔄 Rescan All Pairs", use_container_width=True, type="primary"):
         st.cache_data.clear()
@@ -206,7 +268,7 @@ st.markdown(f"""
     Scores all 21 instruments across 10 criteria · Weekly + Daily + 4H · Ranks by readiness
   </div>
   <div style="font-size:12px;color:#388bfd;margin-top:6px;">
-    🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · Direction: {direction}
+    🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · Direction: {direction} · TP {rr_ratio:.1f}R
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -262,6 +324,10 @@ if not all_results:
     st.stop()
 
 st.markdown("---")
+st.caption(
+    f"Trade levels — entry ≈ current price (proxy) · stop = scorer's structural SL distance · "
+    f"take-profit = stop × {rr_ratio:.1f} R:R. Confirm against your real 15M entry before trading."
+)
 
 # ══════════════════════════════════════════════════════════════════
 # RESULTS
@@ -284,6 +350,14 @@ with tab_cards:
         d_color = "#388bfd" if r["direction"] == "LONG" else "#a371f7"
         bar_pct = r["pct"]
         price_fmt = f"{r['close']:.5f}" if r["close"] < 100 else f"{r['close']:.3f}"
+
+        # Trade levels (entry proxy = current close, stop distance from scorer, TP at chosen R:R)
+        pip_size = INSTRUMENTS.get(r["pair"], {}).get("pip_size")
+        lv       = trade_levels(r["close"], r.get("sl_pips"), pip_size, r["direction"], rr_ratio)
+        sl_price_fmt = fmt_price(lv["sl_price"])
+        tp_price_fmt = fmt_price(lv["tp_price"])
+        tp_pips_txt  = f"{lv['tp_pips']:g}" if lv["tp_pips"] is not None else "—"
+        sl_pips_txt  = f"{r['sl_pips']}" if r.get("sl_pips") not in (None, "") else "—"
 
         # Score dots
         dots = "".join(
@@ -323,9 +397,12 @@ with tab_cards:
             </div>
           </div>
           <div style="margin:10px 0 6px 0;">{dots}</div>
-          <div style="font-size:11px;color:#8b949e;margin-bottom:8px;">
-            Price: <span style="color:#e6edf3;font-family:monospace;">{price_fmt}</span>
-            &nbsp;·&nbsp; SL: <span style="color:#f85149;">{r["sl_pips"]} pips</span>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11px;margin-bottom:10px;align-items:center;">
+            <span style="color:#8b949e;">Entry ≈ <span style="color:#e6edf3;font-family:monospace;">{price_fmt}</span></span>
+            <span style="color:#8b949e;">🛑 SL <span style="color:#f85149;font-family:monospace;font-weight:600;">{sl_price_fmt}</span>
+              <span style="color:#484f58;">({sl_pips_txt} pips)</span></span>
+            <span style="color:#8b949e;">🎯 TP <span style="color:#3fb950;font-family:monospace;font-weight:600;">{tp_price_fmt}</span>
+              <span style="color:#484f58;">({tp_pips_txt} pips · {rr_ratio:.1f}R)</span></span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:2px;">{pills}</div>
         </div>
@@ -339,6 +416,8 @@ with tab_table:
     criteria_keys = list(all_results[0]["scores"].keys()) if all_results else []
     table_rows = []
     for r in all_results:
+        pip_size = INSTRUMENTS.get(r["pair"], {}).get("pip_size")
+        lv       = trade_levels(r["close"], r.get("sl_pips"), pip_size, r["direction"], rr_ratio)
         row = {
             "Rank":      all_results.index(r) + 1,
             "Pair":      r["pair"],
@@ -346,7 +425,11 @@ with tab_table:
             "Score":     f"{r['score']}/10",
             "Grade":     r["grade"],
             "Price":     f"{r['close']:.5f}" if r["close"] < 100 else f"{r['close']:.3f}",
+            "SL Price":  fmt_price(lv["sl_price"]),
             "SL Pips":   r["sl_pips"],
+            "TP Price":  fmt_price(lv["tp_price"]),
+            "TP Pips":   lv["tp_pips"] if lv["tp_pips"] is not None else "—",
+            "R:R":       f"{rr_ratio:.1f}",
         }
         for k in criteria_keys:
             row[k] = "✅" if r["scores"][k] else "❌"
@@ -390,6 +473,6 @@ with tab_chart:
 # Footer
 st.markdown("""
 <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
-  🎰 Setup Ranker · 10-point multi-timeframe scoring · Not financial advice
+  🎰 Setup Ranker · 10-point multi-timeframe scoring · SL/TP for planning only · Not financial advice
 </div>
 """, unsafe_allow_html=True)

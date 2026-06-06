@@ -66,6 +66,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ── HTML helper ────────────────────────────────────────────────────
+def html_block(html: str) -> str:
+    """Collapse leading indentation and blank lines.
+
+    Streamlit's Markdown parser treats any line indented 4+ spaces (and any
+    HTML following a blank/whitespace-only line) as a literal *code block*.
+    Inside `with`/`for`/`if` blocks our f-string HTML is indented, so without
+    this the markup is shown as raw text instead of rendering. Flattening every
+    line to a single, un-indented string guarantees it parses as an HTML block.
+    """
+    return "".join(line.strip() for line in html.splitlines())
+
+
 # ── Instrument registry (mirrors main app) ─────────────────────────
 INSTRUMENTS = {
     "EUR/USD": {"ticker": "EURUSD=X", "pip_size": 0.0001},
@@ -394,13 +407,13 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
         open=plot_df["Open"], high=plot_df["High"],
         low=plot_df["Low"],  close=plot_df["Close"],
         increasing_line_color="#3fb950", decreasing_line_color="#f85149",
-        increasing_fillcolor="#3fb95044", decreasing_fillcolor="#f8514944",
+        increasing_fillcolor="rgba(63,185,80,0.27)", decreasing_fillcolor="rgba(248,81,73,0.27)",
         name="15M Candles", showlegend=False,
     ), row=1, col=1)
 
     # Volume
     vol_colors = [
-        "#3fb95066" if c >= o else "#f8514966"
+        "rgba(63,185,80,0.4)" if c >= o else "rgba(248,81,73,0.4)"
         for c, o in zip(plot_df["Close"], plot_df["Open"])
     ]
     fig.add_trace(go.Bar(
@@ -483,9 +496,9 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
     # BOS lines
     for i, row in plot_df.iterrows():
         if row.get("bos_bull"):
-            fig.add_vline(x=i, line_color="#3fb95066", line_dash="dot", line_width=1, row=1, col=1)
+            fig.add_vline(x=i, line_color="rgba(63,185,80,0.4)", line_dash="dot", line_width=1, row=1, col=1)
         if row.get("bos_bear"):
-            fig.add_vline(x=i, line_color="#f8514966", line_dash="dot", line_width=1, row=1, col=1)
+            fig.add_vline(x=i, line_color="rgba(248,81,73,0.4)", line_dash="dot", line_width=1, row=1, col=1)
 
     # Swing high/low labels
     swing_highs = plot_df[plot_df.get("swing_high", False) == True] if "swing_high" in plot_df.columns else pd.DataFrame()
@@ -511,7 +524,7 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
         font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
         xaxis_rangeslider_visible=False,
         legend=dict(
-            bgcolor="#0d111799", bordercolor="#21262d", borderwidth=1,
+            bgcolor="rgba(13,17,23,0.6)", bordercolor="#21262d", borderwidth=1,
             font=dict(size=10), orientation="h",
             yanchor="bottom", y=1.01, xanchor="left", x=0,
         ),
@@ -571,14 +584,14 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📋 Patterns detected**")
-    st.markdown("""
+    st.markdown(html_block("""
     <div style='font-size:12px;color:#8b949e;line-height:1.8;'>
     🔨 Hammer &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;⭐ Shooting Star<br>
     📌 Pin Bar ↑↓ &nbsp;&nbsp;&nbsp;🟢🔴 Engulfing<br>
     🔧 Tweezer Bot &nbsp;&nbsp;🔩 Tweezer Top<br>
     ⚖️ Doji &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;📈📉 BOS Break
     </div>
-    """, unsafe_allow_html=True)
+    """), unsafe_allow_html=True)
 
     st.divider()
     if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
@@ -813,7 +826,7 @@ with tab_detail:
         pdh_info = f"PDH {pdh:.5f}" if pdh else "PDH —"
         pdl_info = f"PDL {pdl:.5f}" if pdl else "PDL —"
 
-        st.markdown(f"""
+        st.markdown(html_block(f"""
         <div class="{vcls}">
           <div style="font-size:22px;font-weight:800;color:{vcolor};letter-spacing:1px;">{vtitle}</div>
           <div style="font-size:13px;color:#8b949e;margin:6px 0 10px 0;">{vdesc}</div>
@@ -826,7 +839,7 @@ with tab_detail:
             <span style="color:#e3b341;">{pdl_info}</span>
           </div>
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
 
         # ── KPI row ──────────────────────────────────
         total_bull      = int(df["bull_signal"].sum())
@@ -939,7 +952,7 @@ with tab_detail:
         ref_cols = st.columns(2)
         for idx, (name, side, color, desc, rule) in enumerate(patterns_ref):
             with ref_cols[idx % 2]:
-                st.markdown(f"""
+                st.markdown(html_block(f"""
                 <div class="pattern-card">
                     <div class="pattern-name" style="color:{color};">{name}
                         <span style="font-size:11px;font-weight:400;color:#8b949e;margin-left:8px;">— {side}</span>
@@ -947,11 +960,11 @@ with tab_detail:
                     <div class="pattern-desc">{desc}</div>
                     <div class="pattern-rule">📐 {rule}</div>
                 </div>
-                """, unsafe_allow_html=True)
+                """), unsafe_allow_html=True)
 
-        st.markdown("""
+        st.markdown(html_block("""
         <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
                     padding-top:16px;border-top:1px solid #21262d;">
           🕯️ 15M Rejection Scanner · Check #12 · For educational purposes only
         </div>
-        """, unsafe_allow_html=True)
+        """), unsafe_allow_html=True)
