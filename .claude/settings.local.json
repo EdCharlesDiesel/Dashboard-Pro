@@ -47,7 +47,16 @@
       "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('pages/backtest-workflow.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
       "Bash(.venv/Scripts/python.exe *)",
       "Bash(python3 -c ' *)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Skill(run)",
+      "Bash(/mnt/c/x/Dashboard-Pro/.venv/Scripts/streamlit.exe run *)",
+      "Bash(curl -sf -o /dev/null http://localhost:8512/_stcore/health)",
+      "Bash(curl -s http://localhost:8512/_stcore/health)",
+      "Bash(kill %1)",
+      "PowerShell($env:PYTHONUNBUFFERED='1'; Start-Process -FilePath 'C:\\\\x\\\\Dashboard-Pro\\\\.venv\\\\Scripts\\\\streamlit.exe' -ArgumentList 'run','daily-trading-checklist.py','--server.port','8512','--server.headless','true','--browser.gatherUsageStats','false' -WorkingDirectory 'C:\\\\x\\\\Dashboard-Pro' -RedirectStandardOutput 'C:\\\\x\\\\Dashboard-Pro\\\\.streamlit_run.log' -RedirectStandardError 'C:\\\\x\\\\Dashboard-Pro\\\\.streamlit_run.err' -PassThru | Select-Object Id)",
+      "PowerShell($deadline=\\(Get-Date\\).AddSeconds\\(45\\); while\\(\\(Get-Date\\) -lt $deadline\\){ try{ $r=Invoke-WebRequest -Uri 'http://localhost:8512/_stcore/health' -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop; if\\($r.StatusCode -eq 200\\){ \"ready: $\\($r.Content\\)\"; break } } catch { Start-Sleep -Milliseconds 800 } })",
+      "PowerShell(& 'C:\\\\x\\\\Dashboard-Pro\\\\.venv\\\\Scripts\\\\python.exe' -c \"import ast; ast.parse\\(open\\(r'C:\\\\x\\\\Dashboard-Pro\\\\pages\\\\amd-scanner.py', encoding='utf-8'\\).read\\(\\)\\); print\\('amd-scanner.py: syntax OK'\\)\")",
+      "PowerShell(& 'C:\\\\x\\\\Dashboard-Pro\\\\.venv\\\\Scripts\\\\python.exe' -c \"import ast; ast.parse\\(open\\(r'C:\\\\x\\\\Dashboard-Pro\\\\pages\\\\amd-scanner.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")"
     ]
   }
 }

@@ -721,6 +721,7 @@ with st.sidebar:
         st.page_link("pages/trade-journal.py",        label="17. Trade Journal",         icon="📓")
         st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
         st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
+        st.page_link("pages/amd-scanner.py",          label="20. AMD Scanner",          icon="📊")
         st.divider()
 
         # Instrument selection
