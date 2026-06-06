@@ -11,3 +11,6 @@ FRED_API_KEY="b95428dde387943cd19ecac1cf71d38f"
 
 [database]
 url = "postgresql://user:pass@localhost/mydb"
+
+url = "postgresql://user:pass@localhost/mydb"
+
