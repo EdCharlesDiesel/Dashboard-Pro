@@ -155,7 +155,7 @@ class SetupRankerPage(BloombergPage):
                 ]
         with col3:
             if st.button("Metals", use_container_width=True):
-                st.session_state.sr_pairs = ["🥇 Gold", "🥈 Silver", "🪙 Platinum"]
+                st.session_state.sr_pairs = ["XAU/USD", "XAG/USD", "XPT/USD"]
         st.session_state.sr_pairs = st.multiselect(
             "Instruments", INSTRUMENTS.keys(),
             default=[p for p in st.session_state.sr_pairs if p in INSTRUMENTS],

@@ -87,9 +87,9 @@ INSTRUMENTS = {
     "USD/ZAR": {"ticker": "USDZAR=X", "pip_size": 0.0001, "pip_label": "0.0001"},
     "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001, "pip_label": "0.0001"},
     "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001, "pip_label": "0.0001"},
-    "🥇 Gold":  {"ticker": "GC=F",    "pip_size": 0.10,   "pip_label": "0.10"},
-    "🥈 Silver":  {"ticker": "SI=F",  "pip_size": 0.01,  "pip_label": "0.01"},
-    "🪙 Platinum":{"ticker": "PL=F",  "pip_size": 0.10,  "pip_label": "0.10"},
+    "XAU/USD":  {"ticker": "GC=F",    "pip_size": 0.10,   "pip_label": "0.10"},
+    "XAG/USD":  {"ticker": "SI=F",  "pip_size": 0.01,  "pip_label": "0.01"},
+    "XPT/USD":{"ticker": "PL=F",  "pip_size": 0.10,  "pip_label": "0.10"},
 }
 
 # Typical retail broker spreads in pips (used for Spread/ATR ratio check; >5% = caution)
@@ -99,7 +99,7 @@ TYPICAL_SPREADS = {
     "EUR/JPY": 2.0, "GBP/JPY": 3.0, "AUD/JPY": 2.5, "EUR/AUD": 3.0,
     "GBP/AUD": 3.5, "EUR/CAD": 3.0, "GBP/CAD": 3.5, "USD/ZAR": 80.0,
     "EUR/ZAR": 90.0, "GBP/ZAR": 90.0,
-    "🥇 Gold": 3.0, "🥈 Silver": 5.0, "🪙 Platinum": 8.0,
+    "XAU/USD": 3.0, "XAG/USD": 5.0, "XPT/USD": 8.0,
 }
 
 # ── ATR Calculation ────────────────────────────────────────────────────────────

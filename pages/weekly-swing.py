@@ -126,9 +126,9 @@ INSTRUMENTS = {
     "USD/ZAR":    {"ticker": "USDZAR=X", "pip_size": 0.0001},
     "EUR/ZAR":    {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "🥇 Gold":    {"ticker": "GC=F",     "pip_size": 0.10},
-    "🥈 Silver":  {"ticker": "SI=F",     "pip_size": 0.01},
-    "🪙 Platinum":{"ticker": "PL=F",     "pip_size": 0.10},
+    "XAU/USD":    {"ticker": "GC=F",     "pip_size": 0.10},
+    "XAG/USD":  {"ticker": "SI=F",     "pip_size": 0.01},
+    "XPT/USD":{"ticker": "PL=F",     "pip_size": 0.10},
 }
 
 

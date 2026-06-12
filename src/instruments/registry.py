@@ -20,9 +20,12 @@ class Instrument:
 
     @property
     def display_name(self) -> str:
-        """Strip emoji prefix for pretty rendering."""
-        if self.name and self.name[0] in "🥇🥈🪙":
-            return self.name.split(" ", 1)[-1]
+        """Display form of the instrument name.
+
+        Names are plain symbols (metals use XAU/USD, XAG/USD, XPT/USD), so
+        this is the name itself; kept as a property because callers and the
+        DB save path build on it.
+        """
         return self.name
 
     @property
@@ -50,13 +53,13 @@ _INSTRUMENT_TABLE: Tuple[Tuple[str, str, float, float, str], ...] = (
     ("USD/ZAR", "USDZAR=X",  0.55, 0.0001, "Gold & risk sentiment"),
     ("EUR/ZAR", "EURZAR=X",  0.55, 0.0001, "EUR/USD + Gold"),
     ("GBP/ZAR", "GBPZAR=X",  0.55, 0.0001, "GBP/USD + Gold"),
-    ("🥇 Gold",    "GC=F",  10.0, 0.10,  "DXY inverse, VIX"),
-    ("🥈 Silver",  "SI=F",  10.0, 0.01,  "Gold correlation"),
-    ("🪙 Platinum","PL=F",  10.0, 0.10,  "Industrial demand"),
+    ("XAU/USD", "GC=F",  10.0, 0.10, "DXY inverse, VIX"),
+    ("XAG/USD", "SI=F",  10.0, 0.01, "Gold correlation"),
+    ("XPT/USD", "PL=F",  10.0, 0.10, "Industrial demand"),
 )
 
 
-TREND_COMMODITIES: FrozenSet[str] = frozenset({"🥇 Gold", "🥈 Silver", "🪙 Platinum"})
+TREND_COMMODITIES: FrozenSet[str] = frozenset({"XAU/USD", "XAG/USD", "XPT/USD"})
 
 TREND_TIMEFRAMES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "1 Hour":  ("60m", "59d", "1h"),
@@ -69,7 +72,7 @@ CORR_GROUPS: Dict[str, FrozenSet[str]] = {
     "USD vs majors (same dir = stacked USD risk)":  frozenset({"EUR/USD", "GBP/USD", "AUD/USD", "NZD/USD"}),
     "USD-base pairs (same dir = stacked USD risk)": frozenset({"USD/JPY", "USD/CHF", "USD/CAD"}),
     "JPY crosses (same dir = stacked JPY risk)":    frozenset({"USD/JPY", "EUR/JPY", "GBP/JPY", "AUD/JPY"}),
-    "Gold / Silver (highly correlated)":            frozenset({"🥇 Gold", "🥈 Silver"}),
+    "Gold / Silver (highly correlated)":            frozenset({"XAU/USD", "XAG/USD"}),
     "ZAR pairs (same dir = stacked ZAR risk)":      frozenset({"USD/ZAR", "EUR/ZAR", "GBP/ZAR"}),
 }
 
@@ -78,8 +81,8 @@ TYPICAL_SPREADS: Dict[str, float] = {
     "USD/JPY": 1.2, "USD/CHF": 2.0, "USD/CAD": 2.0, "EUR/GBP": 1.5,
     "EUR/JPY": 2.0, "GBP/JPY": 3.0, "AUD/JPY": 2.5, "EUR/AUD": 3.0,
     "GBP/AUD": 3.5, "EUR/CAD": 3.0, "GBP/CAD": 3.5, "USD/ZAR": 80.0,
-    "EUR/ZAR": 90.0, "GBP/ZAR": 90.0, "🥇 Gold": 0.5, "🥈 Silver": 0.03,
-    "🪙 Platinum": 1.0,
+    "EUR/ZAR": 90.0, "GBP/ZAR": 90.0, "XAU/USD": 0.5, "XAG/USD": 0.03,
+    "XPT/USD": 1.0,
 }
 
 
