@@ -60,7 +60,7 @@ NAV_SECTIONS: List[tuple] = [
     ]),
     ("8 · REVIEW", [
         NavEntry("JRNL", "21. Trade Journal",        "📓", "pages/trade-journal.py"),
-        NavEntry("BTST", "22. Backtest Workflow",    "🧪", "pages/backtest-workflow.py"),
+        NavEntry("BTST", "22. Forecast & Backtest",  "🧪", "pages/backtest-workflow.py"),
     ]),
 ]
 

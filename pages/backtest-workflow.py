@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.forecast_service import run_forecast
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -9,7 +10,7 @@ import yfinance as yf
 from datetime import datetime, timedelta
 
 st.set_page_config(
-    page_title="Workflow Backtest · Trading System",
+    page_title="Forecast & Backtest · Trading System",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -596,7 +597,7 @@ with st.sidebar:
 st.markdown(f"""
 <div class="hero">
   <h2 style="margin:0;color:#e6e6e6;font-size:22px;font-weight:700;">
-    🧪 Workflow Backtest — {pair} {direction}
+    🔮 Forecast &amp; Backtest — {pair} {direction}
   </h2>
   <p style="margin:6px 0 0;color:#9a9a9a;font-size:13px;">
     Simulates all 18 workflow checks on daily data · SL = {sl_mult}× ATR · TP1 = {rr}:1 R:R · Min score {min_score}/18
@@ -625,150 +626,250 @@ if daily.empty or len(daily) < 60:
     st.error("Not enough data. Try a more liquid instrument or wider date range.")
     st.stop()
 
-# ── Workflow Replay (always visible) ─────────────────────────────
-st.markdown("### Step-by-Step Workflow Replay")
-st.markdown("Pick any historical date to walk through all 18 checks exactly as the system would on that day.")
 
-available_dates = [d.date() for d in daily.index if len(daily[daily.index <= d]) >= 55]
-replay_date     = st.select_slider(
-    "Select date to replay",
-    options=available_dates,
-    value=available_dates[-1] if available_dates else None,
-)
+# ══════════════════════════════════════════════════════════════════
+# TABS — forecast first, backtest second
+# ══════════════════════════════════════════════════════════════════
 
-if replay_date:
-    replay_idx = next((i for i, d in enumerate(daily.index) if d.date() == replay_date), None)
-    if replay_idx and replay_idx >= 55:
-        d_slice = daily.iloc[:replay_idx + 1]
-        w_slice = weekly[weekly.index <= daily.index[replay_idx]]
-        replay_res, replay_score = run_checks(d_slice, w_slice, direction)
+tab_fc, tab_bt = st.tabs(["🔮 PROBABILITY FORECAST", "🧪 BACKTEST & REPLAY"])
 
-        passed   = sum(v for v, _ in replay_res.values())
-        critical = [k for k, _, mode, crit in CHECK_META if mode == "calc" and crit]
-        crit_ok  = all(replay_res.get(k, (False,))[0] for k in critical)
-        signal   = "🟢 GO" if passed >= min_score and crit_ok else "🔴 NO TRADE"
+with tab_fc:
+    atr14_now = float(calc_atr(daily, 14).iloc[-1])
+    horizon = st.radio(
+        "Forecast horizon", [5, 10, 21], index=1, horizontal=True,
+        format_func=lambda d: f"{d} trading days", key="fc_horizon",
+    )
+    with st.spinner("Running 8,000 Monte Carlo paths…"):
+        fc = run_forecast(daily["Close"], atr14_now, int(horizon),
+                          float(sl_mult), float(rr))
 
-        cols = st.columns([1, 1, 1, 1])
-        cols[0].markdown(f'<div class="metric-box"><div class="metric-value">{passed}/18</div><div class="metric-label">Checks Passed</div></div>', unsafe_allow_html=True)
-        cols[1].markdown(f'<div class="metric-box"><div class="metric-value">{signal}</div><div class="metric-label">Signal</div></div>', unsafe_allow_html=True)
-        cols[2].markdown(f'<div class="metric-box"><div class="metric-value">{daily["Close"].iloc[replay_idx]:.5f}</div><div class="metric-label">Close Price</div></div>', unsafe_allow_html=True)
-        cols[3].markdown(f'<div class="metric-box"><div class="metric-value">{calc_atr(d_slice, 14).iloc[-1]:.5f}</div><div class="metric-label">ATR14</div></div>', unsafe_allow_html=True)
+    rng_pips = (fc.q95 - fc.q05) / pip_sz
+    vol_tag = ("ELEVATED" if fc.vol_ratio > 1.15 else
+               "SUPPRESSED" if fc.vol_ratio < 0.85 else "NORMAL")
+    k = st.columns(5)
+    p_up_col = "#00ff66" if fc.p_up >= 0.5 else "#ff3344"
+    k[0].markdown(f'<div class="metric-box"><div class="metric-value" style="color:{p_up_col}">{fc.p_up*100:.0f}%</div><div class="metric-label">P(higher in {horizon}d)</div></div>', unsafe_allow_html=True)
+    k[1].markdown(f'<div class="metric-box"><div class="metric-value">{fc.exp_move_pct:+.2f}%</div><div class="metric-label">Median move</div></div>', unsafe_allow_html=True)
+    k[2].markdown(f'<div class="metric-box"><div class="metric-value">{fc.median_price:,.5f}</div><div class="metric-label">Median price</div></div>', unsafe_allow_html=True)
+    k[3].markdown(f'<div class="metric-box"><div class="metric-value">{rng_pips:,.0f}p</div><div class="metric-label">90% range</div></div>', unsafe_allow_html=True)
+    k[4].markdown(f'<div class="metric-box"><div class="metric-value">{vol_tag}</div><div class="metric-label">Vol regime ({fc.vol_ratio:.2f}×)</div></div>', unsafe_allow_html=True)
 
-        st.markdown("")
+    # ── Best bet for this currency under the house risk model ──────
+    be = 1.0 / (1.0 + rr)
+    edge_long = fc.p_tp_first_long - be
+    edge_short = fc.p_tp_first_short - be
+    best_side = "LONG" if edge_long >= edge_short else "SHORT"
+    best_edge = max(edge_long, edge_short)
+    best_p = fc.p_tp_first_long if best_side == "LONG" else fc.p_tp_first_short
+    edge_col = "#00ff66" if best_edge > 0.03 else "#ffcc00" if best_edge > -0.03 else "#ff3344"
+    verdict = ("EDGE" if best_edge > 0.03 else
+               "MARGINAL" if best_edge > -0.03 else "NO EDGE — STAY FLAT")
+    st.markdown(f"""
+<div style="border:1px solid {edge_col};background:#0f0f0f;padding:12px 16px;margin:12px 0;">
+  <span style="color:{edge_col};font-weight:700;font-size:15px;letter-spacing:.1em;">
+    BEST BET · {pair} {best_side} — {verdict}</span><br>
+  <span style="color:#e6e6e6;font-size:12px;">
+    P(TP before SL): LONG <b style="color:{'#00ff66' if edge_long > 0 else '#ff3344'}">{fc.p_tp_first_long*100:.0f}%</b>
+    · SHORT <b style="color:{'#00ff66' if edge_short > 0 else '#ff3344'}">{fc.p_tp_first_short*100:.0f}%</b>
+    · breakeven at {rr}:1 = {be*100:.0f}%
+    · SL {fc.sl_dist/pip_sz:.0f}p / TP {fc.tp_dist/pip_sz:.0f}p</span><br>
+  <span style="color:#9a9a9a;font-size:11px;">Probabilities are close-touch estimates from 8,000 simulated paths; intraday wicks hit both levels slightly more often.</span>
+</div>""", unsafe_allow_html=True)
 
-        c1, c2 = st.columns(2)
-        for i, (key, label, mode, critical_flag) in enumerate(CHECK_META):
-            col = c1 if i % 2 == 0 else c2
-            if key in replay_res:
-                passed_flag, detail = replay_res[key]
-                crit_tag = " ⭐" if critical_flag else ""
-                if mode == "auto":
-                    col.markdown(f'<div class="check-auto">🔵 {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
-                elif passed_flag:
-                    col.markdown(f'<div class="check-pass">✅ {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
-                else:
-                    col.markdown(f'<div class="check-fail">❌ {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
+    # ── Probability cone + terminal distribution ───────────────────
+    cc1, cc2 = st.columns([3, 2])
+    hist_tail = daily["Close"].iloc[-60:]
+    future_x = list(range(1, int(horizon) + 1))
+    with cc1:
+        st.markdown("**Probability cone**")
+        fig_c = go.Figure()
+        fig_c.add_trace(go.Scatter(x=list(range(-len(hist_tail) + 1, 1)),
+                                   y=hist_tail.values, name="History",
+                                   line=dict(color="#e6e6e6", width=1.4)))
+        for hi, lo, alpha in (("q95", "q05", 0.10), ("q75", "q25", 0.18)):
+            fig_c.add_trace(go.Scatter(x=future_x + future_x[::-1],
+                                       y=list(fc.cone[hi]) + list(fc.cone[lo])[::-1],
+                                       fill="toself", fillcolor=f"rgba(0,255,65,{alpha})",
+                                       line=dict(width=0), hoverinfo="skip", showlegend=False))
+        fig_c.add_trace(go.Scatter(x=future_x, y=fc.cone["q50"], name="Median path",
+                                   line=dict(color="#00ff41", width=2)))
+        fig_c.add_hline(y=fc.last + fc.tp_dist, line_dash="dash", line_color="#00ff66", line_width=1)
+        fig_c.add_hline(y=fc.last - fc.sl_dist, line_dash="dash", line_color="#ff3344", line_width=1)
+        fig_c.update_layout(paper_bgcolor="#000000", plot_bgcolor="#0f0f0f",
+                            font=dict(color="#e6e6e6", size=10), height=380,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                            legend=dict(orientation="h", y=1.05, bgcolor="rgba(0,0,0,0)"),
+                            xaxis=dict(title="Trading days (0 = today)", gridcolor="#2a2a2a"),
+                            yaxis=dict(gridcolor="#2a2a2a"))
+        st.plotly_chart(fig_c, use_container_width=True, config=dict(displayModeBar=False))
+    with cc2:
+        st.markdown(f"**Where price lands in {horizon} days**")
+        term = fc.terminal_sample
+        fig_h = go.Figure(go.Histogram(
+            x=term, nbinsx=60,
+            marker=dict(color=["#00ff66" if t > fc.last else "#ff3344" for t in term]),
+        ))
+        fig_h.add_vline(x=fc.last, line_color="#e6e6e6", line_width=1.5,
+                        annotation_text="now", annotation_font_color="#e6e6e6")
+        fig_h.update_layout(paper_bgcolor="#000000", plot_bgcolor="#0f0f0f",
+                            font=dict(color="#e6e6e6", size=10), height=380,
+                            margin=dict(l=20, r=20, t=20, b=20), showlegend=False,
+                            xaxis=dict(gridcolor="#2a2a2a"), yaxis=dict(gridcolor="#2a2a2a"))
+        st.plotly_chart(fig_h, use_container_width=True, config=dict(displayModeBar=False))
 
-        st.markdown("*⭐ = critical check. All critical checks must pass regardless of total score.*")
+    with st.expander("◇ The math under the hood"):
+        st.markdown(f"""
+- **8,000 Monte Carlo paths**: half parametric (EWMA volatility λ=0.94, Student-t(5) fat-tailed innovations, drift shrunk 75% toward zero), half stationary block bootstrap of the real return history (mean block 5 days — keeps autocorrelation and skew the parametric model misses).
+- **Current vs long-run volatility**: {fc.ewma_vol_ann:.1f}% vs {fc.longrun_vol_ann:.1f}% annualised → regime ratio {fc.vol_ratio:.2f}×.
+- **Touch probabilities** use your sidebar risk model (SL = {sl_mult}×ATR14 = {fc.sl_dist/pip_sz:.0f}p, TP = {rr}R = {fc.tp_dist/pip_sz:.0f}p) and ask, per path: which level does the close cross first?
+- Deterministic seed — numbers only change when the data, horizon, or risk settings change.
+""")
 
-st.markdown("---")
+with tab_bt:
+    # ── Workflow Replay (always visible) ─────────────────────────────
+    st.markdown("### Step-by-Step Workflow Replay")
+    st.markdown("Pick any historical date to walk through all 18 checks exactly as the system would on that day.")
 
-# ── Backtest Results ──────────────────────────────────────────────
-if run_btn:
-    with st.spinner("Running backtest across all dates…"):
-        trades = run_backtest(daily, weekly, direction, min_score, sl_mult, rr, start_dt, end_dt)
+    available_dates = [d.date() for d in daily.index if len(daily[daily.index <= d]) >= 55]
+    replay_date     = st.select_slider(
+        "Select date to replay",
+        options=available_dates,
+        value=available_dates[-1] if available_dates else None,
+    )
 
-    st.session_state['bt_trades']    = trades
-    st.session_state['bt_direction'] = direction
-    st.session_state['bt_daily']     = daily
-    st.session_state['bt_weekly']    = weekly
+    if replay_date:
+        replay_idx = next((i for i, d in enumerate(daily.index) if d.date() == replay_date), None)
+        if replay_idx and replay_idx >= 55:
+            d_slice = daily.iloc[:replay_idx + 1]
+            w_slice = weekly[weekly.index <= daily.index[replay_idx]]
+            replay_res, replay_score = run_checks(d_slice, w_slice, direction)
 
-if 'bt_trades' in st.session_state:
-    trades    = st.session_state['bt_trades']
-    direction = st.session_state['bt_direction']
+            passed   = sum(v for v, _ in replay_res.values())
+            critical = [k for k, _, mode, crit in CHECK_META if mode == "calc" and crit]
+            crit_ok  = all(replay_res.get(k, (False,))[0] for k in critical)
+            signal   = "🟢 GO" if passed >= min_score and crit_ok else "🔴 NO TRADE"
 
-    st.markdown("### Backtest Results")
+            cols = st.columns([1, 1, 1, 1])
+            cols[0].markdown(f'<div class="metric-box"><div class="metric-value">{passed}/18</div><div class="metric-label">Checks Passed</div></div>', unsafe_allow_html=True)
+            cols[1].markdown(f'<div class="metric-box"><div class="metric-value">{signal}</div><div class="metric-label">Signal</div></div>', unsafe_allow_html=True)
+            cols[2].markdown(f'<div class="metric-box"><div class="metric-value">{daily["Close"].iloc[replay_idx]:.5f}</div><div class="metric-label">Close Price</div></div>', unsafe_allow_html=True)
+            cols[3].markdown(f'<div class="metric-box"><div class="metric-value">{calc_atr(d_slice, 14).iloc[-1]:.5f}</div><div class="metric-label">ATR14</div></div>', unsafe_allow_html=True)
 
-    if not trades:
-        st.warning("No trades met the minimum score threshold in this date range. Try lowering Min Score or widening the date range.")
+            st.markdown("")
+
+            c1, c2 = st.columns(2)
+            for i, (key, label, mode, critical_flag) in enumerate(CHECK_META):
+                col = c1 if i % 2 == 0 else c2
+                if key in replay_res:
+                    passed_flag, detail = replay_res[key]
+                    crit_tag = " ⭐" if critical_flag else ""
+                    if mode == "auto":
+                        col.markdown(f'<div class="check-auto">🔵 {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
+                    elif passed_flag:
+                        col.markdown(f'<div class="check-pass">✅ {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
+                    else:
+                        col.markdown(f'<div class="check-fail">❌ {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
+
+            st.markdown("*⭐ = critical check. All critical checks must pass regardless of total score.*")
+
+    st.markdown("---")
+
+    # ── Backtest Results ──────────────────────────────────────────────
+    if run_btn:
+        with st.spinner("Running backtest across all dates…"):
+            trades = run_backtest(daily, weekly, direction, min_score, sl_mult, rr, start_dt, end_dt)
+
+        st.session_state['bt_trades']    = trades
+        st.session_state['bt_direction'] = direction
+        st.session_state['bt_daily']     = daily
+        st.session_state['bt_weekly']    = weekly
+
+    if 'bt_trades' in st.session_state:
+        trades    = st.session_state['bt_trades']
+        direction = st.session_state['bt_direction']
+
+        st.markdown("### Backtest Results")
+
+        if not trades:
+            st.warning("No trades met the minimum score threshold in this date range. Try lowering Min Score or widening the date range.")
+        else:
+            stats = compute_stats(trades)
+
+            # ── Summary metrics ─────────────────────────────────────
+            m = st.columns(8)
+            m[0].markdown(f'<div class="metric-box"><div class="metric-value">{stats["total"]}</div><div class="metric-label">Trades</div></div>', unsafe_allow_html=True)
+            m[1].markdown(f'<div class="metric-box"><div class="metric-value">{stats["win_rate"]:.0f}%</div><div class="metric-label">Win Rate</div></div>', unsafe_allow_html=True)
+            m[2].markdown(f'<div class="metric-box"><div class="metric-value">{stats["net_r"]:+.1f}R</div><div class="metric-label">Net R</div></div>', unsafe_allow_html=True)
+            m[3].markdown(f'<div class="metric-box"><div class="metric-value">{stats["avg_r"]:+.2f}R</div><div class="metric-label">Avg R / Trade</div></div>', unsafe_allow_html=True)
+            m[4].markdown(f'<div class="metric-box"><div class="metric-value">{stats["profit_factor"]:.2f}</div><div class="metric-label">Profit Factor</div></div>', unsafe_allow_html=True)
+            m[5].markdown(f'<div class="metric-box"><div class="metric-value">{stats["max_dd"]:.1f}R</div><div class="metric-label">Max Drawdown</div></div>', unsafe_allow_html=True)
+
+            dollar_gain = stats["net_r"] * (account * risk_pct / 100)
+            m[6].markdown(f'<div class="metric-box"><div class="metric-value">${dollar_gain:+,.0f}</div><div class="metric-label">P&L ({risk_pct}% risk)</div></div>', unsafe_allow_html=True)
+            be_wr = 1 / (1 + rr) * 100
+            m[7].markdown(f'<div class="metric-box"><div class="metric-value">{be_wr:.0f}%</div><div class="metric-label">Breakeven WR</div></div>', unsafe_allow_html=True)
+
+            st.markdown("")
+
+            # ── Charts ──────────────────────────────────────────────
+            ch1, ch2 = st.columns([2, 1])
+            with ch1:
+                st.markdown("**Equity Curve (cumulative R)**")
+                st.plotly_chart(equity_curve_chart(trades), use_container_width=True)
+            with ch2:
+                st.markdown("**R per Trade**")
+                st.plotly_chart(r_distribution_chart(trades), use_container_width=True)
+
+            # ── Check pass-rate breakdown ────────────────────────────
+            with st.expander("Check Pass-Rate Breakdown (last 60 bars sampled)"):
+                st.markdown("Shows how often each check passed — identifies which filters are hardest to satisfy.")
+                d_state = st.session_state.get('bt_daily', daily)
+                w_state = st.session_state.get('bt_weekly', weekly)
+                st.plotly_chart(check_pass_rate_chart(trades, d_state, w_state, direction), use_container_width=True)
+
+            # ── Trade log ────────────────────────────────────────────
+            st.markdown("**Trade Log**")
+            df_log = pd.DataFrame(trades)
+            df_log['entry']   = df_log['entry'].round(5)
+            df_log['exit']    = df_log['exit'].round(5)
+            df_log['sl']      = df_log['sl'].round(5)
+            df_log['tp1']     = df_log['tp1'].round(5)
+            df_log['r']       = df_log['r'].round(2)
+            df_log['pips']    = (df_log['sl_d'] / pip_sz * df_log['r']).round(1)
+
+            def colour_outcome(val):
+                if val == "TP2":
+                    return 'color: #00ff66; font-weight:600'
+                if val == "TP1 → BE":
+                    return 'color: #ffcc00'
+                if val == "SL":
+                    return 'color: #ff3344'
+                return 'color: #9a9a9a'
+
+            def colour_r(val):
+                return f'color: {"#00ff66" if val > 0 else "#ff3344" if val < 0 else "#ffcc00"}'
+
+            styled = (
+                df_log[['date', 'score', 'entry', 'exit', 'sl', 'tp1', 'r', 'pips', 'outcome']]
+                .style
+                .map(colour_outcome, subset=['outcome'])
+                .map(colour_r,       subset=['r'])
+                .format({'entry': '{:.5f}', 'exit': '{:.5f}', 'sl': '{:.5f}', 'tp1': '{:.5f}',
+                         'r': '{:+.2f}R', 'pips': '{:.0f}'})
+            )
+            st.dataframe(styled, use_container_width=True, height=320)
+
+            # ── Outcome breakdown ────────────────────────────────────
+            st.markdown("**Outcome Distribution**")
+            oc_counts = pd.DataFrame(trades)['outcome'].value_counts()
+            bc1, bc2, bc3, bc4 = st.columns(4)
+            for col, (label, cnt) in zip([bc1, bc2, bc3, bc4], oc_counts.items()):
+                pct = cnt / len(trades) * 100
+                col.markdown(f'<div class="metric-box"><div class="metric-value">{cnt} ({pct:.0f}%)</div><div class="metric-label">{label}</div></div>', unsafe_allow_html=True)
+
     else:
-        stats = compute_stats(trades)
-
-        # ── Summary metrics ─────────────────────────────────────
-        m = st.columns(8)
-        m[0].markdown(f'<div class="metric-box"><div class="metric-value">{stats["total"]}</div><div class="metric-label">Trades</div></div>', unsafe_allow_html=True)
-        m[1].markdown(f'<div class="metric-box"><div class="metric-value">{stats["win_rate"]:.0f}%</div><div class="metric-label">Win Rate</div></div>', unsafe_allow_html=True)
-        m[2].markdown(f'<div class="metric-box"><div class="metric-value">{stats["net_r"]:+.1f}R</div><div class="metric-label">Net R</div></div>', unsafe_allow_html=True)
-        m[3].markdown(f'<div class="metric-box"><div class="metric-value">{stats["avg_r"]:+.2f}R</div><div class="metric-label">Avg R / Trade</div></div>', unsafe_allow_html=True)
-        m[4].markdown(f'<div class="metric-box"><div class="metric-value">{stats["profit_factor"]:.2f}</div><div class="metric-label">Profit Factor</div></div>', unsafe_allow_html=True)
-        m[5].markdown(f'<div class="metric-box"><div class="metric-value">{stats["max_dd"]:.1f}R</div><div class="metric-label">Max Drawdown</div></div>', unsafe_allow_html=True)
-
-        dollar_gain = stats["net_r"] * (account * risk_pct / 100)
-        m[6].markdown(f'<div class="metric-box"><div class="metric-value">${dollar_gain:+,.0f}</div><div class="metric-label">P&L ({risk_pct}% risk)</div></div>', unsafe_allow_html=True)
-        be_wr = 1 / (1 + rr) * 100
-        m[7].markdown(f'<div class="metric-box"><div class="metric-value">{be_wr:.0f}%</div><div class="metric-label">Breakeven WR</div></div>', unsafe_allow_html=True)
-
-        st.markdown("")
-
-        # ── Charts ──────────────────────────────────────────────
-        ch1, ch2 = st.columns([2, 1])
-        with ch1:
-            st.markdown("**Equity Curve (cumulative R)**")
-            st.plotly_chart(equity_curve_chart(trades), use_container_width=True)
-        with ch2:
-            st.markdown("**R per Trade**")
-            st.plotly_chart(r_distribution_chart(trades), use_container_width=True)
-
-        # ── Check pass-rate breakdown ────────────────────────────
-        with st.expander("Check Pass-Rate Breakdown (last 60 bars sampled)"):
-            st.markdown("Shows how often each check passed — identifies which filters are hardest to satisfy.")
-            d_state = st.session_state.get('bt_daily', daily)
-            w_state = st.session_state.get('bt_weekly', weekly)
-            st.plotly_chart(check_pass_rate_chart(trades, d_state, w_state, direction), use_container_width=True)
-
-        # ── Trade log ────────────────────────────────────────────
-        st.markdown("**Trade Log**")
-        df_log = pd.DataFrame(trades)
-        df_log['entry']   = df_log['entry'].round(5)
-        df_log['exit']    = df_log['exit'].round(5)
-        df_log['sl']      = df_log['sl'].round(5)
-        df_log['tp1']     = df_log['tp1'].round(5)
-        df_log['r']       = df_log['r'].round(2)
-        df_log['pips']    = (df_log['sl_d'] / pip_sz * df_log['r']).round(1)
-
-        def colour_outcome(val):
-            if val == "TP2":
-                return 'color: #00ff66; font-weight:600'
-            if val == "TP1 → BE":
-                return 'color: #ffcc00'
-            if val == "SL":
-                return 'color: #ff3344'
-            return 'color: #9a9a9a'
-
-        def colour_r(val):
-            return f'color: {"#00ff66" if val > 0 else "#ff3344" if val < 0 else "#ffcc00"}'
-
-        styled = (
-            df_log[['date', 'score', 'entry', 'exit', 'sl', 'tp1', 'r', 'pips', 'outcome']]
-            .style
-            .map(colour_outcome, subset=['outcome'])
-            .map(colour_r,       subset=['r'])
-            .format({'entry': '{:.5f}', 'exit': '{:.5f}', 'sl': '{:.5f}', 'tp1': '{:.5f}',
-                     'r': '{:+.2f}R', 'pips': '{:.0f}'})
-        )
-        st.dataframe(styled, use_container_width=True, height=320)
-
-        # ── Outcome breakdown ────────────────────────────────────
-        st.markdown("**Outcome Distribution**")
-        oc_counts = pd.DataFrame(trades)['outcome'].value_counts()
-        bc1, bc2, bc3, bc4 = st.columns(4)
-        for col, (label, cnt) in zip([bc1, bc2, bc3, bc4], oc_counts.items()):
-            pct = cnt / len(trades) * 100
-            col.markdown(f'<div class="metric-box"><div class="metric-value">{cnt} ({pct:.0f}%)</div><div class="metric-label">{label}</div></div>', unsafe_allow_html=True)
-
-else:
-    st.info("Configure your parameters in the sidebar and click **▶ Run Backtest** to simulate the workflow on historical data.")
-    st.markdown("""
+        st.info("Configure your parameters in the sidebar and click **▶ Run Backtest** to simulate the workflow on historical data.")
+        st.markdown("""
 **How this works:**
 1. For each trading day, all 18 workflow checks are evaluated using data available up to that point.
 2. If the score meets your minimum threshold **and** all critical checks (⭐) pass, a trade is taken at the next bar's open.

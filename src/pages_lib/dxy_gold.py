@@ -107,11 +107,17 @@ class DxyGoldPage(BloombergPage):
             MetricCell(f"Corr ({window}d now)", f"{current_corr:+.2f}", regime_color),
         ])
 
-        # Regime read — the actionable line
-        Panel("REGIME READ", tag=regime, body_html=(
-            f'<div style="font-family:{T.FONT_MONO};font-size:12px;'
-            f'color:{T.WHITE};">{regime_read}</div>'
-        )).show()
+        # Who's stronger + what to do about it
+        sig = self._strength_signal(closes)
+        col_sig, col_regime = st.columns([3, 2], gap="medium")
+        with col_sig:
+            Panel("WHO'S STRONGER — TRADE SIGNAL", tag=sig["stronger"],
+                  body_html=self._strength_html(sig)).show()
+        with col_regime:
+            Panel("REGIME READ", tag=regime, body_html=(
+                f'<div style="font-family:{T.FONT_MONO};font-size:12px;'
+                f'color:{T.WHITE};">{regime_read}</div>'
+            )).show()
 
         col_overlay, col_roll = st.columns([3, 2], gap="medium")
         with col_overlay:
@@ -134,6 +140,84 @@ class DxyGoldPage(BloombergPage):
         )
 
     # ── helpers ────────────────────────────────────────────────────────────
+    @staticmethod
+    def _trend_score(series: pd.Series) -> dict:
+        """0–4 bull score: positive 5d/20d/60d returns + price above 20-EMA."""
+        rets = {}
+        for w in (5, 20, 60):
+            if len(series) > w:
+                rets[w] = (float(series.iloc[-1]) / float(series.iloc[-1 - w]) - 1) * 100
+            else:
+                rets[w] = 0.0
+        ema20 = float(series.ewm(span=20, adjust=False).mean().iloc[-1])
+        score = sum(r > 0 for r in rets.values()) + (float(series.iloc[-1]) > ema20)
+        state = "BULL" if score >= 3 else "BEAR" if score <= 1 else "MIXED"
+        return {"rets": rets, "score": score, "state": state}
+
+    @classmethod
+    def _strength_signal(cls, closes: pd.DataFrame) -> dict:
+        gold = cls._trend_score(closes["XAU/USD"])
+        dxy = cls._trend_score(closes["DXY"])
+        g, d = gold["state"], dxy["state"]
+        if g == "BULL" and d == "BEAR":
+            action, color, why = "BUY XAU/USD — STRONG", T.GREEN, (
+                "Gold trending up while the dollar trends down — the cleanest "
+                "tailwind gold gets. Dollar weakness is doing the heavy lifting.")
+        elif g == "BEAR" and d == "BULL":
+            action, color, why = "SELL XAU/USD — STRONG", T.RED, (
+                "Dollar trending up while gold trends down — textbook pressure "
+                "on gold. Favor shorts / stand aside on longs.")
+        elif g == "BULL" and d == "BULL":
+            action, color, why = "BUY XAU/USD — CAUTION", T.YELLOW, (
+                "Gold is rising despite a strong dollar — intrinsic demand "
+                "(risk-off / real yields). Valid long, but trade smaller: the "
+                "dollar is a headwind, not a tailwind.")
+        elif g == "BEAR" and d == "BEAR":
+            action, color, why = "SELL XAU/USD — CAUTION", T.YELLOW, (
+                "Gold is falling even with a weak dollar — that is real gold "
+                "weakness. Shorts have the edge, but a dollar bounce is the risk.")
+        else:
+            action, color, why = "NO CLEAR SIDE — WAIT", T.GREY, (
+                "Neither asset has a clean trend. No edge from this pair of "
+                "drivers right now — let one of them pick a direction first.")
+        if gold["score"] != dxy["score"]:
+            stronger = "GOLD" if gold["score"] > dxy["score"] else "DOLLAR"
+        else:
+            # tie on trend score — let 20-day momentum decide (gold runs ~3x
+            # DXY's volatility, so scale DXY up before comparing)
+            stronger = ("GOLD" if gold["rets"][20] > dxy["rets"][20] * 3
+                        else "DOLLAR")
+        return {"gold": gold, "dxy": dxy, "action": action,
+                "color": color, "why": why, "stronger": stronger}
+
+    @staticmethod
+    def _strength_html(sig: dict) -> str:
+        def chips(label, ts):
+            cells = "".join(
+                f'<span style="color:{T.GREEN if r > 0 else T.RED};'
+                f'margin-right:10px;">{w}D {r:+.1f}%</span>'
+                for w, r in ts["rets"].items()
+            )
+            state_color = (T.GREEN if ts["state"] == "BULL"
+                           else T.RED if ts["state"] == "BEAR" else T.GREY)
+            return (
+                f'<div style="margin:2px 0;"><b style="color:{T.WHITE};'
+                f'display:inline-block;width:74px;">{label}</b>'
+                f'<span style="color:{state_color};font-weight:700;'
+                f'display:inline-block;width:54px;">{ts["state"]}</span>'
+                f'{cells}</div>'
+            )
+
+        return (
+            f'<div style="font-family:{T.FONT_MONO};font-size:11px;">'
+            f'<div style="font-size:16px;font-weight:700;color:{sig["color"]};'
+            f'letter-spacing:0.08em;margin-bottom:6px;">▸ {sig["action"]}</div>'
+            + chips("XAU/USD", sig["gold"])
+            + chips("DXY", sig["dxy"])
+            + f'<div style="color:{T.GREY};margin-top:6px;">{sig["why"]}</div>'
+            + '</div>'
+        )
+
     @staticmethod
     def _regime(corr: float):
         if corr <= -0.7:
