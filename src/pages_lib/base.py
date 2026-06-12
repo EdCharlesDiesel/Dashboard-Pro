@@ -17,8 +17,8 @@ from typing import Optional
 
 import streamlit as st
 
-from src.pages_lib.navigation import NAV_ENTRIES
-from src.ui.components import FunctionCodeGrid, StatusBar
+from src.pages_lib.navigation import render_sidebar_nav
+from src.ui.components import StatusBar
 from src.ui.theme import BloombergTheme
 
 
@@ -80,12 +80,8 @@ class BloombergPage:
 """,
             unsafe_allow_html=True,
         )
-        with st.expander("◆ FUNCTION CODES", expanded=False):
-            grid = FunctionCodeGrid([
-                (e.code, f"{e.icon} {e.label}", f"/{_link_for(e.path)}")
-                for e in NAV_ENTRIES
-            ])
-            grid.show()
+        render_sidebar_nav()
+        st.markdown("---")
 
     @staticmethod
     def _status_bar(ctx: PageContext) -> None:
@@ -96,9 +92,3 @@ class BloombergPage:
             f"LOCAL {now}",
             "DASHBOARD PRO v3.0",
         ]).show()
-
-
-def _link_for(path: str) -> str:
-    """Turn a Streamlit page path into a URL fragment for st.page_link."""
-    fname = path.rsplit("/", 1)[-1]
-    return fname.replace(".py", "")

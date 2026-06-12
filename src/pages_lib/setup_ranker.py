@@ -134,6 +134,7 @@ class SetupRankerPage(BloombergPage):
         st.session_state.setdefault("sr_direction", "LONG")
         st.session_state.setdefault("sr_min_score", 5)
         st.session_state.setdefault("sr_rr_ratio", 2.0)
+        st.session_state.setdefault("sr_pairs", INSTRUMENTS.keys())
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
 
     def sidebar(self, ctx: PageContext) -> None:
@@ -141,6 +142,23 @@ class SetupRankerPage(BloombergPage):
             '<div style="color:#ff9900;font-weight:700;letter-spacing:0.15em;'
             'text-transform:uppercase;font-size:11px;">SCAN PARAMS</div>',
             unsafe_allow_html=True,
+        )
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("All", use_container_width=True):
+                st.session_state.sr_pairs = INSTRUMENTS.keys()
+        with col2:
+            if st.button("Majors", use_container_width=True):
+                st.session_state.sr_pairs = [
+                    "EUR/USD", "GBP/USD", "AUD/USD", "NZD/USD",
+                    "USD/JPY", "USD/CHF", "USD/CAD",
+                ]
+        with col3:
+            if st.button("Metals", use_container_width=True):
+                st.session_state.sr_pairs = ["🥇 Gold", "🥈 Silver", "🪙 Platinum"]
+        st.session_state.sr_pairs = st.multiselect(
+            "Instruments", INSTRUMENTS.keys(),
+            default=[p for p in st.session_state.sr_pairs if p in INSTRUMENTS],
         )
         st.session_state.sr_direction = st.radio(
             "Direction", ["LONG", "SHORT", "Both"], horizontal=True,
@@ -163,16 +181,21 @@ class SetupRankerPage(BloombergPage):
         direction = st.session_state.sr_direction
         min_score = st.session_state.sr_min_score
         rr_ratio = st.session_state.sr_rr_ratio
+        pairs = st.session_state.sr_pairs
+        if not pairs:
+            st.warning("⚠ Select at least one instrument in the sidebar.")
+            return
 
         CommandBar(label="RANK", cells=[
             (f"DIR {direction}", ""),
+            (f"PAIRS {len(pairs)}", ""),
             (f"MIN {min_score}/10", "cyan"),
             (f"TP {rr_ratio:.1f}R", "green"),
             (datetime.now().strftime("%a %d %b %H:%M"), "amber"),
         ]).show()
 
         directions = ["LONG", "SHORT"] if direction == "Both" else [direction]
-        results = self._scan(directions, min_score)
+        results = self._scan(pairs, directions, min_score)
 
         # KPI strip
         grade_counts = {
@@ -203,9 +226,9 @@ class SetupRankerPage(BloombergPage):
         with tab_chart: self._render_chart(results)
 
     @staticmethod
-    def _scan(directions, min_score) -> list:
+    def _scan(pairs, directions, min_score) -> list:
         results = []
-        pairs_list = list(INSTRUMENTS.items())
+        pairs_list = [(p, INSTRUMENTS[p]) for p in pairs if p in INSTRUMENTS]
         total = len(pairs_list) * len(directions)
         done = 0
         prog = st.progress(0, text="Scoring pairs…")
