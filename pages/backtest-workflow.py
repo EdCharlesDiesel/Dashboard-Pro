@@ -64,7 +64,7 @@ INSTRUMENTS = {
     "EUR/CAD": {"ticker": "EURCAD=X", "pip": 0.0001, "pip_val": 7.4},
     "GBP/CAD": {"ticker": "GBPCAD=X", "pip": 0.0001, "pip_val": 7.4},
     "USD/ZAR": {"ticker": "USDZAR=X", "pip": 0.0001, "pip_val": 0.55},
-    "🥇 Gold":  {"ticker": "GC=F",    "pip": 0.10,   "pip_val": 10.0},
+    "XAU/USD":  {"ticker": "GC=F",    "pip": 0.10,   "pip_val": 10.0},
 }
 
 CHECK_META = [

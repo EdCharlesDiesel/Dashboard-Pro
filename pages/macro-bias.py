@@ -173,7 +173,7 @@ PAIRS = [
     ("GBP/JPY", "GBP", "JPY"), ("AUD/JPY", "AUD", "JPY"), ("EUR/AUD", "EUR", "AUD"),
     ("GBP/AUD", "GBP", "AUD"), ("EUR/CAD", "EUR", "CAD"), ("GBP/CAD", "GBP", "CAD"),
     ("USD/ZAR", "USD", "ZAR"), ("EUR/ZAR", "EUR", "ZAR"), ("GBP/ZAR", "GBP", "ZAR"),
-    ("🥇 Gold", "USD", "—"),
+    ("XAU/USD", "USD", "—"),
 ]
 
 
@@ -520,7 +520,7 @@ st.markdown(f"""
         <div class="metric-value" style="color:#00ff41;">
           {f'${dxy_data["value"]:.1f}' if dxy_data else 'N/A'}
         </div>
-        <div class="metric-label">💵 DXY Index</div>
+        <div class="metric-label">DXY Index</div>
       </div>
       <div class="metric-box" style="min-width:90px;">
         <div class="metric-value" style="color:#ffcc00;">

@@ -83,6 +83,37 @@ section[data-testid="stSidebar"] h4 {{
     padding-bottom: 4px;
 }}
 
+/* anything sitting on the green fill gets BLACK text — readability first.
+   (The sidebar `*` rule above paints inner spans white, which made green
+   primary buttons and the active page link unreadable.) */
+.stButton button[kind="primary"],
+.stButton button[kind="primary"] *,
+section[data-testid="stSidebar"] .stButton button[kind="primary"],
+section[data-testid="stSidebar"] .stButton button[kind="primary"] * {{
+    color: {cls.BG} !important;
+}}
+
+/* sidebar page navigation links */
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] {{
+    padding: 2px 8px;
+    border: 1px solid transparent;
+    border-radius: 0 !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]:hover {{
+    background: {cls.BG_HEADER} !important;
+    border-color: {cls.AMBER_DIM} !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]:hover * {{
+    color: {cls.AMBER} !important;
+}}
+/* current page: solid green chip, black font */
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current="page"] {{
+    background: {cls.AMBER} !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current="page"] * {{
+    color: {cls.BG} !important;
+}}
+
 /* widgets — flat, bordered, monospace */
 .stTextInput input, .stNumberInput input, .stSelectbox > div,
 .stTextArea textarea {{

@@ -61,9 +61,9 @@ INSTRUMENTS = {
     "USD/ZAR":     "USDZAR=X",
     "EUR/ZAR":     "EURZAR=X",
     "GBP/ZAR":     "GBPZAR=X",
-    "🥇 Gold":     "GC=F",
-    "🥈 Silver":   "SI=F",
-    "🪙 Platinum": "PL=F",
+    "XAU/USD":     "GC=F",
+    "XAG/USD":   "SI=F",
+    "XPT/USD": "PL=F",
 }
 
 

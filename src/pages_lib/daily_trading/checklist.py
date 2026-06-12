@@ -153,7 +153,7 @@ class ChecklistController:
         cached. We don't trigger fetches here so the page stays snappy.
         """
         items: List = []
-        for name in ["EUR/USD", "GBP/USD", "USD/JPY", "🥇 Gold", current]:
+        for name in ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", current]:
             if name not in INSTRUMENTS:
                 continue
             atr = st.session_state.get(f"atr_data_{name}", None)

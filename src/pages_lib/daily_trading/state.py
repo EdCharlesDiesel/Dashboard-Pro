@@ -41,7 +41,7 @@ class SessionStateBootstrap:
             st.session_state.setdefault(f"check_{i}", False)
         # trend-following toggles
         st.session_state.setdefault(
-            "trend_selected_pairs", ["EUR/USD", "GBP/USD", "🥇 Gold"]
+            "trend_selected_pairs", ["EUR/USD", "GBP/USD", "XAU/USD"]
         )
         st.session_state.setdefault("trend_timeframe", "4 Hours")
         st.session_state.setdefault("trend_min_conds", 4)

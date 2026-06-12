@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A professional forex/metals day-trading dashboard built on Streamlit. Two apps share one repo:
 
-- **`daily-trading-checklist.py` + `pages/`** — the main multipage "terminal" system (21 pages). This is where active development happens.
+- **`daily-trading-checklist.py` + `pages/`** — the main multipage "terminal" system (22 pages). This is where active development happens.
 - **`app.py`** — an older single-page tab dashboard ("Macro Dashboard Pro") kept running in parallel. It shares `src/core/` with the multipage app.
 - **`archive/`** — dead experiments; never touch.
 
@@ -46,7 +46,7 @@ EOF
 
 Pages come in two generations that must look identical:
 
-1. **Framework pages** (Checklist, Setup Ranker, Correlations) subclass `BloombergPage` in `src/pages_lib/base.py` — a template method (`configure()` / `sidebar()` / `body()`) that handles page config, theme injection, sidebar nav, and the status bar. The files in `pages/` and the root entrypoint are 5-line shims; implementations live in `src/pages_lib/`. **New pages should use this framework.**
+1. **Framework pages** (Checklist, Setup Ranker, Correlations, DXY vs Gold) subclass `BloombergPage` in `src/pages_lib/base.py` — a template method (`configure()` / `sidebar()` / `body()`) that handles page config, theme injection, sidebar nav, and the status bar. The files in `pages/` and the root entrypoint are 5-line shims; implementations live in `src/pages_lib/`. **New pages should use this framework.**
 2. **Legacy pages** (the other 18 in `pages/`) are standalone scripts with inline CSS. They are visually harmonized by calling `BloombergTheme.apply()` immediately after `st.set_page_config()` and by a global flatten rule in the theme (no rounded corners anywhere). Their inline hexes were bulk-remapped to the terminal palette — don't reintroduce GitHub-dark colors (`#0d1117`, `#388bfd`, …) or `plotly_white`.
 
 ### Single sources of truth (never duplicate these)
@@ -73,7 +73,7 @@ Brand/page header → **page controls (symbol picker first)** → divider → na
 - **Risk model**: SL = 1.5 × ATR14 (in pips), TP1 = 2R, TP2 = 3R. Lot size = risk_amount / sl_pips / pip_value. R-multiple = pips gained / SL pips.
 - **The 18-point checklist**: checks 11–16 are the "critical path"; verdict is GO only when ≥16/18 checked AND all critical checks pass. A daily-loss limit (2 losses/day, queried from Postgres) blocks new trade entry.
 - **Sessions (UTC)**: London Kill Zone 07–09, NY Kill Zone 12–14, London Close 15–17, Tokyo 00–03; everything else is Dead Zone. Prime windows are the only "green" entries.
-- **Instrument names carry emoji prefixes** ("🥇 Gold"). `Instrument.display_name` strips them; the DB stores stripped names ("Gold") — keep it that way for data consistency.
+- **Metals use forex symbols, not icons**: Gold = XAU/USD, Silver = XAG/USD, Platinum = XPT/USD (Yahoo tickers stay GC=F / SI=F / PL=F). Older Postgres rows may carry the previous display names ("Gold").
 - **AMD scanner** is fixed to a daily-trading preset: 1H bars × 1 month (`PERIOD`/`INTERVAL`/`BARS_PER_DAY` constants), detection on the full month, chart windowed to the current trading week. Volume-profile colors follow candle green/red by buy/sell dominance.
 - **Correlation stacking**: before adding exposure, `CorrelationService.check_exposure()` warns when an open trade in the same `CORR_GROUPS` group shares the direction (e.g. long EUR/USD + long GBP/USD = doubled USD risk).
 
