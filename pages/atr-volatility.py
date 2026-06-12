@@ -167,8 +167,6 @@ def fetch_instrument_data(ticker: str, pip_size: float, period: str = "60d", int
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📊 ATR Volatility")
-    render_sidebar_nav()
-    st.divider()
 
     period_options = {"30 Days": "30d", "60 Days": "60d", "90 Days": "90d", "6 Months": "6mo"}
     selected_period = st.selectbox("Lookback Period", list(period_options.keys()), index=1)
@@ -189,6 +187,8 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # FETCH ALL INSTRUMENTS
 # ══════════════════════════════════════════════════════════════════

@@ -562,8 +562,6 @@ def check_pass_rate_chart(trades: list, daily: pd.DataFrame, weekly: pd.DataFram
 # ══════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    render_sidebar_nav()
-    st.markdown("---")
     st.markdown("### 🧪 Workflow Backtest")
     st.markdown("---")
 
@@ -587,6 +585,8 @@ with st.sidebar:
     st.markdown("---")
     run_btn = st.button("▶ Run Backtest", use_container_width=True, type="primary")
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════

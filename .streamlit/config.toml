@@ -1,7 +1,7 @@
 [theme]
 # Bloomberg-terminal palette — keep in sync with src/ui/theme.py (BloombergTheme)
 base                    = "dark"
-primaryColor            = "#ff9900"
+primaryColor            = "#00ff41"
 backgroundColor         = "#000000"
 secondaryBackgroundColor= "#0a0a0a"
 textColor               = "#e6e6e6"

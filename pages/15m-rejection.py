@@ -544,8 +544,6 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
 
 with st.sidebar:
     st.markdown("### 🕯️ 15M Rejection Scanner")
-    render_sidebar_nav()
-    st.divider()
 
     inst_keys = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -583,6 +581,8 @@ with st.sidebar:
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')} local")
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN CONTENT
 # ══════════════════════════════════════════════════════════════════

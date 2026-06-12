@@ -422,8 +422,6 @@ def build_chart(m: dict, pair: str,
 
 with st.sidebar:
     st.markdown("### 📊 Daily MACD Momentum")
-    render_sidebar_nav()
-    st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -463,6 +461,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN PAGE
 # ══════════════════════════════════════════════════════════════════

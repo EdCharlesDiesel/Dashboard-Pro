@@ -95,7 +95,7 @@ class CorrelationsPage(BloombergPage):
 
     def sidebar(self, ctx: PageContext) -> None:
         st.markdown(
-            '<div style="color:#ff9900;font-weight:700;letter-spacing:0.15em;'
+            '<div style="color:#00ff41;font-weight:700;letter-spacing:0.15em;'
             'text-transform:uppercase;font-size:11px;">CORR SETTINGS</div>',
             unsafe_allow_html=True,
         )
@@ -301,7 +301,7 @@ class CorrelationsPage(BloombergPage):
     @staticmethod
     def _render_known_insights(corr_matrix: pd.DataFrame) -> None:
         st.markdown(
-            '<div style="color:#ff9900;font-family:\'JetBrains Mono\',monospace;'
+            '<div style="color:#00ff41;font-family:\'JetBrains Mono\',monospace;'
             'font-size:12px;letter-spacing:0.18em;margin:14px 0 6px 0;">'
             '▸ KEY RELATIONSHIPS</div>',
             unsafe_allow_html=True,

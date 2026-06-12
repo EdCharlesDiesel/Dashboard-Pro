@@ -307,8 +307,6 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
 
 with st.sidebar:
     st.markdown("### 🏗️ Market Structure")
-    render_sidebar_nav()
-    st.divider()
 
     tf_options = {
         "4H (recommended)": ("1h",  90, "4h"),
@@ -336,6 +334,8 @@ with st.sidebar:
         st.rerun()
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════
