@@ -1,0 +1,237 @@
+"""Trade persistence via PostgreSQL.
+
+Wraps psycopg2 connections in a class so callers stop passing around raw cfg
+dicts. SQL strings are byte-equivalent to the procedural code they replace.
+"""
+from __future__ import annotations
+
+from contextlib import closing
+from dataclasses import dataclass
+from typing import Any, Dict, List, Mapping, Optional, Tuple
+
+import psycopg2
+import psycopg2.extras
+
+
+@dataclass(frozen=True)
+class DBConfig:
+    host: str = "localhost"
+    port: int = 5432
+    dbname: str = "trading"
+    user: str = "postgres"
+    password: str = ""
+
+    @classmethod
+    def from_mapping(cls, m: Mapping[str, Any]) -> "DBConfig":
+        return cls(
+            host=str(m.get("host", "localhost")),
+            port=int(m.get("port", 5432)),
+            dbname=str(m.get("dbname") or m.get("name") or "trading"),
+            user=str(m.get("user", "postgres")),
+            password=str(m.get("password", "")),
+        )
+
+    def as_kwargs(self) -> Dict[str, Any]:
+        return {
+            "host": self.host, "port": self.port, "dbname": self.dbname,
+            "user": self.user, "password": self.password,
+        }
+
+
+class TradeRepository:
+    """All trade_setups CRUD + analytics behind a single class."""
+
+    OUTCOME_COLUMNS = (
+        "entry_price FLOAT",
+        "outcome     VARCHAR(10)",
+        "close_price FLOAT",
+        "pips_gained FLOAT",
+        "r_multiple  FLOAT",
+        "is_open     BOOLEAN DEFAULT TRUE",
+    )
+
+    CREATE_SQL = """
+        CREATE TABLE IF NOT EXISTS trade_setups (
+            id            SERIAL PRIMARY KEY,
+            logged_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+            instrument    VARCHAR(30),
+            ticker        VARCHAR(20),
+            direction     VARCHAR(10),
+            session       VARCHAR(20),
+            score         VARCHAR(20),
+            verdict       VARCHAR(20),
+            atr14         FLOAT,
+            atr20         FLOAT,
+            sl_pips       FLOAT,
+            tp1_pips      FLOAT,
+            tp2_pips      FLOAT,
+            lot_size      FLOAT,
+            risk_amount   FLOAT,
+            rr_tp1        FLOAT,
+            rr_tp2        FLOAT,
+            account_bal   FLOAT,
+            risk_pct      FLOAT,
+            checks_passed INT,
+            checks_total  INT,
+            checks_detail JSONB,
+            notes         TEXT
+        )
+    """
+
+    def __init__(self, cfg: DBConfig) -> None:
+        self.cfg = cfg
+
+    # ── connection helper ───────────────────────────────────────────────────
+    def _connect(self):
+        return psycopg2.connect(**self.cfg.as_kwargs())
+
+    # ── schema ──────────────────────────────────────────────────────────────
+    def init_schema(self) -> Tuple[bool, str]:
+        """Create the table + outcome columns. Returns (ok, message)."""
+        try:
+            with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+                cur.execute(self.CREATE_SQL)
+                for col_def in self.OUTCOME_COLUMNS:
+                    cur.execute(
+                        f"ALTER TABLE trade_setups ADD COLUMN IF NOT EXISTS {col_def}"
+                    )
+                conn.commit()
+            return True, "Connected"
+        except Exception as exc:
+            return False, str(exc)
+
+    # ── writes ──────────────────────────────────────────────────────────────
+    def save_setup(self, row: Dict[str, Any]) -> None:
+        sql = """
+            INSERT INTO trade_setups (
+                logged_at, instrument, ticker, direction, session,
+                score, verdict, atr14, atr20, sl_pips, tp1_pips, tp2_pips,
+                lot_size, risk_amount, rr_tp1, rr_tp2, account_bal, risk_pct,
+                checks_passed, checks_total, checks_detail, notes
+            ) VALUES (
+                %(logged_at)s, %(instrument)s, %(ticker)s, %(direction)s, %(session)s,
+                %(score)s, %(verdict)s, %(atr14)s, %(atr20)s, %(sl_pips)s, %(tp1_pips)s, %(tp2_pips)s,
+                %(lot_size)s, %(risk_amount)s, %(rr_tp1)s, %(rr_tp2)s, %(account_bal)s, %(risk_pct)s,
+                %(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s
+            )
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, row)
+            conn.commit()
+
+    def delete_setup(self, trade_id: int) -> None:
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM trade_setups WHERE id = %s", (trade_id,))
+            conn.commit()
+
+    def close_trade(
+        self,
+        trade_id: int,
+        entry_price: float,
+        close_price: float,
+        pips_gained: float,
+        r_multiple: float,
+        outcome: str,
+    ) -> None:
+        sql = """
+            UPDATE trade_setups
+            SET entry_price = %s, close_price = %s, pips_gained = %s,
+                r_multiple = %s, outcome = %s, is_open = FALSE
+            WHERE id = %s
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                sql,
+                (entry_price, close_price, pips_gained, r_multiple, outcome, trade_id),
+            )
+            conn.commit()
+
+    # ── reads ───────────────────────────────────────────────────────────────
+    def load_setups(self, limit: int = 50) -> List[Dict[str, Any]]:
+        sql = """
+            SELECT id, logged_at, instrument, ticker,
+                   direction, session, score, verdict, atr14, atr20,
+                   sl_pips, tp1_pips, tp2_pips, lot_size, risk_amount,
+                   rr_tp1, rr_tp2, account_bal, risk_pct, checks_passed,
+                   checks_total, checks_detail, notes
+            FROM trade_setups
+            ORDER BY logged_at DESC
+            LIMIT %s
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(sql, (limit,))
+            return [dict(r) for r in cur.fetchall()]
+
+    def load_open(self) -> List[Dict[str, Any]]:
+        sql = """
+            SELECT id, logged_at, instrument, direction, sl_pips, tp1_pips,
+                   tp2_pips, lot_size
+            FROM trade_setups
+            WHERE is_open IS TRUE OR is_open IS NULL
+            ORDER BY logged_at DESC LIMIT 20
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(sql)
+            return [dict(r) for r in cur.fetchall()]
+
+    def daily_losses(self, max_losses: int = 2) -> Dict[str, Any]:
+        sql = """
+            SELECT COUNT(*) AS cnt
+            FROM trade_setups
+            WHERE outcome = 'LOSS' AND is_open = FALSE
+              AND DATE(logged_at) = CURRENT_DATE
+        """
+        try:
+            with self._connect() as conn, conn.cursor(
+                cursor_factory=psycopg2.extras.RealDictCursor
+            ) as cur:
+                cur.execute(sql)
+                row = cur.fetchone()
+            count = int(row["cnt"]) if row else 0
+        except Exception:
+            count = 0
+        return {
+            "losses_today": count,
+            "limit": max_losses,
+            "blocked": count >= max_losses,
+        }
+
+    def performance_stats(self, n: int = 20) -> Optional[Dict[str, Any]]:
+        sql = """
+            SELECT outcome, r_multiple, pips_gained
+            FROM trade_setups
+            WHERE is_open = FALSE AND outcome IS NOT NULL
+            ORDER BY logged_at DESC LIMIT %s
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(sql, (n,))
+            rows = [dict(r) for r in cur.fetchall()]
+        if not rows:
+            return None
+        wins = [r for r in rows if r["outcome"] == "WIN"]
+        losses = [r for r in rows if r["outcome"] == "LOSS"]
+        be_trades = [r for r in rows if r["outcome"] == "BE"]
+        total = len(rows)
+        win_rate = len(wins) / total * 100 if total else 0
+        win_rs = [r["r_multiple"] for r in wins if r["r_multiple"]]
+        loss_rs = [abs(r["r_multiple"]) for r in losses if r["r_multiple"]]
+        avg_win_r = sum(win_rs) / len(win_rs) if win_rs else 0
+        avg_loss_r = sum(loss_rs) / len(loss_rs) if loss_rs else 1.0
+        loss_rate = len(losses) / total if total else 0
+        expectancy = (win_rate / 100 * avg_win_r) - (loss_rate * avg_loss_r)
+        pf = (
+            (len(wins) * avg_win_r) / (len(losses) * avg_loss_r)
+            if losses and avg_loss_r else 0.0
+        )
+        return {
+            "total": total, "wins": len(wins), "losses": len(losses),
+            "be": len(be_trades), "win_rate": win_rate,
+            "avg_win_r": avg_win_r, "avg_loss_r": avg_loss_r,
+            "expectancy": expectancy, "profit_factor": pf,
+        }
