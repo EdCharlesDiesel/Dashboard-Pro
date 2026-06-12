@@ -419,8 +419,6 @@ def build_chart(df: pd.DataFrame, pair: str,
 
 with st.sidebar:
     st.markdown("### 🛡️ Stop Below/Above Structure")
-    render_sidebar_nav()
-    st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -461,6 +459,8 @@ with st.sidebar:
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')} local")
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN PAGE
 # ══════════════════════════════════════════════════════════════════

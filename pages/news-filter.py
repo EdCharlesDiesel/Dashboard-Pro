@@ -452,8 +452,6 @@ def check_alerts(events: List[Dict], user_tz) -> List[Dict]:
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📰 News Filter")
-    render_sidebar_nav()
-    st.divider()
 
     # Timezone picker
     tz_options = [
@@ -514,6 +512,8 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # FETCH & NORMALISE
 # ══════════════════════════════════════════════════════════════════

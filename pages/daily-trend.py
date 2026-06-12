@@ -241,8 +241,6 @@ def ema_stack(data: dict, direction: str) -> dict:
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📈 Daily Trend")
-    render_sidebar_nav()
-    st.divider()
 
     direction = st.radio("🎯 Trade Direction", ["LONG", "SHORT"], horizontal=True)
     focus_pair = st.selectbox("Focus Pair (Detail Chart)", list(INSTRUMENTS.keys()), index=0)
@@ -262,6 +260,8 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # FETCH ALL
 # ══════════════════════════════════════════════════════════════════

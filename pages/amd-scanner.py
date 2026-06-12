@@ -246,12 +246,35 @@ def load_yfinance(symbol: str, period: str, interval: str) -> pd.DataFrame:
     return df
 
 
+# Matched to the terminal theme (src/ui/theme.py): cyan = info/coiling,
+# yellow = warning/trap, purple = delivery leg.
 PHASE_COLORS = {
-    "accumulation": "#3b82f6",
-    "manipulation": "#f59e0b",
-    "distribution": "#a855f7",
+    "accumulation": "#00e0ff",
+    "manipulation": "#ffcc00",
+    "distribution": "#b266ff",
     "neutral": "rgba(0,0,0,0)",
 }
+
+# Same green/red family as the candles on the chart (and every other chart
+# in the app — src/ui/theme.py GREEN/RED).
+CANDLE_UP = "#00ff66"
+CANDLE_DOWN = "#ff3344"
+
+
+def _this_week(labeled: pd.DataFrame) -> pd.DataFrame:
+    """Bars from Monday of the current trading week, anchored on the last bar
+    (so a weekend view still shows the completed week). If the week has just
+    started and there's less than a day of bars, include the prior week so
+    the chart isn't nearly empty on a Monday morning."""
+    if labeled.empty:
+        return labeled
+    idx = pd.DatetimeIndex(labeled.index)
+    last = idx[-1]
+    monday = (last - pd.Timedelta(days=int(last.dayofweek))).normalize()
+    view = labeled[idx >= monday]
+    if len(view) < BARS_PER_DAY:
+        view = labeled[idx >= monday - pd.Timedelta(days=7)]
+    return view
 
 
 def _has_usable_volume(s: pd.Series) -> bool:
@@ -323,18 +346,18 @@ def _volume_profile(labeled: pd.DataFrame, y_series: pd.Series,
     return centers, profile, up_share
 
 
-# Buy/sell dominance → bar colour (strong green → light green → light red → red)
+# Buy/sell dominance → bar colour, same green/red family as the candles
 def _profile_colors(up_share: np.ndarray) -> list:
     colors = []
     for s in up_share:
         if s >= 0.60:
-            colors.append("#16a34a")    # green — buyers dominate
+            colors.append(CANDLE_UP)    # green — buyers dominate
         elif s >= 0.50:
-            colors.append("#86efac")    # light green — buyers slightly ahead
+            colors.append("#7dffb0")    # light green — buyers slightly ahead
         elif s >= 0.40:
-            colors.append("#fca5a5")    # light red — sellers slightly ahead
+            colors.append("#ff8899")    # light red — sellers slightly ahead
         else:
-            colors.append("#dc2626")    # red — sellers dominate
+            colors.append(CANDLE_DOWN)  # red — sellers dominate
     return colors
 
 
@@ -382,7 +405,8 @@ def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.F
         go.Candlestick(
             x=labeled.index, open=labeled["Open"], high=labeled["High"],
             low=labeled["Low"], close=labeled["Close"], name="price",
-            increasing_line_color="#16a34a", decreasing_line_color="#dc2626",
+            increasing_line_color=CANDLE_UP, decreasing_line_color=CANDLE_DOWN,
+            increasing_fillcolor=CANDLE_UP, decreasing_fillcolor=CANDLE_DOWN,
         ),
         row=1, col=2,
     )
@@ -405,7 +429,7 @@ def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.F
     # ---- Period separators on the price chart ----
     for b in _period_boundaries(labeled.index, interval):
         fig.add_vline(
-            x=b, line=dict(color="#94a3b8", width=1, dash="dot"),
+            x=b, line=dict(color="#555555", width=1, dash="dot"),
             row=1, col=2,
         )
 
@@ -413,11 +437,18 @@ def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.F
     fig.update_layout(
         height=680,
         xaxis_rangeslider_visible=False,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.2),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.2,
+                    bgcolor="rgba(0,0,0,0)", font=dict(color="#e6e6e6")),
         margin=dict(l=10, r=10, t=60, b=10),
-        template="plotly_white",
+        template="plotly_dark",
+        paper_bgcolor="#000000", plot_bgcolor="#0f0f0f",
+        font=dict(color="#e6e6e6",
+                  family="'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+                  size=10),
         bargap=0.05,
     )
+    fig.update_xaxes(gridcolor="#2a2a2a", linecolor="#2a2a2a", zerolinecolor="#2a2a2a")
+    fig.update_yaxes(gridcolor="#2a2a2a", linecolor="#2a2a2a", zerolinecolor="#2a2a2a")
     return fig
 
 
@@ -504,8 +535,6 @@ st.caption(
 )
 
 with st.sidebar:
-    render_sidebar_nav()
-    st.markdown("---")
     st.header("Data")
     inst_keys = list(INSTRUMENTS.keys())
     default_idx = inst_keys.index("EUR/USD") if "EUR/USD" in inst_keys else 0
@@ -583,6 +612,8 @@ with st.sidebar:
         )
         (st.success if ok else st.error)(f"Test: {info}")
 
+    st.divider()
+    render_sidebar_nav()
 # ---- load data (auto, cached 5 min) ----
 df_raw = None
 try:
@@ -656,12 +687,17 @@ if df_raw is not None and not df_raw.empty:
                     "proxy** instead. For real volume, pick a futures contract "
                     "(Gold, Silver, Platinum)."
                 )
-            st.plotly_chart(make_chart(labeled, symbol, INTERVAL), use_container_width=True)
+            week_view = _this_week(labeled)
+            st.plotly_chart(make_chart(week_view, symbol, INTERVAL),
+                            use_container_width=True)
             st.caption(
-                "Volume-profile colours — 🟩 **green**: buyers dominate (≥60% up-bar "
-                "volume) · 🟢 **light green**: buyers slightly ahead · "
-                "🔴 **light red**: sellers slightly ahead · 🟥 **red**: sellers "
-                "dominate. Long green/red bars = high-interest price levels."
+                f"Chart shows **this trading week** ({len(week_view)} × 1H bars "
+                f"since {week_view.index[0]:%a %d %b}); phase detection still "
+                f"uses the full {PERIOD} of history for range context. "
+                "Volume-profile colours match the candles — 🟩 **green**: buyers "
+                "dominate (≥60% up-bar volume) · 🟢 **light green**: buyers "
+                "slightly ahead · 🔴 **light red**: sellers slightly ahead · "
+                "🟥 **red**: sellers dominate. Long bars = high-interest levels."
             )
 
         with tab_phases:

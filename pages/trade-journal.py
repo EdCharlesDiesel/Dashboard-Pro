@@ -86,8 +86,6 @@ def load_journal_trades(cfg, limit: int = 500):
 
 with st.sidebar:
     st.markdown("### 📓 Trade Journal")
-    render_sidebar_nav()
-    st.divider()
 
     st.markdown("**🗄️ PostgreSQL Database**")
     _host = st.text_input("Host",     value=st.session_state.get("db_host", "localhost"), key="jdb_host")
@@ -115,6 +113,8 @@ with st.sidebar:
         st.rerun()
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════

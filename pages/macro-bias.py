@@ -416,8 +416,6 @@ def pair_macro_bias(base: str, quote: str, scores: dict) -> dict:
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 🌐 Macro Bias")
-    render_sidebar_nav()
-    st.markdown("---")
 
     # Refresh controls
     col1, col2 = st.columns(2)
@@ -447,6 +445,8 @@ with st.sidebar:
     show_pairs = st.multiselect("Filter Pairs", [p[0] for p in PAIRS],
                                 default=[p[0] for p in PAIRS[:12]])
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # FETCH ALL DATA
 # ══════════════════════════════════════════════════════════════════

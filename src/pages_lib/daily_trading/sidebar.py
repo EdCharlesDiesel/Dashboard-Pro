@@ -17,7 +17,7 @@ class ChecklistSidebar:
 
     def render(self) -> None:
         st.markdown(
-            '<div style="color:#ff9900;font-weight:700;letter-spacing:0.15em;'
+            '<div style="color:#00ff41;font-weight:700;letter-spacing:0.15em;'
             'text-transform:uppercase;font-size:11px;margin-bottom:6px;">'
             'TRADE SETUP</div>',
             unsafe_allow_html=True,
@@ -137,7 +137,7 @@ class TrendSidebar:
 
     def render(self) -> None:
         st.markdown(
-            '<div style="color:#ff9900;font-weight:700;letter-spacing:0.15em;'
+            '<div style="color:#00ff41;font-weight:700;letter-spacing:0.15em;'
             'text-transform:uppercase;font-size:11px;margin-bottom:6px;">'
             'TREND SIGNALS</div>',
             unsafe_allow_html=True,

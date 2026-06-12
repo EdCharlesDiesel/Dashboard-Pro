@@ -277,8 +277,6 @@ INSTRUMENTS = {
 
 with st.sidebar:
     st.markdown("### 🎯 4H Confluence Zone")
-    render_sidebar_nav()
-    st.divider()
     st.markdown("### ⚙️ Settings")
 
     inst_keys = list(INSTRUMENTS.keys())
@@ -311,6 +309,8 @@ with st.sidebar:
         st.rerun()
 
 
+    st.divider()
+    render_sidebar_nav()
 # ─────────────────────────────────────────────
 #  Hero card
 # ─────────────────────────────────────────────

@@ -545,8 +545,6 @@ with st.sidebar:
                                  index=inst_keys.index(default_inst))
 
     st.divider()
-    render_sidebar_nav()
-    st.divider()
     st.markdown("**📅 Weekly Settings**")
     pivot_lb = st.slider("Swing pivot sensitivity (weeks)", 1, 5, 2,
                          help="Left/right candles needed to confirm a swing pivot. "
@@ -582,6 +580,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN PAGE
 # ══════════════════════════════════════════════════════════════════

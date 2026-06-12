@@ -272,8 +272,8 @@ class ChecklistController:
 
             for title, items in sections:
                 st.markdown(
-                    f'<div style="color:#ff9900;font-family:\'JetBrains Mono\',monospace;'
-                    f'font-size:10px;letter-spacing:0.18em;border-left:3px solid #ff9900;'
+                    f'<div style="color:#00ff41;font-family:\'JetBrains Mono\',monospace;'
+                    f'font-size:10px;letter-spacing:0.18em;border-left:3px solid #00ff41;'
                     f'padding-left:8px;margin:10px 0 6px 0;">{title}</div>',
                     unsafe_allow_html=True,
                 )

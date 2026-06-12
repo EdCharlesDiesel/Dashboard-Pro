@@ -201,7 +201,6 @@ def fetch_weekly(ticker: str, pip_size: float, lookback: str = "2y"):
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📉 Weekly EMA")
-    render_sidebar_nav()
 
     st.divider()
 
@@ -222,6 +221,8 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # FETCH ALL
 # ══════════════════════════════════════════════════════════════════

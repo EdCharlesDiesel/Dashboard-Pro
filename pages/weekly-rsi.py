@@ -211,8 +211,6 @@ def fetch_rsi_data(ticker: str, rsi_period: int, weeks: int):
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📡 Weekly RSI")
-    render_sidebar_nav()
-    st.divider()
 
     direction = st.radio("🎯 Trade Direction", ["LONG", "SHORT"], horizontal=True)
 
@@ -233,6 +231,8 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # FETCH
 # ══════════════════════════════════════════════════════════════════
