@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -13,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 st.markdown("""
 <style>
@@ -24,21 +27,21 @@ st.markdown("""
     }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     .stApp{background:var(--background-color);}
-    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
-    .card{background:var(--secondary-background-color);border:1px solid var(--border,#21262d);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
-    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#8b949e;margin-bottom:12px;}
-    .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
+    .card{background:var(--secondary-background-color);border:1px solid var(--border,#2a2a2a);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a;margin-bottom:12px;}
+    .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
     .hero::before{content:'';position:absolute;top:-40%;right:-5%;width:300px;height:300px;background:radial-gradient(circle,rgba(56,139,253,.07) 0%,transparent 70%);border-radius:50%;}
-    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px;text-align:center;}
-    .metric-value{font-size:20px;font-weight:700;color:#c9d1d9;}
-    .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
-    .section-title{font-size:15px;font-weight:700;color:#e6edf3;margin:20px 0 12px 0;padding-left:4px;border-left:3px solid #388bfd;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:12px;text-align:center;}
+    .metric-value{font-size:20px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    .section-title{font-size:15px;font-weight:700;color:#e6e6e6;margin:20px 0 12px 0;padding-left:4px;border-left:3px solid #00ff41;}
 
-    .struct-card{border-radius:10px;padding:13px 15px;margin-bottom:8px;border:1px solid #21262d;background:#161b22;}
-    .struct-bull{border-left:4px solid #3fb950;}
-    .struct-bear{border-left:4px solid #f85149;}
-    .struct-choch{border-left:4px solid #e3b341;}
-    .struct-neutral{border-left:4px solid #484f58;}
+    .struct-card{border-radius:10px;padding:13px 15px;margin-bottom:8px;border:1px solid #2a2a2a;background:#0a0a0a;}
+    .struct-bull{border-left:4px solid #00ff66;}
+    .struct-bear{border-left:4px solid #ff3344;}
+    .struct-choch{border-left:4px solid #ffcc00;}
+    .struct-neutral{border-left:4px solid #555555;}
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
@@ -72,9 +75,9 @@ INSTRUMENTS = {
     "USD/ZAR":    {"ticker": "USDZAR=X", "pip_size": 0.0001},
     "EUR/ZAR":    {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "🥇 Gold":    {"ticker": "GC=F",     "pip_size": 0.10},
-    "🥈 Silver":  {"ticker": "SI=F",     "pip_size": 0.01},
-    "🪙 Platinum":{"ticker": "PL=F",     "pip_size": 0.10},
+    "XAU/USD":    {"ticker": "GC=F",     "pip_size": 0.10},
+    "XAG/USD":  {"ticker": "SI=F",     "pip_size": 0.01},
+    "XPT/USD":{"ticker": "PL=F",     "pip_size": 0.10},
 }
 
 
@@ -132,7 +135,7 @@ def analyse_structure(df: pd.DataFrame) -> dict:
     if len(sh_df) < 2 or len(sl_df) < 2:
         return {
             "trend": "NEUTRAL", "label": "⏳ Insufficient data",
-            "color": "#484f58", "card_cls": "struct-neutral",
+            "color": "#555555", "card_cls": "struct-neutral",
             "hh": None, "hl": None, "lh": None, "ll": None,
             "choch": False, "bos": False,
             "sh_prices": [], "sh_dates": [],
@@ -162,17 +165,17 @@ def analyse_structure(df: pd.DataFrame) -> dict:
     choch = (hh and ll) or (lh and hl)   # conflicting signals = character change
 
     if hh and hl:
-        trend, label, color, cls = "BULLISH", "📈 HH + HL — Bullish Structure", "#3fb950", "struct-bull"
+        trend, label, color, cls = "BULLISH", "📈 HH + HL — Bullish Structure", "#00ff66", "struct-bull"
     elif lh and ll:
-        trend, label, color, cls = "BEARISH", "📉 LH + LL — Bearish Structure", "#f85149", "struct-bear"
+        trend, label, color, cls = "BEARISH", "📉 LH + LL — Bearish Structure", "#ff3344", "struct-bear"
     elif choch:
-        trend, label, color, cls = "CHOCH", "🔄 CHoCH — Character Change", "#e3b341", "struct-choch"
+        trend, label, color, cls = "CHOCH", "🔄 CHoCH — Character Change", "#ffcc00", "struct-choch"
     elif hh:
-        trend, label, color, cls = "BULLISH", "📈 HH forming — Potential Bullish", "#3fb950", "struct-bull"
+        trend, label, color, cls = "BULLISH", "📈 HH forming — Potential Bullish", "#00ff66", "struct-bull"
     elif ll:
-        trend, label, color, cls = "BEARISH", "📉 LL forming — Potential Bearish", "#f85149", "struct-bear"
+        trend, label, color, cls = "BEARISH", "📉 LL forming — Potential Bearish", "#ff3344", "struct-bear"
     else:
-        trend, label, color, cls = "NEUTRAL", "⏳ Ranging / No clear structure", "#484f58", "struct-neutral"
+        trend, label, color, cls = "NEUTRAL", "⏳ Ranging / No clear structure", "#555555", "struct-neutral"
 
     if bos_bull and trend == "BULLISH":
         label += " + BOS ▲"
@@ -214,7 +217,7 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
         x=plot.index,
         open=plot["Open"], high=plot["High"],
         low=plot["Low"],   close=plot["Close"],
-        increasing_line_color="#3fb950", decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63,185,80,0.15)",
         decreasing_fillcolor="rgba(248,81,73,0.15)",
         name="Price", showlegend=False,
@@ -228,11 +231,11 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
             x=[d for d, _ in sh_in_window],
             y=[p * 1.0003 for _, p in sh_in_window],
             mode="markers+text",
-            marker=dict(symbol="triangle-down", size=10, color="#3fb950",
-                        line=dict(width=1, color="#0d1117")),
+            marker=dict(symbol="triangle-down", size=10, color="#00ff66",
+                        line=dict(width=1, color="#000000")),
             text=["SH" for _ in sh_in_window],
             textposition="top center",
-            textfont=dict(size=9, color="#3fb950"),
+            textfont=dict(size=9, color="#00ff66"),
             name="Swing High", showlegend=True,
         ), row=1, col=1)
 
@@ -244,11 +247,11 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
             x=[d for d, _ in sl_in_window],
             y=[p * 0.9997 for _, p in sl_in_window],
             mode="markers+text",
-            marker=dict(symbol="triangle-up", size=10, color="#f85149",
-                        line=dict(width=1, color="#0d1117")),
+            marker=dict(symbol="triangle-up", size=10, color="#ff3344",
+                        line=dict(width=1, color="#000000")),
             text=["SL" for _ in sl_in_window],
             textposition="bottom center",
-            textfont=dict(size=9, color="#f85149"),
+            textfont=dict(size=9, color="#ff3344"),
             name="Swing Low", showlegend=True,
         ), row=1, col=1)
 
@@ -258,14 +261,14 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
         fig.add_trace(go.Scatter(
             x=[d for d, _ in sh_in_window],
             y=[p for _, p in sh_in_window],
-            mode="lines", line=dict(color="#3fb950", width=1.2, dash="dot"),
+            mode="lines", line=dict(color="#00ff66", width=1.2, dash="dot"),
             name="SH trendline", showlegend=False, opacity=0.6,
         ), row=1, col=1)
     if len(sl_in_window) >= 2:
         fig.add_trace(go.Scatter(
             x=[d for d, _ in sl_in_window],
             y=[p for _, p in sl_in_window],
-            mode="lines", line=dict(color="#f85149", width=1.2, dash="dot"),
+            mode="lines", line=dict(color="#ff3344", width=1.2, dash="dot"),
             name="SL trendline", showlegend=False, opacity=0.6,
         ), row=1, col=1)
 
@@ -288,15 +291,15 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
     ), row=2, col=1)
 
     fig.update_layout(
-        height=600, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
-        font=dict(family="Inter,sans-serif", size=11, color="#8b949e"),
+        height=600, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter,sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
-        legend=dict(bgcolor="rgba(13,17,23,.6)", bordercolor="#21262d", borderwidth=1,
+        legend=dict(bgcolor="rgba(13,17,23,.6)", bordercolor="#2a2a2a", borderwidth=1,
                     font=dict(size=10), orientation="h", y=1.02, x=0),
         margin=dict(l=10, r=100, t=10, b=10),
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(showgrid=False, linecolor="#21262d")
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(showgrid=False, linecolor="#2a2a2a")
     return fig
 
 
@@ -306,27 +309,6 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
 
 with st.sidebar:
     st.markdown("### 🏗️ Market Structure")
-    st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
-    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
-    st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
-    st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
-    st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
-    st.page_link("pages/atr-volatility.py",       label="05. ATR Volatility",       icon="📊")
-    st.page_link("pages/weekly-ema.py",           label="06. Weekly EMA",           icon="📉")
-    st.page_link("pages/weekly-rsi.py",           label="07. Weekly RSI",           icon="📡")
-    st.page_link("pages/weekly-swing.py",         label="08. Weekly Swing",         icon="🔄")
-    st.page_link("pages/daily-trend.py",          label="09. Daily Trend",          icon="📈")
-    st.page_link("pages/daily-macd.py",           label="10. Daily MACD",           icon="📊")
-    st.page_link("pages/4H-confluence-zone.py",   label="11. 4H Confluence Zone",   icon="🎯")
-    st.page_link("pages/confluence-checker.py",   label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py",        label="13. 15M Rejection",        icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py",     label="14. 15M Entry Signal",     icon="⚡")
-    st.page_link("pages/stop-structure.py",       label="15. Stop Structure",       icon="🛡️")
-    st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
-    st.page_link("pages/trade-journal.py",        label="17. Trade Journal",        icon="📓")
-    st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     tf_options = {
         "4H (recommended)": ("1h",  90, "4h"),
@@ -354,17 +336,19 @@ with st.sidebar:
         st.rerun()
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════
 
 st.markdown(f"""
 <div class="hero">
-  <div style="font-size:26px;font-weight:700;color:#e6edf3;">🏗️ Market Structure Scanner</div>
-  <div style="color:#8b949e;font-size:13px;margin-top:4px;">
+  <div style="font-size:26px;font-weight:700;color:#e6e6e6;">🏗️ Market Structure Scanner</div>
+  <div style="color:#9a9a9a;font-size:13px;margin-top:4px;">
     HH/HL · LH/LL · CHoCH · Break of Structure · {selected_tf} · 21 Instruments
   </div>
-  <div style="font-size:12px;color:#388bfd;margin-top:6px;">
+  <div style="font-size:12px;color:#00ff41;margin-top:6px;">
     🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · Swing strength: {swing_strength} bars
   </div>
 </div>
@@ -418,12 +402,12 @@ with tab_scan:
 
     sc1, sc2, sc3, sc4, sc5, sc6 = st.columns(6)
     for col_, val_, lbl_, c_ in [
-        (sc1, cnt_bull,    "Bullish (HH/HL)",  "#3fb950"),
-        (sc2, cnt_bear,    "Bearish (LH/LL)",  "#f85149"),
-        (sc3, cnt_choch,   "CHoCH",            "#e3b341"),
-        (sc4, cnt_neutral, "Neutral/Ranging",  "#484f58"),
-        (sc5, cnt_bos,     "Break of Struct",  "#388bfd"),
-        (sc6, cnt_err,     "No Data",          "#484f58"),
+        (sc1, cnt_bull,    "Bullish (HH/HL)",  "#00ff66"),
+        (sc2, cnt_bear,    "Bearish (LH/LL)",  "#ff3344"),
+        (sc3, cnt_choch,   "CHoCH",            "#ffcc00"),
+        (sc4, cnt_neutral, "Neutral/Ranging",  "#555555"),
+        (sc5, cnt_bos,     "Break of Struct",  "#00ff41"),
+        (sc6, cnt_err,     "No Data",          "#555555"),
     ]:
         with col_:
             st.markdown(
@@ -440,41 +424,41 @@ with tab_scan:
     for i, r in enumerate(scan_results):
         pair_name = r["pair"]
         is_sel    = pair_name == focus_pair
-        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
+        border    = "border:2px solid #00ff41;" if is_sel else "border:1px solid #2a2a2a;"
 
         if not r.get("ok"):
-            card_content = '<span style="font-size:11px;color:#484f58;">No data</span>'
+            card_content = '<span style="font-size:11px;color:#555555;">No data</span>'
         else:
             s = r["struct"]
             color = s["color"]
             label = s["label"]
             bos_badge = (
                 '<span style="background:rgba(56,139,253,.15);border:1px solid rgba(56,139,253,.5);'
-                'border-radius:4px;padding:2px 7px;font-size:10px;color:#388bfd;font-weight:600;margin-left:6px;">'
+                'border-radius:4px;padding:2px 7px;font-size:10px;color:#00ff41;font-weight:600;margin-left:6px;">'
                 'BOS</span>'
             ) if s["bos"] else ""
             price_fmt = f"{s['close']:.5f}" if s["close"] < 100 else f"{s['close']:.3f}"
-            hh_dot = f'<span style="color:#3fb950;font-size:10px;margin-right:4px;">{"●" if s["hh"] else "○"}HH</span>'
-            hl_dot = f'<span style="color:#3fb950;font-size:10px;margin-right:4px;">{"●" if s["hl"] else "○"}HL</span>'
-            lh_dot = f'<span style="color:#f85149;font-size:10px;margin-right:4px;">{"●" if s["lh"] else "○"}LH</span>'
-            ll_dot = f'<span style="color:#f85149;font-size:10px;margin-right:4px;">{"●" if s["ll"] else "○"}LL</span>'
+            hh_dot = f'<span style="color:#00ff66;font-size:10px;margin-right:4px;">{"●" if s["hh"] else "○"}HH</span>'
+            hl_dot = f'<span style="color:#00ff66;font-size:10px;margin-right:4px;">{"●" if s["hl"] else "○"}HL</span>'
+            lh_dot = f'<span style="color:#ff3344;font-size:10px;margin-right:4px;">{"●" if s["lh"] else "○"}LH</span>'
+            ll_dot = f'<span style="color:#ff3344;font-size:10px;margin-right:4px;">{"●" if s["ll"] else "○"}LL</span>'
 
             card_content = (
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
-                f'<span style="font-size:13px;font-weight:700;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="font-size:13px;font-weight:700;color:#e6e6e6;">{pair_name}</span>'
                 f'<span style="font-size:11px;font-weight:600;color:{color};">'
                 f'{label.split(" — ")[0] if " — " in label else label}'
                 f'</span>{bos_badge}'
                 f'</div>'
-                f'<div style="margin-top:6px;font-size:11px;color:#8b949e;">'
+                f'<div style="margin-top:6px;font-size:11px;color:#9a9a9a;">'
                 f'{hh_dot}{hl_dot}{lh_dot}{ll_dot}'
                 f'</div>'
-                f'<div style="margin-top:4px;font-size:11px;color:#484f58;font-family:monospace;">{price_fmt}</div>'
+                f'<div style="margin-top:4px;font-size:11px;color:#555555;font-family:monospace;">{price_fmt}</div>'
             )
 
         with cols3[i % 3]:
             st.markdown(
-                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'<div style="background:#0a0a0a;{border}border-radius:8px;'
                 f'padding:12px 14px;margin-bottom:8px;">{card_content}</div>',
                 unsafe_allow_html=True)
 
@@ -533,12 +517,12 @@ with tab_detail:
         # ── Structure verdict banner ──────────────────────────────
         banner_bg = {"BULLISH": "#0d2f1a", "BEARISH": "#2f0d0d",
                      "CHOCH": "#2a1f00", "NEUTRAL": "#1a1a1a"}.get(struct["trend"], "#1a1a1a")
-        banner_bd = {"BULLISH": "#238636", "BEARISH": "#8b2d2d",
-                     "CHOCH": "#9e6a03", "NEUTRAL": "#30363d"}.get(struct["trend"], "#30363d")
+        banner_bd = {"BULLISH": "#00a32a", "BEARISH": "#8b2d2d",
+                     "CHOCH": "#9e6a03", "NEUTRAL": "#2a2a2a"}.get(struct["trend"], "#2a2a2a")
 
         bos_text = ""
         if struct["bos"]:
-            bos_text = '<span style="background:rgba(56,139,253,.15);border:1px solid #388bfd;border-radius:4px;padding:3px 10px;font-size:12px;color:#388bfd;font-weight:700;margin-left:10px;">⚡ BREAK OF STRUCTURE</span>'
+            bos_text = '<span style="background:rgba(56,139,253,.15);border:1px solid #00ff41;border-radius:4px;padding:3px 10px;font-size:12px;color:#00ff41;font-weight:700;margin-left:10px;">⚡ BREAK OF STRUCTURE</span>'
 
         st.markdown(f"""
         <div style="background:{banner_bg};border:2px solid {banner_bd};border-radius:14px;
@@ -546,7 +530,7 @@ with tab_detail:
           <div style="font-size:22px;font-weight:800;color:{color};letter-spacing:1px;">
             {struct["label"]} {bos_text}
           </div>
-          <div style="font-size:12px;color:#8b949e;margin-top:8px;">
+          <div style="font-size:12px;color:#9a9a9a;margin-top:8px;">
             {focus_pair} · {selected_tf} · Swing strength: {swing_strength} bars each side ·
             {datetime.now().strftime('%H:%M UTC')}
           </div>
@@ -556,12 +540,12 @@ with tab_detail:
         # ── KPI row ───────────────────────────────────────────────
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         for col_, val_, lbl_, c_ in [
-            (k1, "✅ HH" if struct["hh"] else "❌ HH", "Higher High", "#3fb950" if struct["hh"] else "#484f58"),
-            (k2, "✅ HL" if struct["hl"] else "❌ HL", "Higher Low",  "#3fb950" if struct["hl"] else "#484f58"),
-            (k3, "✅ LH" if struct["lh"] else "❌ LH", "Lower High",  "#f85149" if struct["lh"] else "#484f58"),
-            (k4, "✅ LL" if struct["ll"] else "❌ LL", "Lower Low",   "#f85149" if struct["ll"] else "#484f58"),
-            (k5, "🔄 YES" if struct["choch"] else "NO", "CHoCH",      "#e3b341" if struct["choch"] else "#484f58"),
-            (k6, "⚡ YES" if struct["bos"] else "NO",   "BOS",        "#388bfd" if struct["bos"] else "#484f58"),
+            (k1, "✅ HH" if struct["hh"] else "❌ HH", "Higher High", "#00ff66" if struct["hh"] else "#555555"),
+            (k2, "✅ HL" if struct["hl"] else "❌ HL", "Higher Low",  "#00ff66" if struct["hl"] else "#555555"),
+            (k3, "✅ LH" if struct["lh"] else "❌ LH", "Lower High",  "#ff3344" if struct["lh"] else "#555555"),
+            (k4, "✅ LL" if struct["ll"] else "❌ LL", "Lower Low",   "#ff3344" if struct["ll"] else "#555555"),
+            (k5, "🔄 YES" if struct["choch"] else "NO", "CHoCH",      "#ffcc00" if struct["choch"] else "#555555"),
+            (k6, "⚡ YES" if struct["bos"] else "NO",   "BOS",        "#00ff41" if struct["bos"] else "#555555"),
         ]:
             with col_:
                 st.markdown(
@@ -576,15 +560,15 @@ with tab_detail:
         lv1, lv2, lv3, lv4 = st.columns(4)
         for col_, val_, lbl_, c_ in [
             (lv1, f"{struct['last_sh']:.5f}" if struct["last_sh"] < 100 else f"{struct['last_sh']:.3f}",
-             "Last Swing High", "#3fb950"),
+             "Last Swing High", "#00ff66"),
             (lv2, f"{struct['prev_sh']:.5f}" if struct.get("prev_sh") and struct["prev_sh"] < 100
              else (f"{struct['prev_sh']:.3f}" if struct.get("prev_sh") else "—"),
-             "Prev Swing High", "#8b949e"),
+             "Prev Swing High", "#9a9a9a"),
             (lv3, f"{struct['last_sl']:.5f}" if struct["last_sl"] < 100 else f"{struct['last_sl']:.3f}",
-             "Last Swing Low", "#f85149"),
+             "Last Swing Low", "#ff3344"),
             (lv4, f"{struct['prev_sl']:.5f}" if struct.get("prev_sl") and struct["prev_sl"] < 100
              else (f"{struct['prev_sl']:.3f}" if struct.get("prev_sl") else "—"),
-             "Prev Swing Low", "#8b949e"),
+             "Prev Swing Low", "#9a9a9a"),
         ]:
             with col_:
                 st.markdown(
@@ -619,7 +603,7 @@ Use CHoCH as an early warning to switch bias — wait for BOS to confirm.
 
 # Footer
 st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #2a2a2a;">
   🏗️ Market Structure Scanner · HH/HL · LH/LL · CHoCH · BOS · Not financial advice
 </div>
 """, unsafe_allow_html=True)

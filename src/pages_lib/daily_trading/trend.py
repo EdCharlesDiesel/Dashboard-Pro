@@ -92,7 +92,7 @@ class TrendController:
 
     def _render_signal_grid(self, results: Dict[str, dict]) -> None:
         st.markdown(
-            '<div style="color:#ff9900;font-family:\'JetBrains Mono\',monospace;'
+            '<div style="color:#00ff41;font-family:\'JetBrains Mono\',monospace;'
             'font-size:12px;letter-spacing:0.18em;margin:14px 0 6px 0;'
             'text-transform:uppercase;">▸ LIVE SIGNALS</div>',
             unsafe_allow_html=True,

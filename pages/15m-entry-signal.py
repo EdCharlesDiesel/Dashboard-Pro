@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -13,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS — matches main app dark theme ─────────────────────────────
 st.markdown("""
@@ -25,47 +28,47 @@ st.markdown("""
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
     .stApp { background:var(--background-color); }
-    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
 
-    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px; padding:20px; margin-bottom:16px; }
-    .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted,#8b949e); margin-bottom:14px; }
-    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px; padding:14px; text-align:center; }
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#2a2a2a); border-radius:12px; padding:20px; margin-bottom:16px; }
+    .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted,#9a9a9a); margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#2a2a2a); border-radius:8px; padding:14px; text-align:center; }
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
-    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
+    .metric-label{ font-size:11px; color:var(--muted,#9a9a9a); margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0;
-                    padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
+                    padding-left:4px; border-left:3px solid #00ff41; }
+    .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
     /* Signal verdict banners */
-    .verdict-long { background:linear-gradient(135deg,#0d3a1f,#0d5e32); border:2px solid #238636;
+    .verdict-long { background:linear-gradient(135deg,#0d3a1f,#0d5e32); border:2px solid #00a32a;
                     border-radius:14px; padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-short{ background:linear-gradient(135deg,#3a0d0d,#5e1414); border:2px solid #8b2d2d;
                     border-radius:14px; padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-wait { background:linear-gradient(135deg,#1c1c0d,#2e2a0d); border:2px solid #9e6a03;
                     border-radius:14px; padding:22px 28px; text-align:center; margin-bottom:18px; }
-    .verdict-none { background:linear-gradient(135deg,#161b22,#1c2128); border:1px solid #30363d;
+    .verdict-none { background:linear-gradient(135deg,#0a0a0a,#1c2128); border:1px solid #2a2a2a;
                     border-radius:14px; padding:22px 28px; text-align:center; margin-bottom:18px; }
 
     /* Condition checklist rows */
     .cond-row{ display:flex; align-items:flex-start; gap:10px; padding:10px 14px;
-               border-bottom:1px solid #21262d; font-size:13px; }
+               border-bottom:1px solid #2a2a2a; font-size:13px; }
     .cond-row:last-child{ border-bottom:none; }
     .cond-icon{ font-size:16px; flex-shrink:0; margin-top:1px; }
-    .cond-text{ color:#c9d1d9; }
-    .cond-sub { font-size:11px; color:#8b949e; margin-top:2px; font-family:monospace; }
+    .cond-text{ color:#e6e6e6; }
+    .cond-sub { font-size:11px; color:#9a9a9a; margin-top:2px; font-family:monospace; }
 
     /* Signal log table pills */
-    .pill-long { display:inline-block; background:#0d4a2f; color:#3fb950; border:1px solid #238636;
+    .pill-long { display:inline-block; background:#003a14; color:#00ff66; border:1px solid #00a32a;
                  border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700; }
-    .pill-short{ display:inline-block; background:#4a0d0d; color:#f85149; border:1px solid #8b2d2d;
+    .pill-short{ display:inline-block; background:#4a0d0d; color:#ff3344; border:1px solid #8b2d2d;
                  border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700; }
 
     /* Explanation box */
-    .explainer{ background:var(--background-color); border:1px solid #1e3a5f; border-left:3px solid #388bfd;
-                border-radius:8px; padding:14px 18px; margin:8px 0; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
+    .explainer{ background:var(--background-color); border:1px solid #1e3a5f; border-left:3px solid #00ff41;
+                border-radius:8px; padding:14px 18px; margin:8px 0; font-size:13px; color:var(--muted,#9a9a9a); line-height:1.7; }
     [data-testid="stSidebarNav"]{ display:none; }
 </style>
 """, unsafe_allow_html=True)
@@ -90,9 +93,9 @@ INSTRUMENTS = {
     "USD/ZAR": {"ticker": "USDZAR=X", "pip_size": 0.0001},
     "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "🥇 Gold": {"ticker": "GC=F", "pip_size": 0.10},
-    "🥈 Silver": {"ticker": "SI=F", "pip_size": 0.01},
-    "🪙 Platinum": {"ticker": "PL=F", "pip_size": 0.10},
+    "XAU/USD": {"ticker": "GC=F", "pip_size": 0.10},
+    "XAG/USD": {"ticker": "SI=F", "pip_size": 0.01},
+    "XPT/USD": {"ticker": "PL=F", "pip_size": 0.10},
 }
 
 
@@ -329,7 +332,7 @@ def build_chart(df: pd.DataFrame, pair: str,
         x=plot.index,
         open=plot["Open"], high=plot["High"],
         low=plot["Low"], close=plot["Close"],
-        increasing_line_color="#3fb950", decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63,185,80,0.20)", decreasing_fillcolor="rgba(248,81,73,0.20)",
         name="Price", showlegend=False,
     ), row=1, col=1)
@@ -341,11 +344,11 @@ def build_chart(df: pd.DataFrame, pair: str,
             x=long_pts.index,
             y=long_pts["Low"] - (long_pts["High"] - long_pts["Low"]) * 0.4,
             mode="markers+text",
-            marker=dict(symbol="triangle-up", size=18, color="#3fb950",
-                        line=dict(color="#0d1117", width=1)),
+            marker=dict(symbol="triangle-up", size=18, color="#00ff66",
+                        line=dict(color="#000000", width=1)),
             text=["⚡ LONG"] * len(long_pts),
             textposition="bottom center",
-            textfont=dict(size=9, color="#3fb950"),
+            textfont=dict(size=9, color="#00ff66"),
             name="LONG Signal",
         ), row=1, col=1)
 
@@ -356,11 +359,11 @@ def build_chart(df: pd.DataFrame, pair: str,
             x=short_pts.index,
             y=short_pts["High"] + (short_pts["High"] - short_pts["Low"]) * 0.4,
             mode="markers+text",
-            marker=dict(symbol="triangle-down", size=18, color="#f85149",
-                        line=dict(color="#0d1117", width=1)),
+            marker=dict(symbol="triangle-down", size=18, color="#ff3344",
+                        line=dict(color="#000000", width=1)),
             text=["⚡ SHORT"] * len(short_pts),
             textposition="top center",
-            textfont=dict(size=9, color="#f85149"),
+            textfont=dict(size=9, color="#ff3344"),
             name="SHORT Signal",
         ), row=1, col=1)
 
@@ -407,12 +410,12 @@ def build_chart(df: pd.DataFrame, pair: str,
     fig.add_hline(y=stoch_os, line_color="rgba(63,185,80,0.40)", line_dash="dash",
                   line_width=1, row=2, col=1,
                   annotation_text=f"OS {stoch_os:.0f}",
-                  annotation_font=dict(size=9, color="#3fb950"),
+                  annotation_font=dict(size=9, color="#00ff66"),
                   annotation_position="right")
     fig.add_hline(y=stoch_ob, line_color="rgba(248,81,73,0.40)", line_dash="dash",
                   line_width=1, row=2, col=1,
                   annotation_text=f"OB {stoch_ob:.0f}",
-                  annotation_font=dict(size=9, color="#f85149"),
+                  annotation_font=dict(size=9, color="#ff3344"),
                   annotation_position="right")
 
     # Mark stoch crossover points on the stoch panel
@@ -420,14 +423,14 @@ def build_chart(df: pd.DataFrame, pair: str,
         fig.add_trace(go.Scatter(
             x=long_pts.index, y=plot.loc[long_pts.index, "stoch_k"],
             mode="markers",
-            marker=dict(symbol="triangle-up", size=10, color="#3fb950"),
+            marker=dict(symbol="triangle-up", size=10, color="#00ff66"),
             name="Cross↑ (stoch)", showlegend=False,
         ), row=2, col=1)
     if not short_pts.empty:
         fig.add_trace(go.Scatter(
             x=short_pts.index, y=plot.loc[short_pts.index, "stoch_k"],
             mode="markers",
-            marker=dict(symbol="triangle-down", size=10, color="#f85149"),
+            marker=dict(symbol="triangle-down", size=10, color="#ff3344"),
             name="Cross↓ (stoch)", showlegend=False,
         ), row=2, col=1)
 
@@ -444,12 +447,12 @@ def build_chart(df: pd.DataFrame, pair: str,
     fig.add_hline(y=rsi_os, line_color="rgba(63,185,80,0.33)", line_dash="dash", line_width=1,
                   row=3, col=1,
                   annotation_text=f"OS {rsi_os:.0f}",
-                  annotation_font=dict(size=9, color="#3fb950"),
+                  annotation_font=dict(size=9, color="#00ff66"),
                   annotation_position="right")
     fig.add_hline(y=rsi_ob, line_color="rgba(248,81,73,0.33)", line_dash="dash", line_width=1,
                   row=3, col=1,
                   annotation_text=f"OB {rsi_ob:.0f}",
-                  annotation_font=dict(size=9, color="#f85149"),
+                  annotation_font=dict(size=9, color="#ff3344"),
                   annotation_position="right")
     fig.add_hline(y=50, line_color="rgba(255,255,255,0.13)", line_dash="dot", line_width=1, row=3, col=1)
 
@@ -460,16 +463,16 @@ def build_chart(df: pd.DataFrame, pair: str,
         fig.add_trace(go.Scatter(
             x=reset_up_pts.index, y=plot.loc[reset_up_pts.index, "rsi"],
             mode="markers",
-            marker=dict(symbol="circle-open", size=10, color="#3fb950",
-                        line=dict(width=2, color="#3fb950")),
+            marker=dict(symbol="circle-open", size=10, color="#00ff66",
+                        line=dict(width=2, color="#00ff66")),
             name="RSI Reset ↑", showlegend=True,
         ), row=3, col=1)
     if not reset_dn_pts.empty:
         fig.add_trace(go.Scatter(
             x=reset_dn_pts.index, y=plot.loc[reset_dn_pts.index, "rsi"],
             mode="markers",
-            marker=dict(symbol="circle-open", size=10, color="#f85149",
-                        line=dict(width=2, color="#f85149")),
+            marker=dict(symbol="circle-open", size=10, color="#ff3344",
+                        line=dict(width=2, color="#ff3344")),
             name="RSI Reset ↓", showlegend=True,
         ), row=3, col=1)
 
@@ -478,8 +481,8 @@ def build_chart(df: pd.DataFrame, pair: str,
         is_bull = plot["Close"].values >= plot["Open"].values
         is_spk  = plot["vol_spike"].values.astype(bool)
         vol_colors = [
-            "#3fb950" if bull and spk else
-            "#f85149" if (not bull) and spk else
+            "#00ff66" if bull and spk else
+            "#ff3344" if (not bull) and spk else
             "rgba(63,185,80,0.30)" if bull else
             "rgba(248,81,73,0.30)"
             for bull, spk in zip(is_bull, is_spk)
@@ -500,18 +503,18 @@ def build_chart(df: pd.DataFrame, pair: str,
     fig.update_layout(
         height=780,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         legend=dict(
-            bgcolor="rgba(13,17,23,0.60)", bordercolor="#21262d", borderwidth=1,
+            bgcolor="rgba(13,17,23,0.60)", bordercolor="#2a2a2a", borderwidth=1,
             font=dict(size=10), orientation="h",
             yanchor="bottom", y=1.01, xanchor="left", x=0,
         ),
         margin=dict(l=10, r=60, t=10, b=10),
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(gridcolor="#21262d", showgrid=False)
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(gridcolor="#2a2a2a", showgrid=False)
     fig.update_yaxes(range=[0, 100], row=2, col=1)
     fig.update_yaxes(range=[0, 100], row=3, col=1)
 
@@ -524,27 +527,6 @@ def build_chart(df: pd.DataFrame, pair: str,
 
 with st.sidebar:
     st.markdown("### ⚡ 15M Entry Signal")
-    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
-    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     inst_keys = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -585,18 +567,20 @@ with st.sidebar:
 
     st.divider()
     st.markdown("""
-    <div style='font-size:11px;color:#484f58;line-height:1.8;'>
-    ⚡ <b style='color:#8b949e;'>LONG signal</b><br>
+    <div style='font-size:11px;color:#555555;line-height:1.8;'>
+    ⚡ <b style='color:#9a9a9a;'>LONG signal</b><br>
     &nbsp;&nbsp;%K crosses above %D<br>
     &nbsp;&nbsp;in/near oversold zone<br>
     &nbsp;&nbsp;+ RSI reset from low<br><br>
-    ⚡ <b style='color:#8b949e;'>SHORT signal</b><br>
+    ⚡ <b style='color:#9a9a9a;'>SHORT signal</b><br>
     &nbsp;&nbsp;%K crosses below %D<br>
     &nbsp;&nbsp;in/near overbought zone<br>
     &nbsp;&nbsp;+ RSI reset from high
     </div>
     """, unsafe_allow_html=True)
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN PAGE
 # ══════════════════════════════════════════════════════════════════
@@ -605,42 +589,42 @@ ticker = INSTRUMENTS[selected_pair]["ticker"]
 
 # Header
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d; border-radius:16px; padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a; border-radius:16px; padding:24px 28px;
             margin-bottom:20px; position:relative; overflow:hidden;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">
+  <div style="font-size:24px; font-weight:700; color:#e6e6e6;">
     ⚡ 15M Entry Signal Scanner
   </div>
-  <div style="color:#8b949e; font-size:13px; margin-top:4px;">
+  <div style="color:#9a9a9a; font-size:13px; margin-top:4px;">
     Stochastic %K/%D crossover + RSI reset · 15-minute chart · {selected_pair}
   </div>
-  <div style="font-size:12px; color:#388bfd; margin-top:6px;">
+  <div style="font-size:12px; color:#00ff41; margin-top:6px;">
     Check #13 — 15M entry signal fired · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
 """, unsafe_allow_html=True)
 
 VERDICT_CFG = {
-    "LONG_CONFIRMED": ("verdict-long",  "⚡ LONG SIGNAL CONFIRMED (4/4)", "#3fb950",
+    "LONG_CONFIRMED": ("verdict-long",  "⚡ LONG SIGNAL CONFIRMED (4/4)", "#00ff66",
                        "All 4 conditions met including volume spike — high-conviction LONG entry"),
-    "SHORT_CONFIRMED":("verdict-short", "⚡ SHORT SIGNAL CONFIRMED (4/4)", "#f85149",
+    "SHORT_CONFIRMED":("verdict-short", "⚡ SHORT SIGNAL CONFIRMED (4/4)", "#ff3344",
                        "All 4 conditions met including volume spike — high-conviction SHORT entry"),
-    "LONG":           ("verdict-long",  "⚡ LONG ENTRY SIGNAL FIRED",     "#3fb950",
+    "LONG":           ("verdict-long",  "⚡ LONG ENTRY SIGNAL FIRED",     "#00ff66",
                        "3 of 4 conditions met — Stochastic crossover ↑ + RSI reset from oversold (no vol spike)"),
-    "SHORT":          ("verdict-short", "⚡ SHORT ENTRY SIGNAL FIRED",    "#f85149",
+    "SHORT":          ("verdict-short", "⚡ SHORT ENTRY SIGNAL FIRED",    "#ff3344",
                        "3 of 4 conditions met — Stochastic crossover ↓ + RSI reset from overbought (no vol spike)"),
-    "WAIT_LONG":      ("verdict-wait",  "🟡 LONG SETUP FORMING",          "#e3b341",
+    "WAIT_LONG":      ("verdict-wait",  "🟡 LONG SETUP FORMING",          "#ffcc00",
                        "≥3 long conditions forming — wait for stochastic crossover confirmation"),
-    "WAIT_SHORT":     ("verdict-wait",  "🟡 SHORT SETUP FORMING",         "#e3b341",
+    "WAIT_SHORT":     ("verdict-wait",  "🟡 SHORT SETUP FORMING",         "#ffcc00",
                        "≥3 short conditions forming — wait for stochastic crossover confirmation"),
-    "NONE":           ("verdict-none",  "⏳ NO ENTRY SIGNAL",              "#8b949e",
+    "NONE":           ("verdict-none",  "⏳ NO ENTRY SIGNAL",              "#9a9a9a",
                        "Conditions not yet aligned — monitor for stochastic crossover + RSI reset"),
 }
 
 SCAN_COLOR = {
-    "LONG_CONFIRMED": "#3fb950", "SHORT_CONFIRMED": "#f85149",
-    "LONG": "#3fb950", "SHORT": "#f85149",
-    "WAIT_LONG": "#e3b341", "WAIT_SHORT": "#e3b341", "NONE": "#484f58",
+    "LONG_CONFIRMED": "#00ff66", "SHORT_CONFIRMED": "#ff3344",
+    "LONG": "#00ff66", "SHORT": "#ff3344",
+    "WAIT_LONG": "#ffcc00", "WAIT_SHORT": "#ffcc00", "NONE": "#555555",
 }
 SCAN_LABEL = {
     "LONG_CONFIRMED": "LONG ✓VOL", "SHORT_CONFIRMED": "SHORT ✓VOL",
@@ -653,7 +637,7 @@ def render_conditions(title, color, conds, score):
     items_html = ""
     for cond_text, met in conds.items():
         icon  = "✅" if met else "❌"
-        shade = "#c9d1d9" if met else "#484f58"
+        shade = "#e6e6e6" if met else "#555555"
         items_html += (
             f'<div class="cond-row">'
             f'<div class="cond-icon">{icon}</div>'
@@ -662,14 +646,14 @@ def render_conditions(title, color, conds, score):
         )
     max_score = max(len(conds), 1)
     prog_pct = int(score / max_score * 100)
-    prog_col = color if score == max_score else "#e3b341" if score >= max_score - 1 else "#484f58"
+    prog_col = color if score == max_score else "#ffcc00" if score >= max_score - 1 else "#555555"
     return (
         f'<div class="card">'
         f'<div class="card-header" style="color:{color};">{title}</div>'
         f'{items_html}'
         f'<div style="margin-top:12px;">'
         f'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
-        f'<span style="font-size:11px;color:#8b949e;">Conditions met</span>'
+        f'<span style="font-size:11px;color:#9a9a9a;">Conditions met</span>'
         f'<span style="font-size:11px;font-weight:700;color:{prog_col};">{score}/3</span>'
         f'</div>'
         f'<div class="prog-track">'
@@ -737,11 +721,11 @@ with tab_scan:
 
     sc1, sc2, sc3, sc4, sc5 = st.columns(5)
     for col_, val_, lbl_, c_ in [
-        (sc1, cnt_long,  "LONG Signal",   "#3fb950"),
-        (sc2, cnt_short, "SHORT Signal",  "#f85149"),
+        (sc1, cnt_long,  "LONG Signal",   "#00ff66"),
+        (sc2, cnt_short, "SHORT Signal",  "#ff3344"),
         (sc3, cnt_conf,  "Vol Confirmed", "#00d4ff"),
-        (sc4, cnt_wait,  "Setup Forming", "#e3b341"),
-        (sc5, cnt_none,  "No Signal",     "#484f58"),
+        (sc4, cnt_wait,  "Setup Forming", "#ffcc00"),
+        (sc5, cnt_none,  "No Signal",     "#555555"),
     ]:
         with col_:
             st.markdown(
@@ -758,30 +742,30 @@ with tab_scan:
     for i, r in enumerate(scan_results):
         pair_name = r["pair"]
         is_sel    = pair_name == selected_pair
-        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
+        border    = "border:2px solid #00ff41;" if is_sel else "border:1px solid #2a2a2a;"
 
         if not r.get("ok"):
-            card_body = '<span style="font-size:11px;color:#f85149;">No data</span>'
+            card_body = '<span style="font-size:11px;color:#ff3344;">No data</span>'
         else:
             vrd   = r["verdict"]
-            color = SCAN_COLOR.get(vrd, "#484f58")
+            color = SCAN_COLOR.get(vrd, "#555555")
             label = SCAN_LABEL.get(vrd, vrd)
             card_body = (
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
-                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="font-size:13px;font-weight:600;color:#e6e6e6;">{pair_name}</span>'
                 f'<span style="background:{color}18;border:1px solid {color}55;border-radius:4px;'
                 f'padding:2px 8px;font-size:11px;color:{color};font-weight:700;">{label}</span>'
                 f'</div>'
                 f'<div style="display:flex;gap:14px;margin-top:6px;">'
-                f'<span style="font-size:11px;color:#8b949e;">%K <span style="color:#00d4ff;font-family:monospace;">{r["k_now"]:.1f}</span></span>'
-                f'<span style="font-size:11px;color:#8b949e;">RSI <span style="color:#a29bfe;font-family:monospace;">{r["rsi_now"]:.1f}</span></span>'
-                f'<span style="font-size:11px;color:#8b949e;font-family:monospace;">{r["close"]:,.5f}</span>'
+                f'<span style="font-size:11px;color:#9a9a9a;">%K <span style="color:#00d4ff;font-family:monospace;">{r["k_now"]:.1f}</span></span>'
+                f'<span style="font-size:11px;color:#9a9a9a;">RSI <span style="color:#a29bfe;font-family:monospace;">{r["rsi_now"]:.1f}</span></span>'
+                f'<span style="font-size:11px;color:#9a9a9a;font-family:monospace;">{r["close"]:,.5f}</span>'
                 f'</div>'
             )
 
         with cols3[i % 3]:
             st.markdown(
-                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'<div style="background:#0a0a0a;{border}border-radius:8px;'
                 f'padding:12px 14px;margin-bottom:8px;">{card_body}</div>',
                 unsafe_allow_html=True)
 
@@ -830,14 +814,14 @@ with tab_detail:
         st.markdown(f"""
         <div class="{vcls}">
           <div style="font-size:22px; font-weight:800; color:{vcolor}; letter-spacing:1px;">{vtitle}</div>
-          <div style="font-size:13px; color:#8b949e; margin:6px 0 10px 0;">{vdesc}</div>
+          <div style="font-size:13px; color:#9a9a9a; margin:6px 0 10px 0;">{vdesc}</div>
           <div style="display:flex; gap:24px; justify-content:center; flex-wrap:wrap;
-                      font-size:13px; color:#c9d1d9; margin-top:10px;">
+                      font-size:13px; color:#e6e6e6; margin-top:10px;">
             <div>%K &nbsp;<code style="color:#00d4ff;">{status['k_now']:.1f}</code></div>
             <div>%D &nbsp;<code style="color:#fdcb6e;">{status['d_now']:.1f}</code></div>
             <div>RSI &nbsp;<code style="color:#a29bfe;">{status['rsi_now']:.1f}</code></div>
-            <div>Close &nbsp;<code style="color:#e6edf3;">{status['close']:.5f}</code></div>
-            <div>⏰ &nbsp;<code style="color:#8b949e;">{status['last_time'].strftime('%H:%M')}</code></div>
+            <div>Close &nbsp;<code style="color:#e6e6e6;">{status['close']:.5f}</code></div>
+            <div>⏰ &nbsp;<code style="color:#9a9a9a;">{status['last_time'].strftime('%H:%M')}</code></div>
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -852,12 +836,12 @@ with tab_detail:
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         for col_, val_, lbl_, color_ in [
-            (k1, total_long,      "LONG Signals",  "#3fb950"),
-            (k2, total_short,     "SHORT Signals", "#f85149"),
+            (k1, total_long,      "LONG Signals",  "#00ff66"),
+            (k2, total_short,     "SHORT Signals", "#ff3344"),
             (k3, total_cross_up,  "Stoch Cross ↑", "#00d4ff"),
             (k4, total_cross_dn,  "Stoch Cross ↓", "#fdcb6e"),
             (k5, total_rsi_reset, "RSI Resets",    "#a29bfe"),
-            (k6, total_vol_spk,   "Vol Spikes",    "#58a6ff"),
+            (k6, total_vol_spk,   "Vol Spikes",    "#00e0ff"),
         ]:
             with col_:
                 st.markdown(
@@ -873,12 +857,12 @@ with tab_detail:
         col_left, col_right = st.columns(2)
         with col_left:
             st.markdown(render_conditions(
-                "🟢 LONG Entry Conditions", "#3fb950",
+                "🟢 LONG Entry Conditions", "#00ff66",
                 status["cond_long"], status["long_score"],
             ), unsafe_allow_html=True)
         with col_right:
             st.markdown(render_conditions(
-                "🔴 SHORT Entry Conditions", "#f85149",
+                "🔴 SHORT Entry Conditions", "#ff3344",
                 status["cond_short"], status["short_score"],
             ), unsafe_allow_html=True)
 
@@ -941,7 +925,7 @@ with tab_detail:
         with col_a:
             st.markdown("""
             <div class="explainer">
-            <b style="color:#3fb950;">🟢 LONG Entry — all 3 required</b><br><br>
+            <b style="color:#00ff66;">🟢 LONG Entry — all 3 required</b><br><br>
             <b>1. Stochastic Crossover ↑</b><br>
             &nbsp;&nbsp;%K line crosses <em>above</em> %D signal line.<br>
             &nbsp;&nbsp;Momentum is shifting from bearish to bullish.<br><br>
@@ -958,7 +942,7 @@ with tab_detail:
         with col_b:
             st.markdown("""
             <div class="explainer">
-            <b style="color:#f85149;">🔴 SHORT Entry — all 3 required</b><br><br>
+            <b style="color:#ff3344;">🔴 SHORT Entry — all 3 required</b><br><br>
             <b>1. Stochastic Crossover ↓</b><br>
             &nbsp;&nbsp;%K line crosses <em>below</em> %D signal line.<br>
             &nbsp;&nbsp;Momentum is shifting from bullish to bearish.<br><br>
@@ -975,7 +959,7 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="explainer" style="margin-top:12px;">
-        <b style="color:#388bfd;">⚙️ Indicator Parameters</b><br><br>
+        <b style="color:#00ff41;">⚙️ Indicator Parameters</b><br><br>
         <b>Stochastic:</b> %K Period {int(k_period)} · Smooth %K {int(smooth_k)} · %D Signal {int(d_period)} &nbsp;
         (adjustable in sidebar)<br>
         <b>RSI:</b> Period 14 · Oversold &lt; {rsi_os} · Overbought &gt; {rsi_ob} &nbsp;
@@ -988,8 +972,8 @@ with tab_detail:
         """, unsafe_allow_html=True)
 
         st.markdown("""
-        <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-                    padding-top:16px;border-top:1px solid #21262d;">
+        <div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+                    padding-top:16px;border-top:1px solid #2a2a2a;">
           ⚡ 15M Entry Signal Scanner · Check #13 · Stochastic + RSI · For educational purposes only
         </div>
         """, unsafe_allow_html=True)

@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -14,6 +16,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS — matches the main app dark theme ─────────────────────────
 st.markdown("""
@@ -26,42 +29,42 @@ st.markdown("""
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
     .stApp { background:var(--background-color); }
-    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
 
-    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px; padding:20px; margin-bottom:16px; }
-    .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted,#8b949e); margin-bottom:14px; }
-    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px; padding:14px; text-align:center; }
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#2a2a2a); border-radius:12px; padding:20px; margin-bottom:16px; }
+    .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted,#9a9a9a); margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#2a2a2a); border-radius:8px; padding:14px; text-align:center; }
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
-    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
-    .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
+    .metric-label{ font-size:11px; color:var(--muted,#9a9a9a); margin-top:2px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
+    .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #00ff41; }
+    .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:10px; margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
     /* Pattern signal pills */
-    .pill-bull{ display:inline-block; background:#0d4a2f; color:#3fb950; border:1px solid #238636;
+    .pill-bull{ display:inline-block; background:#003a14; color:#00ff66; border:1px solid #00a32a;
                 border-radius:20px; padding:3px 12px; font-size:12px; font-weight:600; margin:2px; }
-    .pill-bear{ display:inline-block; background:#4a0d0d; color:#f85149; border:1px solid #8b2d2d;
+    .pill-bear{ display:inline-block; background:#4a0d0d; color:#ff3344; border:1px solid #8b2d2d;
                 border-radius:20px; padding:3px 12px; font-size:12px; font-weight:600; margin:2px; }
-    .pill-neutral{ display:inline-block; background:#1c2128; color:#8b949e; border:1px solid #30363d;
+    .pill-neutral{ display:inline-block; background:#1c2128; color:#9a9a9a; border:1px solid #2a2a2a;
                    border-radius:20px; padding:3px 12px; font-size:12px; font-weight:600; margin:2px; }
 
     /* Signal verdict banner */
-    .verdict-bull{ background:linear-gradient(135deg,#0d4a2f,#0d6634); border:1px solid #238636;
+    .verdict-bull{ background:linear-gradient(135deg,#003a14,#0d6634); border:1px solid #00a32a;
                    border-radius:12px; padding:18px 24px; text-align:center; margin-bottom:16px; }
     .verdict-bear{ background:linear-gradient(135deg,#4a0d0d,#6e1414); border:1px solid #8b2d2d;
                    border-radius:12px; padding:18px 24px; text-align:center; margin-bottom:16px; }
-    .verdict-none{ background:linear-gradient(135deg,#161b22,#1c2128); border:1px solid #30363d;
+    .verdict-none{ background:linear-gradient(135deg,#0a0a0a,#1c2128); border:1px solid #2a2a2a;
                    border-radius:12px; padding:18px 24px; text-align:center; margin-bottom:16px; }
 
     /* Pattern info cards */
-    .pattern-card{ background:#0d1117; border:1px solid #21262d; border-radius:8px;
+    .pattern-card{ background:#000000; border:1px solid #2a2a2a; border-radius:8px;
                    padding:12px 16px; margin:6px 0; }
     .pattern-name{ font-weight:700; font-size:14px; }
-    .pattern-desc{ font-size:12px; color:#8b949e; margin-top:4px; }
-    .pattern-rule{ font-size:11px; color:#58a6ff; margin-top:6px; font-family:monospace; }
+    .pattern-desc{ font-size:12px; color:#9a9a9a; margin-top:4px; }
+    .pattern-rule{ font-size:11px; color:#00e0ff; margin-top:6px; font-family:monospace; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,9 +102,9 @@ INSTRUMENTS = {
     "USD/ZAR": {"ticker": "USDZAR=X", "pip_size": 0.0001},
     "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "🥇 Gold":    {"ticker": "GC=F",    "pip_size": 0.10},
-    "🥈 Silver":  {"ticker": "SI=F",    "pip_size": 0.01},
-    "🪙 Platinum":{"ticker": "PL=F",    "pip_size": 0.10},
+    "XAU/USD":    {"ticker": "GC=F",    "pip_size": 0.10},
+    "XAG/USD":  {"ticker": "SI=F",    "pip_size": 0.01},
+    "XPT/USD":{"ticker": "PL=F",    "pip_size": 0.10},
 }
 
 
@@ -406,7 +409,7 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
         x=plot_df.index,
         open=plot_df["Open"], high=plot_df["High"],
         low=plot_df["Low"],  close=plot_df["Close"],
-        increasing_line_color="#3fb950", decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63,185,80,0.27)", decreasing_fillcolor="rgba(248,81,73,0.27)",
         name="15M Candles", showlegend=False,
     ), row=1, col=1)
@@ -434,22 +437,22 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
         fig.add_trace(go.Scatter(
             x=pts.index, y=y_vals,
             mode="markers+text",
-            marker=dict(symbol=symbol, size=14, color=color, line=dict(color="#0d1117", width=1)),
+            marker=dict(symbol=symbol, size=14, color=color, line=dict(color="#000000", width=1)),
             text=[label] * len(pts),
             textposition="top center" if yref == "high" else "bottom center",
             textfont=dict(size=9, color=color),
             name=label, showlegend=True,
         ), row=1, col=1)
 
-    add_markers("hammer",         "triangle-up",   "#3fb950", "low",  1, "Hammer")
+    add_markers("hammer",         "triangle-up",   "#00ff66", "low",  1, "Hammer")
     add_markers("pin_bar_bull",   "triangle-up",   "#00d4ff", "low",  1, "PinBar↑")
-    add_markers("bullish_engulf", "square",        "#3fb950", "low",  1, "Bull Engulf")
+    add_markers("bullish_engulf", "square",        "#00ff66", "low",  1, "Bull Engulf")
     add_markers("tweezer_bot",    "diamond",       "#74b9ff", "low",  1, "Tweezer Bot")
-    add_markers("shooting_star",  "triangle-down", "#f85149", "high", 1, "Shoot★")
+    add_markers("shooting_star",  "triangle-down", "#ff3344", "high", 1, "Shoot★")
     add_markers("pin_bar_bear",   "triangle-down", "#ff6b35", "high", 1, "PinBar↓")
-    add_markers("bearish_engulf", "square",        "#f85149", "high", 1, "Bear Engulf")
+    add_markers("bearish_engulf", "square",        "#ff3344", "high", 1, "Bear Engulf")
     add_markers("tweezer_top",    "diamond",       "#fdcb6e", "high", 1, "Tweezer Top")
-    add_markers("doji",           "circle",        "#8b949e", "high", 1, "Doji")
+    add_markers("doji",           "circle",        "#9a9a9a", "high", 1, "Doji")
 
     # ── Liquidity sweep markers ───────────────────────────────────
     if "sweep_bull" in plot_df.columns:
@@ -460,7 +463,7 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
                 y=sb_pts["Low"] - (sb_pts["High"] - sb_pts["Low"]) * 0.5,
                 mode="markers+text",
                 marker=dict(symbol="star", size=16, color="#00d4ff",
-                            line=dict(color="#0d1117", width=1)),
+                            line=dict(color="#000000", width=1)),
                 text=["🔄 SWEEP"] * len(sb_pts),
                 textposition="bottom center",
                 textfont=dict(size=9, color="#00d4ff"),
@@ -474,7 +477,7 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
                 y=sb_pts["High"] + (sb_pts["High"] - sb_pts["Low"]) * 0.5,
                 mode="markers+text",
                 marker=dict(symbol="star", size=16, color="#fdcb6e",
-                            line=dict(color="#0d1117", width=1)),
+                            line=dict(color="#000000", width=1)),
                 text=["🔄 SWEEP"] * len(sb_pts),
                 textposition="top center",
                 textfont=dict(size=9, color="#fdcb6e"),
@@ -483,14 +486,14 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
 
     # PDH / PDL horizontal levels
     if pdh is not None:
-        fig.add_hline(y=pdh, line_color="#58a6ff", line_dash="dash", line_width=1.2,
+        fig.add_hline(y=pdh, line_color="#00e0ff", line_dash="dash", line_width=1.2,
                       row=1, col=1,
-                      annotation_text="PDH", annotation_font=dict(size=9, color="#58a6ff"),
+                      annotation_text="PDH", annotation_font=dict(size=9, color="#00e0ff"),
                       annotation_position="right")
     if pdl is not None:
-        fig.add_hline(y=pdl, line_color="#e3b341", line_dash="dash", line_width=1.2,
+        fig.add_hline(y=pdl, line_color="#ffcc00", line_dash="dash", line_width=1.2,
                       row=1, col=1,
-                      annotation_text="PDL", annotation_font=dict(size=9, color="#e3b341"),
+                      annotation_text="PDL", annotation_font=dict(size=9, color="#ffcc00"),
                       annotation_position="right")
 
     # BOS lines
@@ -507,33 +510,33 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
     if not swing_highs.empty:
         fig.add_trace(go.Scatter(
             x=swing_highs.index, y=swing_highs["High"],
-            mode="markers", marker=dict(symbol="x", size=8, color="#e3b341"),
+            mode="markers", marker=dict(symbol="x", size=8, color="#ffcc00"),
             name="Swing High", showlegend=True,
         ), row=1, col=1)
     if not swing_lows.empty:
         fig.add_trace(go.Scatter(
             x=swing_lows.index, y=swing_lows["Low"],
-            mode="markers", marker=dict(symbol="x", size=8, color="#58a6ff"),
+            mode="markers", marker=dict(symbol="x", size=8, color="#00e0ff"),
             name="Swing Low", showlegend=True,
         ), row=1, col=1)
 
     fig.update_layout(
         height=600,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         legend=dict(
-            bgcolor="rgba(13,17,23,0.6)", bordercolor="#21262d", borderwidth=1,
+            bgcolor="rgba(13,17,23,0.6)", bordercolor="#2a2a2a", borderwidth=1,
             font=dict(size=10), orientation="h",
             yanchor="bottom", y=1.01, xanchor="left", x=0,
         ),
         margin=dict(l=10, r=10, t=10, b=10),
         title=dict(text=f"<b>{pair}</b> — 15M Candlestick Rejection Scanner",
-                   font=dict(color="#e6edf3", size=15), x=0.01),
+                   font=dict(color="#e6e6e6", size=15), x=0.01),
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(gridcolor="#21262d", showgrid=False)
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(gridcolor="#2a2a2a", showgrid=False)
     return fig
 
 
@@ -543,27 +546,6 @@ def build_chart(df: pd.DataFrame, pair: str, show_candles: int = 80,
 
 with st.sidebar:
     st.markdown("### 🕯️ 15M Rejection Scanner")
-    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
-    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     inst_keys = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -585,7 +567,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**📋 Patterns detected**")
     st.markdown(html_block("""
-    <div style='font-size:12px;color:#8b949e;line-height:1.8;'>
+    <div style='font-size:12px;color:#9a9a9a;line-height:1.8;'>
     🔨 Hammer &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;⭐ Shooting Star<br>
     📌 Pin Bar ↑↓ &nbsp;&nbsp;&nbsp;🟢🔴 Engulfing<br>
     🔧 Tweezer Bot &nbsp;&nbsp;🔩 Tweezer Top<br>
@@ -601,6 +583,8 @@ with st.sidebar:
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')} local")
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN CONTENT
 # ══════════════════════════════════════════════════════════════════
@@ -610,29 +594,29 @@ pip_size  = INSTRUMENTS[selected_pair]["pip_size"]
 
 # Header
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d;border-radius:16px;padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a;border-radius:16px;padding:24px 28px;
             margin-bottom:20px;position:relative;overflow:hidden;">
-  <div style="font-size:24px;font-weight:700;color:#e6edf3;">
+  <div style="font-size:24px;font-weight:700;color:#e6e6e6;">
     🕯️ 15M Rejection Scanner
   </div>
-  <div style="color:#8b949e;font-size:13px;margin-top:4px;">
+  <div style="color:#9a9a9a;font-size:13px;margin-top:4px;">
     Rejection candle &amp; structural confirmation on 15-minute chart · {selected_pair}
   </div>
-  <div style="font-size:12px;color:#388bfd;margin-top:6px;">
+  <div style="font-size:12px;color:#00ff41;margin-top:6px;">
     Check #12 — Candlestick rejection on 15M · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
 """, unsafe_allow_html=True)
 
 VERDICT_CFG = {
-    "BULL":  ("verdict-bull", "🟢 BULLISH REJECTION", "#3fb950",
+    "BULL":  ("verdict-bull", "🟢 BULLISH REJECTION", "#00ff66",
               "Rejection candle(s) suggest upward structural confirmation"),
-    "BEAR":  ("verdict-bear", "🔴 BEARISH REJECTION", "#f85149",
+    "BEAR":  ("verdict-bear", "🔴 BEARISH REJECTION", "#ff3344",
               "Rejection candle(s) suggest downward structural confirmation"),
-    "MIXED": ("verdict-none", "⚠️ MIXED SIGNALS",    "#e3b341",
+    "MIXED": ("verdict-none", "⚠️ MIXED SIGNALS",    "#ffcc00",
               "Both bullish and bearish patterns present — wait for clarity"),
-    "NONE":  ("verdict-none", "⏳ NO CLEAR PATTERN", "#8b949e",
+    "NONE":  ("verdict-none", "⏳ NO CLEAR PATTERN", "#9a9a9a",
               "No significant rejection candles detected on the last 3 candles"),
 }
 
@@ -705,11 +689,11 @@ with tab_scan:
 
     sc1, sc2, sc3, sc4, sc5 = st.columns(5)
     for col_, val_, lbl_, c_ in [
-        (sc1, cnt_bull,   "Bullish Rejection", "#3fb950"),
-        (sc2, cnt_bear,   "Bearish Rejection", "#f85149"),
+        (sc1, cnt_bull,   "Bullish Rejection", "#00ff66"),
+        (sc2, cnt_bear,   "Bearish Rejection", "#ff3344"),
         (sc3, cnt_sweeps, "Liq. Sweeps",       "#00d4ff"),
-        (sc4, cnt_mixed,  "Mixed Signals",     "#e3b341"),
-        (sc5, cnt_none,   "No Pattern",        "#484f58"),
+        (sc4, cnt_mixed,  "Mixed Signals",     "#ffcc00"),
+        (sc5, cnt_none,   "No Pattern",        "#555555"),
     ]:
         with col_:
             st.markdown(
@@ -722,7 +706,7 @@ with tab_scan:
     st.markdown("---")
 
     # ── Card grid ───────────────────────────────
-    SCAN_COLOR = {"BULL": "#3fb950", "BEAR": "#f85149", "MIXED": "#e3b341", "NONE": "#484f58"}
+    SCAN_COLOR = {"BULL": "#00ff66", "BEAR": "#ff3344", "MIXED": "#ffcc00", "NONE": "#555555"}
     SCAN_BG    = {"BULL": "rgba(63,185,80,.10)", "BEAR": "rgba(248,81,73,.10)",
                   "MIXED": "rgba(227,179,65,.08)", "NONE": "rgba(72,79,88,.08)"}
 
@@ -730,13 +714,13 @@ with tab_scan:
     for i, r in enumerate(scan_results):
         pair_name = r["pair"]
         is_sel    = pair_name == selected_pair
-        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
+        border    = "border:2px solid #00ff41;" if is_sel else "border:1px solid #2a2a2a;"
 
         if not r.get("ok"):
-            card_body = '<span style="font-size:11px;color:#f85149;">No data</span>'
+            card_body = '<span style="font-size:11px;color:#ff3344;">No data</span>'
         else:
             vrd    = r["verdict"]
-            color  = SCAN_COLOR.get(vrd, "#484f58")
+            color  = SCAN_COLOR.get(vrd, "#555555")
             bg     = SCAN_BG.get(vrd, "transparent")
             bulls  = r["bull_count"]
             bears  = r["bear_count"]
@@ -748,21 +732,21 @@ with tab_scan:
                 sweep_badge += '<span style="background:#2a1f00;color:#fdcb6e;border:1px solid #fdcb6e55;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px;">🔄 SWEEP↓</span>'
             card_body = (
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
-                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="font-size:13px;font-weight:600;color:#e6e6e6;">{pair_name}</span>'
                 f'<span style="background:{bg};border:1px solid {color}44;border-radius:4px;'
                 f'padding:2px 8px;font-size:11px;color:{color};font-weight:700;">{label}</span>'
                 f'</div>'
                 f'<div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;align-items:center;">'
-                f'<span style="font-size:11px;color:#8b949e;">🟢 <span style="color:#3fb950;">{bulls}</span></span>'
-                f'<span style="font-size:11px;color:#8b949e;">🔴 <span style="color:#f85149;">{bears}</span></span>'
-                f'<span style="font-size:11px;color:#8b949e;font-family:monospace;">{r["last_close"]:,.5f}</span>'
+                f'<span style="font-size:11px;color:#9a9a9a;">🟢 <span style="color:#00ff66;">{bulls}</span></span>'
+                f'<span style="font-size:11px;color:#9a9a9a;">🔴 <span style="color:#ff3344;">{bears}</span></span>'
+                f'<span style="font-size:11px;color:#9a9a9a;font-family:monospace;">{r["last_close"]:,.5f}</span>'
                 f'{sweep_badge}'
                 f'</div>'
             )
 
         with cols3[i % 3]:
             st.markdown(
-                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'<div style="background:#0a0a0a;{border}border-radius:8px;'
                 f'padding:12px 14px;margin-bottom:8px;">{card_body}</div>',
                 unsafe_allow_html=True)
 
@@ -829,14 +813,14 @@ with tab_detail:
         st.markdown(html_block(f"""
         <div class="{vcls}">
           <div style="font-size:22px;font-weight:800;color:{vcolor};letter-spacing:1px;">{vtitle}</div>
-          <div style="font-size:13px;color:#8b949e;margin:6px 0 10px 0;">{vdesc}</div>
+          <div style="font-size:13px;color:#9a9a9a;margin:6px 0 10px 0;">{vdesc}</div>
           <div>{all_pills}</div>
           {f'<div style="margin-top:8px;">{sweep_html}</div>' if sweep_html else ''}
-          <div style="margin-top:10px;font-size:12px;color:#484f58;">
+          <div style="margin-top:10px;font-size:12px;color:#555555;">
             Last candle: {v['last_time'].strftime('%Y-%m-%d %H:%M')} &nbsp;·&nbsp;
-            Close: <code style="color:#c9d1d9;">{v['last_close']:.5f}</code> &nbsp;·&nbsp;
-            <span style="color:#58a6ff;">{pdh_info}</span> &nbsp;·&nbsp;
-            <span style="color:#e3b341;">{pdl_info}</span>
+            Close: <code style="color:#e6e6e6;">{v['last_close']:.5f}</code> &nbsp;·&nbsp;
+            <span style="color:#00e0ff;">{pdh_info}</span> &nbsp;·&nbsp;
+            <span style="color:#ffcc00;">{pdl_info}</span>
           </div>
         </div>
         """), unsafe_allow_html=True)
@@ -851,12 +835,12 @@ with tab_detail:
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         for col_, val_, lbl_, color_ in [
-            (k1, str(total_bull),      "Bull Signals",    "#3fb950"),
-            (k2, str(total_bear),      "Bear Signals",    "#f85149"),
-            (k3, str(total_bos),       "BOS Events",      "#388bfd"),
-            (k4, str(total_doji),      "Doji Candles",    "#8b949e"),
+            (k1, str(total_bull),      "Bull Signals",    "#00ff66"),
+            (k2, str(total_bear),      "Bear Signals",    "#ff3344"),
+            (k3, str(total_bos),       "BOS Events",      "#00ff41"),
+            (k4, str(total_doji),      "Doji Candles",    "#9a9a9a"),
             (k5, str(total_sweeps),    "Liq. Sweeps",     "#00d4ff"),
-            (k6, str(last_3_patterns), "Last 3 Patterns", "#e3b341"),
+            (k6, str(last_3_patterns), "Last 3 Patterns", "#ffcc00"),
         ]:
             with col_:
                 st.markdown(
@@ -914,10 +898,10 @@ with tab_detail:
         st.markdown('<div class="section-title">📖 Pattern Reference Guide</div>', unsafe_allow_html=True)
 
         patterns_ref = [
-            ("🔨 Hammer", "Bullish", "#3fb950",
+            ("🔨 Hammer", "Bullish", "#00ff66",
              "Small body at top of range, lower wick ≥ 2× body. Signals buyers absorbing selling pressure.",
              "Lower wick ≥ 2× body · Upper wick ≤ 0.5× body · Bullish close"),
-            ("⭐ Shooting Star", "Bearish", "#f85149",
+            ("⭐ Shooting Star", "Bearish", "#ff3344",
              "Small body at bottom of range, upper wick ≥ 2× body. Signals sellers rejecting higher prices.",
              "Upper wick ≥ 2× body · Lower wick ≤ 0.5× body · Bearish close"),
             ("📌 Pin Bar ↑", "Bullish", "#00d4ff",
@@ -926,10 +910,10 @@ with tab_detail:
             ("📌 Pin Bar ↓", "Bearish", "#ff6b35",
              "Long upper wick covering ≥ 60% of the candle range. Bearish rejection at key resistance.",
              "Upper wick ≥ 60% of range · Body in lower 40% of candle"),
-            ("🟢 Bullish Engulfing", "Bullish", "#3fb950",
+            ("🟢 Bullish Engulfing", "Bullish", "#00ff66",
              "Current bullish candle's body fully engulfs the previous bearish candle. Strong reversal signal.",
              "Close > Prev Open AND Open < Prev Close · Current must be bullish"),
-            ("🔴 Bearish Engulfing", "Bearish", "#f85149",
+            ("🔴 Bearish Engulfing", "Bearish", "#ff3344",
              "Current bearish candle's body fully engulfs the previous bullish candle. Strong reversal signal.",
              "Close < Prev Open AND Open > Prev Close · Current must be bearish"),
             ("🔧 Tweezer Bottom", "Bullish", "#74b9ff",
@@ -938,13 +922,13 @@ with tab_detail:
             ("🔩 Tweezer Top", "Bearish", "#fdcb6e",
              "Two candles with matching highs — previous bullish, current bearish. Double rejection of highs.",
              "|High[i] − High[i−1]| < 5% range · Bull candle then Bear candle"),
-            ("⚖️ Doji", "Neutral", "#8b949e",
+            ("⚖️ Doji", "Neutral", "#9a9a9a",
              "Body < 10% of candle range. Market indecision. High confluence with other signals.",
              "Body / Range < 0.10 · Confirm with next candle direction"),
-            ("📈 BOS Break Up", "Bullish", "#3fb950",
+            ("📈 BOS Break Up", "Bullish", "#00ff66",
              "Price closes above a prior swing high, confirming a bullish break of structure.",
              "Close > prior Swing High · Structural shift in buyer control"),
-            ("📉 BOS Break Down", "Bearish", "#f85149",
+            ("📉 BOS Break Down", "Bearish", "#ff3344",
              "Price closes below a prior swing low, confirming a bearish break of structure.",
              "Close < prior Swing Low · Structural shift in seller control"),
         ]
@@ -955,7 +939,7 @@ with tab_detail:
                 st.markdown(html_block(f"""
                 <div class="pattern-card">
                     <div class="pattern-name" style="color:{color};">{name}
-                        <span style="font-size:11px;font-weight:400;color:#8b949e;margin-left:8px;">— {side}</span>
+                        <span style="font-size:11px;font-weight:400;color:#9a9a9a;margin-left:8px;">— {side}</span>
                     </div>
                     <div class="pattern-desc">{desc}</div>
                     <div class="pattern-rule">📐 {rule}</div>
@@ -963,8 +947,8 @@ with tab_detail:
                 """), unsafe_allow_html=True)
 
         st.markdown(html_block("""
-        <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-                    padding-top:16px;border-top:1px solid #21262d;">
+        <div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+                    padding-top:16px;border-top:1px solid #2a2a2a;">
           🕯️ 15M Rejection Scanner · Check #12 · For educational purposes only
         </div>
         """), unsafe_allow_html=True)

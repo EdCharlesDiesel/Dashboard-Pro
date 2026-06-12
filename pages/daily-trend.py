@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -12,6 +14,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 st.markdown("""
 <style>
@@ -23,29 +26,29 @@ st.markdown("""
     }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     .stApp{background:var(--background-color);}
-    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
-    .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
+    .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
     .hero::before{content:'';position:absolute;top:-40%;right:-5%;width:300px;height:300px;background:radial-gradient(circle,rgba(56,139,253,.07) 0%,transparent 70%);border-radius:50%;}
-    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px 14px;text-align:center;}
-    .metric-value{font-size:20px;font-weight:700;color:#c9d1d9;}
-    .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:12px 14px;text-align:center;}
+    .metric-value{font-size:20px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
 
     /* Pair cards */
-    .pair-card{border-radius:12px;padding:14px 16px;margin-bottom:9px;border:1px solid #21262d;background:#161b22;}
-    .card-bull{border-left:4px solid #3fb950;}
-    .card-bear{border-left:4px solid #f85149;}
-    .card-neut{border-left:4px solid #e3b341;}
-    .card-none{border-left:4px solid #30363d;opacity:.5;}
+    .pair-card{border-radius:12px;padding:14px 16px;margin-bottom:9px;border:1px solid #2a2a2a;background:#0a0a0a;}
+    .card-bull{border-left:4px solid #00ff66;}
+    .card-bear{border-left:4px solid #ff3344;}
+    .card-neut{border-left:4px solid #ffcc00;}
+    .card-none{border-left:4px solid #2a2a2a;opacity:.5;}
 
-    .pair-name{font-size:15px;font-weight:700;color:#e6edf3;}
+    .pair-name{font-size:15px;font-weight:700;color:#e6e6e6;}
     .badge{border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;display:inline-block;}
-    .b-bull{background:#0d2f1a;color:#3fb950;border:1px solid #238636;}
-    .b-bear{background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;}
-    .b-warn{background:#2f1f0d;color:#e3b341;border:1px solid #9e6a03;}
-    .b-none{background:#21262d;color:#8b949e;border:1px solid #30363d;}
+    .b-bull{background:#0d2f1a;color:#00ff66;border:1px solid #00a32a;}
+    .b-bear{background:#2f0d0d;color:#ff3344;border:1px solid #8b2d2d;}
+    .b-warn{background:#2f1f0d;color:#ffcc00;border:1px solid #9e6a03;}
+    .b-none{background:#2a2a2a;color:#9a9a9a;border:1px solid #2a2a2a;}
 
     /* EMA gap bar */
-    .gap-track{background:#21262d;border-radius:6px;height:8px;margin:6px 0;overflow:hidden;position:relative;}
+    .gap-track{background:#2a2a2a;border-radius:6px;height:8px;margin:6px 0;overflow:hidden;position:relative;}
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
@@ -74,9 +77,9 @@ INSTRUMENTS = {
     "USD/ZAR": {"ticker": "USDZAR=X", "pip_size": 0.0001},
     "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "🥇 Gold":  {"ticker": "GC=F",    "pip_size": 0.10},
-    "🥈 Silver":  {"ticker": "SI=F",  "pip_size": 0.01},
-    "🪙 Platinum":{"ticker": "PL=F",  "pip_size": 0.10},
+    "XAU/USD":  {"ticker": "GC=F",    "pip_size": 0.10},
+    "XAG/USD":  {"ticker": "SI=F",  "pip_size": 0.01},
+    "XPT/USD":{"ticker": "PL=F",  "pip_size": 0.10},
 }
 
 ALL_EMAS = [20, 50, 100, 200]
@@ -176,28 +179,28 @@ def check_trend(data: dict, direction: str) -> dict:
         if bull and s20 > 0:
             status = "✅ Intact"
             detail = "EMA20 > EMA50 · EMA20 rising · Trend confirmed"
-            color, card, badge = "#3fb950", "card-bull", "b-bull"
+            color, card, badge = "#00ff66", "card-bull", "b-bull"
         elif bull and s20 <= 0:
             status = "⚠️ Weakening"
             detail = "EMA20 > EMA50 but EMA20 slope flattening"
-            color, card, badge = "#e3b341", "card-neut", "b-warn"
+            color, card, badge = "#ffcc00", "card-neut", "b-warn"
         else:
             status = "❌ Broken"
             detail = "EMA20 < EMA50 — bearish structure, avoid longs"
-            color, card, badge = "#f85149", "card-bear", "b-bear"
+            color, card, badge = "#ff3344", "card-bear", "b-bear"
     else:  # SHORT
         if not bull and s20 < 0:
             status = "✅ Intact"
             detail = "EMA20 < EMA50 · EMA20 falling · Trend confirmed"
-            color, card, badge = "#3fb950", "card-bull", "b-bull"
+            color, card, badge = "#00ff66", "card-bull", "b-bull"
         elif not bull and s20 >= 0:
             status = "⚠️ Weakening"
             detail = "EMA20 < EMA50 but EMA20 slope flattening"
-            color, card, badge = "#e3b341", "card-neut", "b-warn"
+            color, card, badge = "#ffcc00", "card-neut", "b-warn"
         else:
             status = "❌ Broken"
             detail = "EMA20 > EMA50 — bullish structure, avoid shorts"
-            color, card, badge = "#f85149", "card-bear", "b-bear"
+            color, card, badge = "#ff3344", "card-bear", "b-bear"
 
     return {"status": status, "detail": detail,
             "color": color, "card": card, "badge": badge}
@@ -227,11 +230,11 @@ def ema_stack(data: dict, direction: str) -> dict:
     score = sum(conds)
     pct   = score / n if n else 0
 
-    if pct == 1.0:    lbl, col = "Full Stack",   "#3fb950"
+    if pct == 1.0:    lbl, col = "Full Stack",   "#00ff66"
     elif pct >= 0.75: lbl, col = "Strong",        "#52cc6b"
-    elif pct >= 0.5:  lbl, col = "Partial",       "#e3b341"
+    elif pct >= 0.5:  lbl, col = "Partial",       "#ffcc00"
     elif pct > 0:     lbl, col = "Weak",          "#e07b39"
-    else:             lbl, col = "No Alignment",  "#f85149"
+    else:             lbl, col = "No Alignment",  "#ff3344"
 
     return {"score": score, "max": n, "pct": pct, "label": lbl, "color": col, "conditions": conds}
 
@@ -240,27 +243,6 @@ def ema_stack(data: dict, direction: str) -> dict:
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("### 📈 Daily Trend")
-    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
-    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     direction = st.radio("🎯 Trade Direction", ["LONG", "SHORT"], horizontal=True)
     focus_pair = st.selectbox("Focus Pair (Detail Chart)", list(INSTRUMENTS.keys()), index=0)
@@ -280,6 +262,8 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # FETCH ALL
 # ══════════════════════════════════════════════════════════════════
@@ -302,7 +286,7 @@ failed   = [p for p in INSTRUMENTS if p not in loaded]
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════
-dir_color = "#3fb950" if direction == "LONG" else "#f85149"
+dir_color = "#00ff66" if direction == "LONG" else "#ff3344"
 dir_icon  = "🔼" if direction == "LONG" else "🔽"
 rule_txt  = "EMA20 > EMA50" if direction == "LONG" else "EMA20 < EMA50"
 
@@ -310,11 +294,11 @@ st.markdown(f"""
 <div class="hero">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
     <div>
-      <div style="font-size:26px;font-weight:700;color:#e6edf3;">📈 Daily Trend Scanner</div>
-      <div style="color:#8b949e;font-size:14px;margin-top:6px;">
+      <div style="font-size:26px;font-weight:700;color:#e6e6e6;">📈 Daily Trend Scanner</div>
+      <div style="color:#9a9a9a;font-size:14px;margin-top:6px;">
         Checklist Item #8 · {rule_txt} · Daily timeframe · EMA20 slope confirmation
       </div>
-      <div style="font-size:13px;color:#388bfd;font-weight:500;margin-top:4px;">
+      <div style="font-size:13px;color:#00ff41;font-weight:500;margin-top:4px;">
         🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · {lookback_days}-day window
       </div>
     </div>
@@ -324,19 +308,19 @@ st.markdown(f"""
         <div class="metric-label">Direction</div>
       </div>
       <div class="metric-box">
-        <div class="metric-value" style="color:#3fb950;">{len(intact)}</div>
+        <div class="metric-value" style="color:#00ff66;">{len(intact)}</div>
         <div class="metric-label">✅ Intact</div>
       </div>
       <div class="metric-box">
-        <div class="metric-value" style="color:#e3b341;">{len(weak)}</div>
+        <div class="metric-value" style="color:#ffcc00;">{len(weak)}</div>
         <div class="metric-label">⚠️ Weakening</div>
       </div>
       <div class="metric-box">
-        <div class="metric-value" style="color:#f85149;">{len(broken)}</div>
+        <div class="metric-value" style="color:#ff3344;">{len(broken)}</div>
         <div class="metric-label">❌ Broken</div>
       </div>
       <div class="metric-box">
-        <div class="metric-value" style="color:#484f58;">{len(failed)}</div>
+        <div class="metric-value" style="color:#555555;">{len(failed)}</div>
         <div class="metric-label">No Data</div>
       </div>
     </div>
@@ -350,19 +334,19 @@ if loaded:
     i_pct = int(len(intact)/n*100)
     w_pct = int(len(weak)/n*100)
     b_pct = int(len(broken)/n*100)
-    bar_c = "#3fb950" if i_pct>=60 else "#e3b341" if i_pct>=35 else "#f85149"
+    bar_c = "#00ff66" if i_pct>=60 else "#ffcc00" if i_pct>=35 else "#ff3344"
     st.markdown(f"""
     <div style="margin-bottom:22px;">
       <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-        <span style="font-size:12px;color:#8b949e;font-weight:500;">DAILY TREND HEALTH — {direction}</span>
+        <span style="font-size:12px;color:#9a9a9a;font-weight:500;">DAILY TREND HEALTH — {direction}</span>
         <span style="font-size:12px;color:{bar_c};font-weight:700;">{len(intact)}/{n} trends intact</span>
       </div>
-      <div style="background:#21262d;border-radius:8px;height:12px;overflow:hidden;display:flex;">
-        <div style="background:#3fb950;width:{i_pct}%;height:100%;border-radius:8px 0 0 8px;"></div>
-        <div style="background:#e3b341;width:{w_pct}%;height:100%;"></div>
-        <div style="background:#f85149;width:{b_pct}%;height:100%;border-radius:0 8px 8px 0;"></div>
+      <div style="background:#2a2a2a;border-radius:8px;height:12px;overflow:hidden;display:flex;">
+        <div style="background:#00ff66;width:{i_pct}%;height:100%;border-radius:8px 0 0 8px;"></div>
+        <div style="background:#ffcc00;width:{w_pct}%;height:100%;"></div>
+        <div style="background:#ff3344;width:{b_pct}%;height:100%;border-radius:0 8px 8px 0;"></div>
       </div>
-      <div style="display:flex;gap:16px;font-size:10px;color:#484f58;margin-top:3px;">
+      <div style="display:flex;gap:16px;font-size:10px;color:#555555;margin-top:3px;">
         <span>🟢 Intact {i_pct}%</span>
         <span>🟡 Weakening {w_pct}%</span>
         <span>🔴 Broken {b_pct}%</span>
@@ -414,28 +398,28 @@ with left:
             continue
 
         gap_abs    = abs(d["gap_pips"])
-        gap_col    = "#3fb950" if (direction=="LONG" and d["gap_pips"]>0) or \
-                                  (direction=="SHORT" and d["gap_pips"]<0) else "#f85149"
+        gap_col    = "#00ff66" if (direction=="LONG" and d["gap_pips"]>0) or \
+                                  (direction=="SHORT" and d["gap_pips"]<0) else "#ff3344"
         gap_scale  = max(d.get("gap_hist_p90", 100.0), gap_abs, 1.0)
         gap_bar    = min(int(gap_abs / gap_scale * 100), 100)
-        s20_col    = "#3fb950" if d["slope20"]>0 else "#f85149"
-        s50_col    = "#3fb950" if d["slope50"]>0 else "#f85149"
+        s20_col    = "#00ff66" if d["slope20"]>0 else "#ff3344"
+        s50_col    = "#00ff66" if d["slope50"]>0 else "#ff3344"
         s20_icon   = "▲" if d["slope20"]>0.01 else "▼" if d["slope20"]<-0.01 else "➡️"
         s50_icon   = "▲" if d["slope50"]>0.01 else "▼" if d["slope50"]<-0.01 else "➡️"
         xover_txt  = f"Cross {d['crossover_bars']}d ago" if d["crossover_bars"] else "Cross > 200d ago"
-        xover_col  = "#e3b341" if d["crossover_bars"] and d["crossover_bars"] < 10 else "#484f58"
-        highlight  = "border-color:#388bfd!important;" if pair == focus_pair else ""
+        xover_col  = "#ffcc00" if d["crossover_bars"] and d["crossover_bars"] < 10 else "#555555"
+        highlight  = "border-color:#00ff41!important;" if pair == focus_pair else ""
 
         # Price vs EMAs
         pa20 = "▲" if d["price_above_20"] else "▼"
         pa50 = "▲" if d["price_above_50"] else "▼"
-        pa20c= "#3fb950" if d["price_above_20"] else "#f85149"
-        pa50c= "#3fb950" if d["price_above_50"] else "#f85149"
+        pa20c= "#00ff66" if d["price_above_20"] else "#ff3344"
+        pa50c= "#00ff66" if d["price_above_50"] else "#ff3344"
 
         # Stack dots
-        dot_cols  = ["#3fb950" if v else "#f85149" for v in stk.get("conditions", [])]
+        dot_cols  = ["#00ff66" if v else "#ff3344" for v in stk.get("conditions", [])]
         while len(dot_cols) < 4:
-            dot_cols.append("#30363d")
+            dot_cols.append("#2a2a2a")
         dots_html = "".join(
             f'<div style="width:9px;height:9px;border-radius:2px;background:{cl};'
             f'display:inline-block;margin:0 1px;"></div>'
@@ -447,48 +431,48 @@ with left:
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
             <div>
               <span class="pair-name">{pair}</span>
-              <span style="font-size:11px;color:#8b949e;margin-left:8px;">@ {d['close']}</span>
+              <span style="font-size:11px;color:#9a9a9a;margin-left:8px;">@ {d['close']}</span>
             </div>
             <span class="badge {c['badge']}">{c['status']}</span>
           </div>
 
           <!-- EMA gap bar -->
-          <div style="font-size:10px;color:#8b949e;margin-bottom:3px;">
+          <div style="font-size:10px;color:#9a9a9a;margin-bottom:3px;">
             EMA gap: <span style="color:{gap_col};font-weight:700;">{d['gap_pips']:+.1f} pips
             ({d['gap_pct']:+.3f}%)</span>
             &nbsp;·&nbsp;<span style="color:{xover_col};">{xover_txt}</span>
           </div>
-          <div style="background:#21262d;border-radius:6px;height:7px;margin-bottom:10px;overflow:hidden;">
+          <div style="background:#2a2a2a;border-radius:6px;height:7px;margin-bottom:10px;overflow:hidden;">
             <div style="background:{gap_col};width:{gap_bar}%;height:100%;border-radius:6px;"></div>
           </div>
 
           <!-- EMA value grid -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:8px;">
-            <div style="background:#0d1117;border-radius:6px;padding:7px;text-align:center;">
-              <div style="font-size:9px;color:#e3b341;font-weight:700;">EMA20</div>
-              <div style="font-size:12px;font-weight:700;color:#e6edf3;font-family:monospace;">{d['ema20']:.4f}</div>
+            <div style="background:#000000;border-radius:6px;padding:7px;text-align:center;">
+              <div style="font-size:9px;color:#ffcc00;font-weight:700;">EMA20</div>
+              <div style="font-size:12px;font-weight:700;color:#e6e6e6;font-family:monospace;">{d['ema20']:.4f}</div>
               <div style="font-size:10px;color:{s20_col};">{s20_icon} {d['slope20']:+.3f}%</div>
             </div>
-            <div style="background:#0d1117;border-radius:6px;padding:7px;text-align:center;">
-              <div style="font-size:9px;color:#388bfd;font-weight:700;">EMA50</div>
-              <div style="font-size:12px;font-weight:700;color:#e6edf3;font-family:monospace;">{d['ema50']:.4f}</div>
+            <div style="background:#000000;border-radius:6px;padding:7px;text-align:center;">
+              <div style="font-size:9px;color:#00ff41;font-weight:700;">EMA50</div>
+              <div style="font-size:12px;font-weight:700;color:#e6e6e6;font-family:monospace;">{d['ema50']:.4f}</div>
               <div style="font-size:10px;color:{s50_col};">{s50_icon} {d['slope50']:+.3f}%</div>
             </div>
-            <div style="background:#0d1117;border-radius:6px;padding:7px;text-align:center;">
-              <div style="font-size:9px;color:#8b949e;">P vs EMA20</div>
+            <div style="background:#000000;border-radius:6px;padding:7px;text-align:center;">
+              <div style="font-size:9px;color:#9a9a9a;">P vs EMA20</div>
               <div style="font-size:16px;font-weight:700;color:{pa20c};">{pa20}</div>
             </div>
-            <div style="background:#0d1117;border-radius:6px;padding:7px;text-align:center;">
-              <div style="font-size:9px;color:#8b949e;">P vs EMA50</div>
+            <div style="background:#000000;border-radius:6px;padding:7px;text-align:center;">
+              <div style="font-size:9px;color:#9a9a9a;">P vs EMA50</div>
               <div style="font-size:16px;font-weight:700;color:{pa50c};">{pa50}</div>
             </div>
           </div>
 
           <!-- Stack signal -->
           <div style="display:flex;align-items:center;gap:5px;padding:6px 0 4px;">
-            <span style="font-size:9px;color:#484f58;letter-spacing:.05em;font-weight:500;">STACK</span>
+            <span style="font-size:9px;color:#555555;letter-spacing:.05em;font-weight:500;">STACK</span>
             {dots_html}
-            <span style="font-size:10px;font-weight:700;color:{stk.get('color','#8b949e')};">
+            <span style="font-size:10px;font-weight:700;color:{stk.get('color','#9a9a9a')};">
               {stk.get('score','?')}/{stk.get('max','4')} {stk.get('label','—')}
             </span>
           </div>
@@ -509,9 +493,9 @@ with right:
     if d is None:
         st.warning(f"No data for {focus_pair}.")
     else:
-        ok_col = c.get("color", "#8b949e")
-        ok_bg  = "#0d2f1a" if ok_col=="#3fb950" else "#2f0d0d" if ok_col=="#f85149" else "#2f1f0d"
-        ok_bdr = "#238636" if ok_col=="#3fb950" else "#8b2d2d" if ok_col=="#f85149" else "#9e6a03"
+        ok_col = c.get("color", "#9a9a9a")
+        ok_bg  = "#0d2f1a" if ok_col=="#00ff66" else "#2f0d0d" if ok_col=="#ff3344" else "#2f1f0d"
+        ok_bdr = "#00a32a" if ok_col=="#00ff66" else "#8b2d2d" if ok_col=="#ff3344" else "#9e6a03"
         pip_size = INSTRUMENTS[focus_pair]["pip_size"]
 
         # ── Status banner ──────────────────────────────────────────
@@ -528,33 +512,33 @@ with right:
               <div style="font-size:17px;font-weight:700;color:{ok_col};">
                 {c.get('status','—')} — {c.get('detail','—')}
               </div>
-              <div style="font-size:12px;color:#8b949e;margin-top:5px;">{xover_note}</div>
+              <div style="font-size:12px;color:#9a9a9a;margin-top:5px;">{xover_note}</div>
               <div style="font-size:12px;margin-top:6px;">
-                <span style="color:#484f58;font-weight:500;">STACK </span>
-                <span style="color:{fp_stk.get('color','#8b949e')};font-weight:700;">
+                <span style="color:#555555;font-weight:500;">STACK </span>
+                <span style="color:{fp_stk.get('color','#9a9a9a')};font-weight:700;">
                   {fp_stk.get('score','?')}/{fp_stk.get('max','4')} — {fp_stk.get('label','—')}
                 </span>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
-                <div style="font-size:10px;color:#e3b341;">EMA20</div>
-                <div style="font-size:14px;font-weight:700;color:#e3b341;font-family:monospace;">{d['ema20']:.5f}</div>
+              <div style="background:#000000;border-radius:6px;padding:8px 12px;text-align:center;">
+                <div style="font-size:10px;color:#ffcc00;">EMA20</div>
+                <div style="font-size:14px;font-weight:700;color:#ffcc00;font-family:monospace;">{d['ema20']:.5f}</div>
               </div>
-              <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
-                <div style="font-size:10px;color:#388bfd;">EMA50</div>
-                <div style="font-size:14px;font-weight:700;color:#388bfd;font-family:monospace;">{d['ema50']:.5f}</div>
+              <div style="background:#000000;border-radius:6px;padding:8px 12px;text-align:center;">
+                <div style="font-size:10px;color:#00ff41;">EMA50</div>
+                <div style="font-size:14px;font-weight:700;color:#00ff41;font-family:monospace;">{d['ema50']:.5f}</div>
               </div>
-              <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
+              <div style="background:#000000;border-radius:6px;padding:8px 12px;text-align:center;">
                 <div style="font-size:10px;color:#a371f7;">EMA100</div>
                 <div style="font-size:14px;font-weight:700;color:#a371f7;font-family:monospace;">{e100_str}</div>
               </div>
-              <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
-                <div style="font-size:10px;color:#f85149;">EMA200</div>
-                <div style="font-size:14px;font-weight:700;color:#f85149;font-family:monospace;">{e200_str}</div>
+              <div style="background:#000000;border-radius:6px;padding:8px 12px;text-align:center;">
+                <div style="font-size:10px;color:#ff3344;">EMA200</div>
+                <div style="font-size:14px;font-weight:700;color:#ff3344;font-family:monospace;">{e200_str}</div>
               </div>
-              <div style="background:#0d1117;border-radius:6px;padding:8px 12px;text-align:center;">
-                <div style="font-size:10px;color:#8b949e;">Gap</div>
+              <div style="background:#000000;border-radius:6px;padding:8px 12px;text-align:center;">
+                <div style="font-size:10px;color:#9a9a9a;">Gap</div>
                 <div style="font-size:14px;font-weight:700;color:{ok_col};">{d['gap_pips']:+.1f}p</div>
               </div>
             </div>
@@ -566,10 +550,10 @@ with right:
         hist = d["history"].tail(min(lookback_days, 300))
 
         EMA_STYLE = {
-            "EMA20":  {"col":"#e3b341","w":2.5},
-            "EMA50":  {"col":"#388bfd","w":2.0},
+            "EMA20":  {"col":"#ffcc00","w":2.5},
+            "EMA50":  {"col":"#00ff41","w":2.0},
             "EMA100": {"col":"#a371f7","w":1.5},
-            "EMA200": {"col":"#f85149","w":1.5,"dash":"dot"},
+            "EMA200": {"col":"#ff3344","w":1.5,"dash":"dot"},
         }
 
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
@@ -583,7 +567,7 @@ with right:
         fig.add_trace(go.Candlestick(
             x=hist.index, open=hist["Open"], high=hist["High"],
             low=hist["Low"], close=hist["Close"], name="Price",
-            increasing_line_color="#3fb950", decreasing_line_color="#f85149",
+            increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
             increasing_fillcolor="#0d2f1a",  decreasing_fillcolor="#2f0d0d",
         ), row=1, col=1)
 
@@ -591,7 +575,7 @@ with right:
         for label in show_emas:
             col_key = label.lower()
             if col_key in hist.columns:
-                style = EMA_STYLE.get(label, {"col":"#8b949e","w":1.5})
+                style = EMA_STYLE.get(label, {"col":"#9a9a9a","w":1.5})
                 fig.add_trace(go.Scatter(
                     x=hist.index, y=hist[col_key], name=label,
                     mode="lines",
@@ -602,36 +586,36 @@ with right:
 
         # EMA gap histogram
         gap_vals  = (hist["ema20"] - hist["ema50"]) / pip_size
-        gap_cols  = ["#3fb950" if v > 0 else "#f85149" for v in gap_vals]
+        gap_cols  = ["#00ff66" if v > 0 else "#ff3344" for v in gap_vals]
         fig.add_trace(go.Bar(
             x=hist.index, y=gap_vals,
             marker_color=gap_cols, name="EMA Gap",
             hovertemplate="Gap: %{y:+.1f} pips<extra></extra>",
         ), row=2, col=1)
-        fig.add_hline(y=0, line_dash="dot", line_color="#484f58",
+        fig.add_hline(y=0, line_dash="dot", line_color="#555555",
                       line_width=1, row=2, col=1)
 
         # Current price
-        fig.add_hline(y=d["close"], line_dash="dash", line_color="#8b949e",
+        fig.add_hline(y=d["close"], line_dash="dash", line_color="#9a9a9a",
                       line_width=1, row=1, col=1,
                       annotation_text=f"  {d['close']}",
-                      annotation_font_color="#8b949e",
+                      annotation_font_color="#9a9a9a",
                       annotation_position="right")
 
         fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
-            legend=dict(font=dict(color="#8b949e",size=11), bgcolor="#161b22",
-                        bordercolor="#21262d", orientation="h", x=0, y=1.06),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#000000",
+            legend=dict(font=dict(color="#9a9a9a",size=11), bgcolor="#0a0a0a",
+                        bordercolor="#2a2a2a", orientation="h", x=0, y=1.06),
             margin=dict(l=10, r=80, t=30, b=10),
             height=520, hovermode="x unified",
             xaxis_rangeslider_visible=False,
         )
         for row in [1, 2]:
-            fig.update_xaxes(showgrid=False, tickfont=dict(color="#8b949e",size=9),
-                             linecolor="#21262d", row=row, col=1)
-            fig.update_yaxes(showgrid=True, gridcolor="#21262d",
-                             tickfont=dict(color="#8b949e",size=9), row=row, col=1)
-        fig.update_annotations(font_color="#8b949e", font_size=11)
+            fig.update_xaxes(showgrid=False, tickfont=dict(color="#9a9a9a",size=9),
+                             linecolor="#2a2a2a", row=row, col=1)
+            fig.update_yaxes(showgrid=True, gridcolor="#2a2a2a",
+                             tickfont=dict(color="#9a9a9a",size=9), row=row, col=1)
+        fig.update_annotations(font_color="#9a9a9a", font_size=11)
         st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
 
         # ── EMA gap bar chart all pairs ────────────────────────────
@@ -644,28 +628,28 @@ with right:
         gp_colors  = []
         for p, v in gap_pairs:
             if p == focus_pair:
-                gp_colors.append("#58a6ff")
+                gp_colors.append("#00e0ff")
             elif (direction=="LONG" and v>0) or (direction=="SHORT" and v<0):
-                gp_colors.append("#3fb950")
+                gp_colors.append("#00ff66")
             else:
-                gp_colors.append("#f85149")
+                gp_colors.append("#ff3344")
 
         fig2 = go.Figure(go.Bar(
             x=gp_labels, y=gp_values,
             marker_color=gp_colors,
             text=[f"{v:+.0f}" for v in gp_values],
             textposition="outside",
-            textfont=dict(color="#c9d1d9", size=9),
+            textfont=dict(color="#e6e6e6", size=9),
             hovertemplate="<b>%{x}</b><br>EMA Gap: %{y:+.1f} pips<extra></extra>",
         ))
-        fig2.add_hline(y=0, line_dash="solid", line_color="#484f58", line_width=1.5)
+        fig2.add_hline(y=0, line_dash="solid", line_color="#555555", line_width=1.5)
         fig2.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#000000",
             margin=dict(l=10,r=10,t=10,b=10), height=260,
-            xaxis=dict(tickfont=dict(color="#8b949e",size=9), tickangle=-40, showgrid=False),
-            yaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True,
-                       gridcolor="#21262d", ticksuffix=" p",
-                       zeroline=True, zerolinecolor="#484f58"),
+            xaxis=dict(tickfont=dict(color="#9a9a9a",size=9), tickangle=-40, showgrid=False),
+            yaxis=dict(tickfont=dict(color="#9a9a9a"), showgrid=True,
+                       gridcolor="#2a2a2a", ticksuffix=" p",
+                       zeroline=True, zerolinecolor="#555555"),
             showlegend=False, bargap=0.2,
         )
         st.plotly_chart(fig2, use_container_width=True, config=dict(displayModeBar=False))
@@ -717,8 +701,8 @@ with right:
                      })
 
 st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-     padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+     padding-top:16px;border-top:1px solid #2a2a2a;">
   📈 Daily Trend · EMA20 vs EMA50 · Daily bars · Wilder EWM · Not financial advice
 </div>
 """, unsafe_allow_html=True)

@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -12,6 +14,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS ────────────────────────────────────────────────────────────
 st.markdown("""
@@ -24,27 +27,27 @@ st.markdown("""
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
     .stApp{ background:var(--background-color); }
-    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
-    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px;
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#2a2a2a); border-radius:12px;
            padding:20px; margin-bottom:16px; }
     .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em;
-                  text-transform:uppercase; color:#8b949e; margin-bottom:14px; }
-    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px;
+                  text-transform:uppercase; color:#9a9a9a; margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#2a2a2a); border-radius:8px;
                  padding:14px; text-align:center; }
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
-    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500;
+    .metric-label{ font-size:11px; color:var(--muted,#9a9a9a); margin-top:2px; font-weight:500;
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color);
-                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
+                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #00ff41; }
 
     /* Verdict banners */
     .verdict-pass{ background:linear-gradient(135deg,#0d3a1f,#0d5e32);
-                   border:2px solid #238636; border-radius:14px;
+                   border:2px solid #00a32a; border-radius:14px;
                    padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-warn{ background:linear-gradient(135deg,#1c1c0d,#2e2a0d);
                    border:2px solid #9e6a03; border-radius:14px;
@@ -54,27 +57,27 @@ st.markdown("""
                    padding:22px 28px; text-align:center; margin-bottom:18px; }
 
     /* R:R visual bar */
-    .rr-track{ background:#21262d; border-radius:6px; height:28px;
+    .rr-track{ background:#2a2a2a; border-radius:6px; height:28px;
                margin:10px 0; overflow:hidden; display:flex; }
 
     /* Trade levels table */
     .lvl-row{ display:flex; justify-content:space-between; align-items:center;
-              padding:10px 16px; border-bottom:1px solid #21262d; font-size:13px; }
+              padding:10px 16px; border-bottom:1px solid #2a2a2a; font-size:13px; }
     .lvl-row:last-child{ border-bottom:none; }
-    .lvl-label{ color:#8b949e; }
-    .lvl-val  { font-family:'JetBrains Mono',monospace; font-weight:600; color:#c9d1d9; }
+    .lvl-label{ color:#9a9a9a; }
+    .lvl-val  { font-family:'JetBrains Mono',monospace; font-weight:600; color:#e6e6e6; }
 
     /* Scenario table */
-    .sc-row{ display:flex; gap:0; border-bottom:1px solid #21262d; font-size:12px; }
+    .sc-row{ display:flex; gap:0; border-bottom:1px solid #2a2a2a; font-size:12px; }
     .sc-row:last-child{ border-bottom:none; }
     .sc-cell{ flex:1; padding:8px 10px; font-family:'JetBrains Mono',monospace; }
 
     .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
-                border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
-    .formula-box{ background:#0d1117; border:1px solid #30363d; border-radius:8px;
+                border-left:3px solid #00ff41; border-radius:8px;
+                padding:14px 18px; font-size:13px; color:var(--muted,#9a9a9a); line-height:1.7; }
+    .formula-box{ background:#000000; border:1px solid #2a2a2a; border-radius:8px;
                   padding:14px 18px; font-family:'JetBrains Mono',monospace;
-                  font-size:13px; color:#c9d1d9; margin:10px 0; line-height:2.2; }
+                  font-size:13px; color:#e6e6e6; margin:10px 0; line-height:2.2; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,9 +102,9 @@ INSTRUMENTS = {
     "USD/ZAR":    {"ticker": "USDZAR=X", "pip": 0.55,  "pip_size": 0.0001},
     "EUR/ZAR":    {"ticker": "EURZAR=X", "pip": 0.55,  "pip_size": 0.0001},
     "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip": 0.55,  "pip_size": 0.0001},
-    "🥇 Gold":    {"ticker": "GC=F",     "pip": 10.0,  "pip_size": 0.10},
-    "🥈 Silver":  {"ticker": "SI=F",     "pip": 10.0,  "pip_size": 0.01},
-    "🪙 Platinum":{"ticker": "PL=F",     "pip": 10.0,  "pip_size": 0.10},
+    "XAU/USD":    {"ticker": "GC=F",     "pip": 10.0,  "pip_size": 0.10},
+    "XAG/USD":  {"ticker": "SI=F",     "pip": 10.0,  "pip_size": 0.01},
+    "XPT/USD":{"ticker": "PL=F",     "pip": 10.0,  "pip_size": 0.10},
 }
 
 
@@ -178,13 +181,13 @@ def compute_rr(entry: float, sl: float, tp1: float, tp2: float,
 
     # Grade
     if rr_tp1 >= 3.0:
-        grade, label, color, vclass = "excellent", "✅ EXCELLENT  R:R", "#3fb950", "verdict-pass"
+        grade, label, color, vclass = "excellent", "✅ EXCELLENT  R:R", "#00ff66", "verdict-pass"
     elif rr_tp1 >= 2.0:
-        grade, label, color, vclass = "pass",      "✅ R:R MINIMUM MET", "#3fb950", "verdict-pass"
+        grade, label, color, vclass = "pass",      "✅ R:R MINIMUM MET", "#00ff66", "verdict-pass"
     elif rr_tp1 >= 1.5:
-        grade, label, color, vclass = "marginal",  "⚠️ MARGINAL — REVIEW", "#e3b341", "verdict-warn"
+        grade, label, color, vclass = "marginal",  "⚠️ MARGINAL — REVIEW", "#ffcc00", "verdict-warn"
     else:
-        grade, label, color, vclass = "fail",      "❌ R:R BELOW MINIMUM", "#f85149", "verdict-fail"
+        grade, label, color, vclass = "fail",      "❌ R:R BELOW MINIMUM", "#ff3344", "verdict-fail"
 
     long_trade = tp1 > entry
 
@@ -229,13 +232,13 @@ def build_rr_chart(c: dict, pair: str) -> go.Figure:
     fig.add_shape(type="rect",
                   x0=0, x1=1,
                   y0=min(c["sl"], c["entry"]), y1=max(c["sl"], c["entry"]),
-                  fillcolor="rgba(248,81,73,0.13)", line_color="#f85149", line_width=1.5,
+                  fillcolor="rgba(248,81,73,0.13)", line_color="#ff3344", line_width=1.5,
                   )
     # ── TP1 zone (green) ──────────────────────────────────────────
     fig.add_shape(type="rect",
                   x0=0, x1=1,
                   y0=min(c["tp1"], c["entry"]), y1=max(c["tp1"], c["entry"]),
-                  fillcolor="rgba(63,185,80,0.13)", line_color="#3fb950", line_width=1.5,
+                  fillcolor="rgba(63,185,80,0.13)", line_color="#00ff66", line_width=1.5,
                   )
     # ── TP2 extension (lighter green) ─────────────────────────────
     fig.add_shape(type="rect",
@@ -245,7 +248,7 @@ def build_rr_chart(c: dict, pair: str) -> go.Figure:
                   line_dash="dot",
                   )
 
-    colors = {"SL":"#f85149","Entry":"#ffffff","TP1":"#3fb950","TP2":"#56d364"}
+    colors = {"SL":"#ff3344","Entry":"#ffffff","TP1":"#00ff66","TP2":"#56d364"}
     for name, val in levels.items():
         fig.add_hline(
             y=val, line_color=colors[name], line_width=2,
@@ -261,8 +264,8 @@ def build_rr_chart(c: dict, pair: str) -> go.Figure:
     mid_tp2 = (c["tp1"]   + c["tp2"]) / 2
 
     for y, text, color in [
-        (mid_sl,  f"SL: {c['sl_pips']:.1f} pips  (1R)",      "#f85149"),
-        (mid_tp1, f"TP1: {c['tp1_pips']:.1f} pips  ({c['rr_tp1']:.1f}R)", "#3fb950"),
+        (mid_sl,  f"SL: {c['sl_pips']:.1f} pips  (1R)",      "#ff3344"),
+        (mid_tp1, f"TP1: {c['tp1_pips']:.1f} pips  ({c['rr_tp1']:.1f}R)", "#00ff66"),
         (mid_tp2, f"TP2: {c['tp2_pips']:.1f} pips  ({c['rr_tp2']:.1f}R)", "#56d364"),
     ]:
         fig.add_annotation(
@@ -273,14 +276,14 @@ def build_rr_chart(c: dict, pair: str) -> go.Figure:
 
     fig.update_layout(
         height=460,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         margin=dict(l=10, r=160, t=30, b=20),
         title=dict(text=f"<b>{pair}</b> — R:R Visual Diagram",
-                   font=dict(color="#e6edf3", size=14), x=0.01),
+                   font=dict(color="#e6e6e6", size=14), x=0.01),
         xaxis=dict(showticklabels=False, showgrid=False,
                    zeroline=False, range=[0,1]),
-        yaxis=dict(showgrid=True, gridcolor="#21262d",
+        yaxis=dict(showgrid=True, gridcolor="#2a2a2a",
                    range=[y_min, y_max], zeroline=False),
         showlegend=False,
     )
@@ -299,7 +302,7 @@ def build_winrate_chart(c: dict) -> go.Figure:
     # Breakeven curve
     fig.add_trace(go.Scatter(
         x=rr_range, y=be_wr,
-        mode="lines", line=dict(color="#388bfd", width=2.5),
+        mode="lines", line=dict(color="#00ff41", width=2.5),
         name="Breakeven win rate",
         fill="tozeroy", fillcolor="rgba(56,139,253,0.07)",
     ))
@@ -307,7 +310,7 @@ def build_winrate_chart(c: dict) -> go.Figure:
     # Minimum 2:1 line
     fig.add_vline(x=2.0, line_color="rgba(227,179,65,0.40)", line_dash="dash", line_width=1.5,
                   annotation_text="Min 2:1", annotation_position="top",
-                  annotation_font=dict(size=9, color="#e3b341"))
+                  annotation_font=dict(size=9, color="#ffcc00"))
 
     # Current R:R marker
     current_be = 1/(1+c["rr_tp1"])*100 if c["rr_tp1"] else 50
@@ -315,7 +318,7 @@ def build_winrate_chart(c: dict) -> go.Figure:
         x=[c["rr_tp1"]], y=[current_be],
         mode="markers+text",
         marker=dict(size=14, color=c["color"],
-                    line=dict(color="#0d1117", width=2)),
+                    line=dict(color="#000000", width=2)),
         text=[f" {c['rr_tp1']:.2f}:1  ({current_be:.1f}% WR needed)"],
         textposition="middle right",
         textfont=dict(size=11, color=c["color"]),
@@ -324,14 +327,14 @@ def build_winrate_chart(c: dict) -> go.Figure:
 
     fig.update_layout(
         height=280,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         margin=dict(l=10, r=20, t=30, b=20),
         title=dict(text="Breakeven Win Rate required at each R:R",
-                   font=dict(color="#e6edf3", size=13), x=0.01),
-        xaxis=dict(title="R:R Ratio", gridcolor="#21262d",
+                   font=dict(color="#e6e6e6", size=13), x=0.01),
+        xaxis=dict(title="R:R Ratio", gridcolor="#2a2a2a",
                    showgrid=True, zeroline=False),
-        yaxis=dict(title="Win rate needed (%)", gridcolor="#21262d",
+        yaxis=dict(title="Win rate needed (%)", gridcolor="#2a2a2a",
                    showgrid=True, zeroline=False, range=[0, 80]),
         showlegend=False,
     )
@@ -344,27 +347,6 @@ def build_winrate_chart(c: dict) -> go.Figure:
 
 with st.sidebar:
     st.markdown("### ⚖️ R:R Calculator")
-    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
-    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -438,6 +420,8 @@ with st.sidebar:
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')} local")
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN PAGE
 # ══════════════════════════════════════════════════════════════════
@@ -453,35 +437,35 @@ c = compute_rr(
 if c["rr_tp1"] >= min_rr * 1.5:
     c["grade"]  = "excellent"
     c["label"]  = f"✅ EXCELLENT  R:R"
-    c["color"]  = "#3fb950"
+    c["color"]  = "#00ff66"
     c["vclass"] = "verdict-pass"
 elif c["rr_tp1"] >= min_rr:
     c["grade"]  = "pass"
     c["label"]  = f"✅ R:R MINIMUM MET  ({min_rr:.1f}:1)"
-    c["color"]  = "#3fb950"
+    c["color"]  = "#00ff66"
     c["vclass"] = "verdict-pass"
 elif c["rr_tp1"] >= min_rr * 0.75:
     c["grade"]  = "marginal"
     c["label"]  = f"⚠️ MARGINAL — {c['rr_tp1']:.2f}:1 (min {min_rr:.1f}:1)"
-    c["color"]  = "#e3b341"
+    c["color"]  = "#ffcc00"
     c["vclass"] = "verdict-warn"
 else:
     c["grade"]  = "fail"
     c["label"]  = f"❌ BELOW MINIMUM — {c['rr_tp1']:.2f}:1 (need {min_rr:.1f}:1)"
-    c["color"]  = "#f85149"
+    c["color"]  = "#ff3344"
     c["vclass"] = "verdict-fail"
 
 # Header
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d; border-radius:16px; padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a; border-radius:16px; padding:24px 28px;
             margin-bottom:20px;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">⚖️ R:R Calculator</div>
-  <div style="color:#8b949e; font-size:13px; margin-top:4px;">
+  <div style="font-size:24px; font-weight:700; color:#e6e6e6;">⚖️ R:R Calculator</div>
+  <div style="color:#9a9a9a; font-size:13px; margin-top:4px;">
     TP1 = {c['tp1_pips']:.1f} pips → R:R {c['rr_tp1']:.2f}:1
     {'✅' if c['rr_tp1'] >= min_rr else '❌'} · {selected_pair} · {direction}
   </div>
-  <div style="font-size:12px; color:#388bfd; margin-top:6px;">
+  <div style="font-size:12px; color:#00ff41; margin-top:6px;">
     Check #15 — R:R ≥ {min_rr:.1f}:1 to TP1 · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
@@ -525,10 +509,10 @@ with tab_scan:
 
     _sc1, _sc2, _sc3, _sc4 = st.columns(4)
     for _col, _cnt, _lbl, _clr in [
-        (_sc1, _std_n,  "≥1.0 Lot",    "#3fb950"),
-        (_sc2, _mini_n, "0.1–1.0 Lot",  "#388bfd"),
-        (_sc3, _mic_n,  "<0.1 Lot",     "#e3b341"),
-        (_sc4, _err_n,  "Errors",        "#8b949e"),
+        (_sc1, _std_n,  "≥1.0 Lot",    "#00ff66"),
+        (_sc2, _mini_n, "0.1–1.0 Lot",  "#00ff41"),
+        (_sc3, _mic_n,  "<0.1 Lot",     "#ffcc00"),
+        (_sc4, _err_n,  "Errors",        "#9a9a9a"),
     ]:
         with _col:
             st.markdown(
@@ -544,33 +528,33 @@ with tab_scan:
     for _i, _r in enumerate(_scan):
         with _gcols[_i % 3]:
             _sel  = _r["pair"] == selected_pair
-            _bclr = "#388bfd" if _sel else "#21262d"
+            _bclr = "#00ff41" if _sel else "#2a2a2a"
             if _r["status"] == "ERROR":
                 st.markdown(
-                    f'<div style="background:#161b22;border:1px solid {_bclr};'
+                    f'<div style="background:#0a0a0a;border:1px solid {_bclr};'
                     f'border-radius:10px;padding:14px;margin-bottom:10px;">'
-                    f'<div style="font-weight:700;color:#e6edf3;font-size:13px;">{_r["pair"]}</div>'
-                    f'<div style="color:#484f58;font-size:11px;margin-top:4px;">⚠️ Data unavailable</div>'
+                    f'<div style="font-weight:700;color:#e6e6e6;font-size:13px;">{_r["pair"]}</div>'
+                    f'<div style="color:#555555;font-size:11px;margin-top:4px;">⚠️ Data unavailable</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             else:
-                _lc  = "#3fb950" if _r["lot"] >= 0.10 else "#e3b341"
-                _tag = ' <span style="color:#388bfd;font-size:10px;">◀ selected</span>' if _sel else ""
+                _lc  = "#00ff66" if _r["lot"] >= 0.10 else "#ffcc00"
+                _tag = ' <span style="color:#00ff41;font-size:10px;">◀ selected</span>' if _sel else ""
                 _pfx = f"{_r['price']:.5f}" if _r["price"] < 100 else f"{_r['price']:.3f}"
                 st.markdown(
-                    f'<div style="background:#161b22;border:1px solid {_bclr};'
+                    f'<div style="background:#0a0a0a;border:1px solid {_bclr};'
                     f'border-radius:10px;padding:14px;margin-bottom:10px;">'
-                    f'<div style="font-weight:700;color:#e6edf3;font-size:13px;">{_r["pair"]}{_tag}</div>'
-                    f'<div style="font-size:11px;color:#8b949e;margin-top:2px;">{_pfx}</div>'
+                    f'<div style="font-weight:700;color:#e6e6e6;font-size:13px;">{_r["pair"]}{_tag}</div>'
+                    f'<div style="font-size:11px;color:#9a9a9a;margin-top:2px;">{_pfx}</div>'
                     f'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
-                    f'<span style="background:#0d1117;border:1px solid #30363d;border-radius:4px;'
-                    f'padding:3px 7px;font-size:11px;color:#f85149;'
+                    f'<span style="background:#000000;border:1px solid #2a2a2a;border-radius:4px;'
+                    f'padding:3px 7px;font-size:11px;color:#ff3344;'
                     f'font-family:\'JetBrains Mono\',monospace;">SL {_r["sl_pips"]:.0f}p</span>'
-                    f'<span style="background:#0d1117;border:1px solid #30363d;border-radius:4px;'
-                    f'padding:3px 7px;font-size:11px;color:#3fb950;'
+                    f'<span style="background:#000000;border:1px solid #2a2a2a;border-radius:4px;'
+                    f'padding:3px 7px;font-size:11px;color:#00ff66;'
                     f'font-family:\'JetBrains Mono\',monospace;">TP1 {_r["tp1_pips"]:.0f}p</span>'
-                    f'<span style="background:#0d1117;border:1px solid #30363d;border-radius:4px;'
+                    f'<span style="background:#000000;border:1px solid #2a2a2a;border-radius:4px;'
                     f'padding:3px 7px;font-size:11px;color:{_lc};'
                     f'font-family:\'JetBrains Mono\',monospace;">{_r["lot"]:.2f} lots</span>'
                     f'</div></div>',
@@ -610,7 +594,7 @@ with tab_detail:
                   font-family:'JetBrains Mono',monospace; margin:8px 0;">
         {c['rr_tp1']:.2f} : 1
       </div>
-      <div style="font-size:13px; color:#8b949e; margin-bottom:14px;">
+      <div style="font-size:13px; color:#9a9a9a; margin-bottom:14px;">
         TP1 = {c['tp1_pips']:.1f} pips &nbsp;·&nbsp;
         SL  = {c['sl_pips']:.1f} pips &nbsp;·&nbsp;
         Min required = {min_rr:.1f}:1
@@ -619,7 +603,7 @@ with tab_detail:
       <!-- R:R bar -->
       <div style="margin:0 auto; max-width:600px;">
         <div style="display:flex; justify-content:space-between;
-                    font-size:11px; color:#8b949e; margin-bottom:4px;">
+                    font-size:11px; color:#9a9a9a; margin-bottom:4px;">
           <span>Risk (SL)</span><span>Reward (TP1)</span>
         </div>
         <div class="rr-track">
@@ -634,7 +618,7 @@ with tab_detail:
             {rew_seg:.0f}%
           </div>
         </div>
-        <div style="font-size:10px; color:#484f58; text-align:left; margin-top:2px;">
+        <div style="font-size:10px; color:#555555; text-align:left; margin-top:2px;">
           ▲ Min {min_rr:.1f}:1 threshold at {min_mark:.0f}% / {100-min_mark:.0f}%
         </div>
       </div>
@@ -647,10 +631,10 @@ with tab_detail:
     for col, val, lbl, color in [
         (k1, f"{c['rr_tp1']:.2f}:1",       "R:R to TP1",         rr_color),
         (k2, f"{c['rr_tp2']:.2f}:1",       "R:R to TP2",         "#56d364"),
-        (k3, f"{c['sl_pips']:.1f}",        "SL (pips)",          "#f85149"),
-        (k4, f"{c['tp1_pips']:.1f}",       "TP1 (pips)",         "#3fb950"),
+        (k3, f"{c['sl_pips']:.1f}",        "SL (pips)",          "#ff3344"),
+        (k4, f"{c['tp1_pips']:.1f}",       "TP1 (pips)",         "#00ff66"),
         (k5, f"{c['tp2_pips']:.1f}",       "TP2 (pips)",         "#56d364"),
-        (k6, f"{c['be_winrate_tp1']:.1f}%", "Breakeven Win Rate", "#388bfd"),
+        (k6, f"{c['be_winrate_tp1']:.1f}%", "Breakeven Win Rate", "#00ff41"),
     ]:
         with col:
             st.markdown(
@@ -669,13 +653,13 @@ with tab_detail:
     with col_left:
         st.markdown('<div class="section-title">📐 Trade Levels</div>', unsafe_allow_html=True)
         dir_icon = "🔼" if c["long_trade"] else "🔽"
-        dir_col  = "#3fb950" if c["long_trade"] else "#f85149"
+        dir_col  = "#00ff66" if c["long_trade"] else "#ff3344"
 
-        def lvl_row(label, val, extra="", color="#c9d1d9"):
+        def lvl_row(label, val, extra="", color="#e6e6e6"):
             return (f'<div class="lvl-row">'
                     f'<span class="lvl-label">{label}</span>'
                     f'<span class="lvl-val" style="color:{color};">{val}'
-                    f'<span style="color:#8b949e;font-size:11px;font-weight:400;">'
+                    f'<span style="color:#9a9a9a;font-size:11px;font-weight:400;">'
                     f'&nbsp;&nbsp;{extra}</span></span></div>')
 
         st.markdown(f"""
@@ -683,14 +667,14 @@ with tab_detail:
           <div class="card-header">{dir_icon} {direction} — {selected_pair}</div>
           {lvl_row("Entry",  f"{c['entry']:.5f}", "", "#ffffff")}
           {lvl_row("Stop Loss", f"{c['sl']:.5f}",
-                   f"−{c['sl_pips']:.1f} pips  (1R)", "#f85149")}
+                   f"−{c['sl_pips']:.1f} pips  (1R)", "#ff3344")}
           {lvl_row("TP1",  f"{c['tp1']:.5f}",
                    f"+{c['tp1_pips']:.1f} pips  ({c['rr_tp1']:.2f}R)",
-                   "#3fb950" if c['rr_tp1'] >= min_rr else "#e3b341")}
+                   "#00ff66" if c['rr_tp1'] >= min_rr else "#ffcc00")}
           {lvl_row("TP2",  f"{c['tp2']:.5f}",
                    f"+{c['tp2_pips']:.1f} pips  ({c['rr_tp2']:.2f}R)", "#56d364")}
           {lvl_row("Lot size", f"{c['lot_size']:.2f} lots",
-                   f"${c['risk_amt']:.2f} risk ({risk_pct}%)", "#388bfd")}
+                   f"${c['risk_amt']:.2f} risk ({risk_pct}%)", "#00ff41")}
           {lvl_row(f"Partial close ({partial_pct}%)",
                    f"{c['partial_lots']:.2f} lots at TP1", "", "#a29bfe")}
           {lvl_row(f"Runner ({100-partial_pct}%)",
@@ -706,42 +690,42 @@ with tab_detail:
         sl_usd   = c["lot_size"]     * c["sl_pips"]  * pip_val
         total    = tp1_usd + tp2_usd
 
-        pnl_color = "#3fb950" if c["rr_tp1"] >= min_rr else "#f85149"
+        pnl_color = "#00ff66" if c["rr_tp1"] >= min_rr else "#ff3344"
 
         st.markdown(f"""
         <div class="card">
           <div class="card-header">💵 Projected P&L</div>
           <div style="display:flex; justify-content:space-between; align-items:center;
-                      padding:12px 0; border-bottom:1px solid #21262d;">
-            <span style="color:#8b949e; font-size:13px;">
+                      padding:12px 0; border-bottom:1px solid #2a2a2a;">
+            <span style="color:#9a9a9a; font-size:13px;">
               TP1 profit &nbsp;({partial_pct}% of position)
             </span>
             <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
-                         color:#3fb950; font-size:15px;">+${tp1_usd:.2f}</span>
+                         color:#00ff66; font-size:15px;">+${tp1_usd:.2f}</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center;
-                      padding:12px 0; border-bottom:1px solid #21262d;">
-            <span style="color:#8b949e; font-size:13px;">
+                      padding:12px 0; border-bottom:1px solid #2a2a2a;">
+            <span style="color:#9a9a9a; font-size:13px;">
               TP2 profit &nbsp;({100-partial_pct}% of position)
             </span>
             <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
                          color:#56d364; font-size:15px;">+${tp2_usd:.2f}</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center;
-                      padding:12px 0; border-bottom:1px solid #21262d;">
-            <span style="color:#8b949e; font-size:13px;">Total profit (both TPs hit)</span>
+                      padding:12px 0; border-bottom:1px solid #2a2a2a;">
+            <span style="color:#9a9a9a; font-size:13px;">Total profit (both TPs hit)</span>
             <span style="font-family:'JetBrains Mono',monospace; font-weight:800;
-                         color:#3fb950; font-size:17px;">+${total:.2f}</span>
+                         color:#00ff66; font-size:17px;">+${total:.2f}</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center;
-                      padding:12px 0; border-bottom:1px solid #21262d;">
-            <span style="color:#8b949e; font-size:13px;">Max loss (SL hit)</span>
+                      padding:12px 0; border-bottom:1px solid #2a2a2a;">
+            <span style="color:#9a9a9a; font-size:13px;">Max loss (SL hit)</span>
             <span style="font-family:'JetBrains Mono',monospace; font-weight:700;
-                         color:#f85149; font-size:15px;">−${sl_usd:.2f}</span>
+                         color:#ff3344; font-size:15px;">−${sl_usd:.2f}</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center;
                       padding:14px 0 4px 0;">
-            <span style="color:#c9d1d9; font-size:13px; font-weight:600;">
+            <span style="color:#e6e6e6; font-size:13px; font-weight:600;">
               Net profit-to-risk ratio
             </span>
             <span style="font-family:'JetBrains Mono',monospace; font-weight:800;
@@ -804,11 +788,11 @@ with tab_detail:
     with col_a:
         st.markdown(f"""
         <div class="explainer">
-        <b style="color:#388bfd;">⚖️ Why R:R ≥ {min_rr:.1f}:1 matters</b><br><br>
-        At a {min_rr:.1f}:1 R:R, you only need to be right <b style="color:#c9d1d9;">
+        <b style="color:#00ff41;">⚖️ Why R:R ≥ {min_rr:.1f}:1 matters</b><br><br>
+        At a {min_rr:.1f}:1 R:R, you only need to be right <b style="color:#e6e6e6;">
         {1/(1+min_rr)*100:.0f}%</b> of the time to break even.<br><br>
         At a 2:1 R:R with a 40% win rate, 100 trades produce:<br>
-        40 wins × $200 − 60 losses × $100 = <b style="color:#3fb950;">+$2,000 net profit</b>.<br><br>
+        40 wins × $200 − 60 losses × $100 = <b style="color:#00ff66;">+$2,000 net profit</b>.<br><br>
         This is why a losing strategy can still be profitable — the R:R multiplies
         every winning trade relative to every loss. A minimum of 2:1 gives you
         enough margin to absorb losses while staying net positive.
@@ -818,12 +802,12 @@ with tab_detail:
     with col_b:
         st.markdown(f"""
         <div class="explainer">
-        <b style="color:#388bfd;">📐 How to use this checker</b><br><br>
+        <b style="color:#00ff41;">📐 How to use this checker</b><br><br>
         <b>1.</b> Fetch the live price (⚡ button in sidebar) or enter your entry manually.<br><br>
         <b>2.</b> Enter your SL in pips — pulled from Check #14 (ATR-based stop structure).<br><br>
         <b>3.</b> TP1 = at least {min_rr:.1f}× the SL distance.
         TP2 = 3× the SL distance for the runner.<br><br>
-        <b>4.</b> If R:R is below {min_rr:.1f}:1 → <b style="color:#f85149;">do not take the trade.</b>
+        <b>4.</b> If R:R is below {min_rr:.1f}:1 → <b style="color:#ff3344;">do not take the trade.</b>
         Widen the TP target or wait for a closer entry.<br><br>
         This is <em>Check #15</em>. Must pass before confirming position size in Check #18.
         </div>
@@ -838,14 +822,14 @@ with tab_detail:
     R:R to TP2 &nbsp;= &nbsp;{c['tp2_pips']:.1f} pips ÷ {c['sl_pips']:.1f} pips
     &nbsp;= &nbsp;<b style="color:#56d364;">{c['rr_tp2']:.2f} : 1</b><br>
     Breakeven &nbsp;&nbsp;= &nbsp;1 ÷ (1 + {c['rr_tp1']:.2f})
-    &nbsp;= &nbsp;<b style="color:#388bfd;">{c['be_winrate_tp1']:.1f}% win rate needed</b>
+    &nbsp;= &nbsp;<b style="color:#00ff41;">{c['be_winrate_tp1']:.1f}% win rate needed</b>
     </div>
     """, unsafe_allow_html=True)
 
     # Footer
     st.markdown("""
-    <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-                padding-top:16px;border-top:1px solid #21262d;">
+    <div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+                padding-top:16px;border-top:1px solid #2a2a2a;">
       ⚖️ R:R Calculator · Check #15 · Risk to Reward · For educational purposes only
     </div>
     """, unsafe_allow_html=True)
