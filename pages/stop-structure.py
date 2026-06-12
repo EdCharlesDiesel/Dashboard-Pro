@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -13,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS ────────────────────────────────────────────────────────────
 st.markdown("""
@@ -25,58 +28,58 @@ st.markdown("""
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
     .stApp{ background:var(--background-color); }
-    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
-    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px;
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#2a2a2a); border-radius:12px;
            padding:20px; margin-bottom:16px; }
     .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em;
-                  text-transform:uppercase; color:#8b949e; margin-bottom:14px; }
-    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px;
+                  text-transform:uppercase; color:#9a9a9a; margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#2a2a2a); border-radius:8px;
                  padding:14px; text-align:center; }
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
-    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500;
+    .metric-label{ font-size:11px; color:var(--muted,#9a9a9a); margin-top:2px; font-weight:500;
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color);
-                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px;
+                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #00ff41; }
+    .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:10px;
                  margin:6px 0 2px 0; overflow:hidden; }
 
     /* SL level cards */
     .sl-card{ border-radius:12px; padding:20px 24px; margin-bottom:12px; }
     .sl-card-long { background:linear-gradient(135deg,#0a2918,#0d3a1f);
-                    border:1px solid #238636; border-left:4px solid #3fb950; }
+                    border:1px solid #00a32a; border-left:4px solid #00ff66; }
     .sl-card-short{ background:linear-gradient(135deg,#2a0a0a,#3a0d0d);
-                    border:1px solid #8b2d2d; border-left:4px solid #f85149; }
+                    border:1px solid #8b2d2d; border-left:4px solid #ff3344; }
 
     /* Structure level table rows */
     .str-row{ display:flex; justify-content:space-between; align-items:center;
-              padding:9px 14px; border-bottom:1px solid #21262d;
+              padding:9px 14px; border-bottom:1px solid #2a2a2a;
               font-size:13px; }
     .str-row:last-child{ border-bottom:none; }
-    .str-label{ color:#8b949e; }
-    .str-val  { font-family:monospace; font-weight:600; color:#c9d1d9; }
+    .str-label{ color:#9a9a9a; }
+    .str-val  { font-family:monospace; font-weight:600; color:#e6e6e6; }
 
     /* Verdict banners */
     .verdict-long { background:linear-gradient(135deg,#0d3a1f,#0d5e32);
-                    border:2px solid #238636; border-radius:14px;
+                    border:2px solid #00a32a; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-short{ background:linear-gradient(135deg,#3a0d0d,#5e1414);
                     border:2px solid #8b2d2d; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
-    .verdict-none { background:linear-gradient(135deg,#161b22,#1c2128);
-                    border:1px solid #30363d; border-radius:14px;
+    .verdict-none { background:linear-gradient(135deg,#0a0a0a,#1c2128);
+                    border:1px solid #2a2a2a; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
 
     .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
-                border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
-    .formula-box{ background:#0d1117; border:1px solid #30363d; border-radius:8px;
+                border-left:3px solid #00ff41; border-radius:8px;
+                padding:14px 18px; font-size:13px; color:var(--muted,#9a9a9a); line-height:1.7; }
+    .formula-box{ background:#000000; border:1px solid #2a2a2a; border-radius:8px;
                   padding:14px 18px; font-family:monospace; font-size:13px;
-                  color:#c9d1d9; margin:10px 0; line-height:2; }
+                  color:#e6e6e6; margin:10px 0; line-height:2; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -101,9 +104,9 @@ INSTRUMENTS = {
     "USD/ZAR":    {"ticker": "USDZAR=X", "pip": 0.55,  "pip_size": 0.0001},
     "EUR/ZAR":    {"ticker": "EURZAR=X", "pip": 0.55,  "pip_size": 0.0001},
     "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip": 0.55,  "pip_size": 0.0001},
-    "🥇 Gold":    {"ticker": "GC=F",     "pip": 10.0,  "pip_size": 0.10},
-    "🥈 Silver":  {"ticker": "SI=F",     "pip": 10.0,  "pip_size": 0.01},
-    "🪙 Platinum":{"ticker": "PL=F",     "pip": 10.0,  "pip_size": 0.10},
+    "XAU/USD":    {"ticker": "GC=F",     "pip": 10.0,  "pip_size": 0.10},
+    "XAG/USD":  {"ticker": "SI=F",     "pip": 10.0,  "pip_size": 0.01},
+    "XPT/USD":{"ticker": "PL=F",     "pip": 10.0,  "pip_size": 0.10},
 }
 
 
@@ -285,7 +288,7 @@ def build_chart(df: pd.DataFrame, pair: str,
         x=plot.index,
         open=plot["Open"], high=plot["High"],
         low=plot["Low"],   close=plot["Close"],
-        increasing_line_color="#3fb950", decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63,185,80,0.20)", decreasing_fillcolor="rgba(248,81,73,0.20)",
         name="Daily", showlegend=False,
     ), row=1, col=1)
@@ -317,11 +320,11 @@ def build_chart(df: pd.DataFrame, pair: str,
             x=sh_plot.index,
             y=sh_plot["High"] * 1.0005,
             mode="markers+text",
-            marker=dict(symbol="triangle-down", size=10, color="#f85149",
-                        line=dict(color="#0d1117", width=1)),
+            marker=dict(symbol="triangle-down", size=10, color="#ff3344",
+                        line=dict(color="#000000", width=1)),
             text=["SH"] * len(sh_plot),
             textposition="top center",
-            textfont=dict(size=8, color="#f85149"),
+            textfont=dict(size=8, color="#ff3344"),
             name="Swing High",
         ), row=1, col=1)
 
@@ -330,11 +333,11 @@ def build_chart(df: pd.DataFrame, pair: str,
             x=sl_plot.index,
             y=sl_plot["Low"] * 0.9995,
             mode="markers+text",
-            marker=dict(symbol="triangle-up", size=10, color="#3fb950",
-                        line=dict(color="#0d1117", width=1)),
+            marker=dict(symbol="triangle-up", size=10, color="#00ff66",
+                        line=dict(color="#000000", width=1)),
             text=["SL"] * len(sl_plot),
             textposition="bottom center",
-            textfont=dict(size=8, color="#3fb950"),
+            textfont=dict(size=8, color="#00ff66"),
             name="Swing Low",
         ), row=1, col=1)
 
@@ -364,51 +367,51 @@ def build_chart(df: pd.DataFrame, pair: str,
         fig.add_hrect(
             y0=calc["sl_long"] - calc["atr_buf"],
             y1=calc["sl_long"] + calc["atr_buf"],
-            fillcolor="#f85149", opacity=0.08, line_width=0, row=1, col=1,
+            fillcolor="#ff3344", opacity=0.08, line_width=0, row=1, col=1,
         )
-        hline(calc["sl_long"],   "#f85149", "dash",  2.0,
+        hline(calc["sl_long"],   "#ff3344", "dash",  2.0,
               f"SL LONG  {calc['sl_long']:.5f}  ({calc['sl_long_pips']:.0f} pips)")
-        hline(calc["tp1_long"],  "#3fb950", "dot",   1.5,
+        hline(calc["tp1_long"],  "#00ff66", "dot",   1.5,
               f"TP1  {calc['tp1_long']:.5f}  ({calc['tp1_pips']:.0f} pips)")
         hline(calc["tp2_long"],  "#56d364", "dot",   1.0,
               f"TP2  {calc['tp2_long']:.5f}  ({calc['tp2_pips']:.0f} pips)")
 
         # Structural SL anchor
         if calc["struct_sl"]:
-            hline(calc["struct_sl"], "#e3b341", "longdash", 1.0,
+            hline(calc["struct_sl"], "#ffcc00", "longdash", 1.0,
                   f"Swing Low  {calc['struct_sl']:.5f}", pos="left")
 
     if direction in ("SHORT", "BOTH"):
         fig.add_hrect(
             y0=calc["sl_short"] - calc["atr_buf"],
             y1=calc["sl_short"] + calc["atr_buf"],
-            fillcolor="#f85149", opacity=0.08, line_width=0, row=1, col=1,
+            fillcolor="#ff3344", opacity=0.08, line_width=0, row=1, col=1,
         )
-        hline(calc["sl_short"],  "#f85149", "dash",  2.0,
+        hline(calc["sl_short"],  "#ff3344", "dash",  2.0,
               f"SL SHORT  {calc['sl_short']:.5f}  ({calc['sl_short_pips']:.0f} pips)")
-        hline(calc["tp1_short"], "#3fb950", "dot",   1.5,
+        hline(calc["tp1_short"], "#00ff66", "dot",   1.5,
               f"TP1  {calc['tp1_short']:.5f}  ({calc['tp1_pips']:.0f} pips)")
         hline(calc["tp2_short"], "#56d364", "dot",   1.0,
               f"TP2  {calc['tp2_short']:.5f}  ({calc['tp2_pips']:.0f} pips)")
 
         if calc["struct_sh"]:
-            hline(calc["struct_sh"], "#e3b341", "longdash", 1.0,
+            hline(calc["struct_sh"], "#ffcc00", "longdash", 1.0,
                   f"Swing High  {calc['struct_sh']:.5f}", pos="left")
 
     fig.update_layout(
         height=620,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         legend=dict(
-            bgcolor="rgba(13,17,23,0.60)", bordercolor="#21262d", borderwidth=1,
+            bgcolor="rgba(13,17,23,0.60)", bordercolor="#2a2a2a", borderwidth=1,
             font=dict(size=10), orientation="h",
             yanchor="bottom", y=1.01, xanchor="left", x=0,
         ),
         margin=dict(l=10, r=170, t=10, b=10),
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(gridcolor="#21262d", showgrid=False)
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(gridcolor="#2a2a2a", showgrid=False)
     return fig
 
 
@@ -418,27 +421,6 @@ def build_chart(df: pd.DataFrame, pair: str,
 
 with st.sidebar:
     st.markdown("### 🛡️ Stop Below/Above Structure")
-    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
-    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -479,6 +461,8 @@ with st.sidebar:
     st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')} local")
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN PAGE
 # ══════════════════════════════════════════════════════════════════
@@ -489,16 +473,16 @@ pip_size = inst["pip_size"]
 pip_val  = inst["pip"]
 
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d; border-radius:16px; padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a; border-radius:16px; padding:24px 28px;
             margin-bottom:20px;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">
+  <div style="font-size:24px; font-weight:700; color:#e6e6e6;">
     🛡️ Stop Below / Above Structure
   </div>
-  <div style="color:#8b949e; font-size:13px; margin-top:4px;">
+  <div style="color:#9a9a9a; font-size:13px; margin-top:4px;">
     SL = {atr_mult}× ATR({int(atr_period)}) placed beyond the nearest swing structure · {selected_pair}
   </div>
-  <div style="font-size:12px; color:#388bfd; margin-top:6px;">
+  <div style="font-size:12px; color:#00ff41; margin-top:6px;">
     Check #14 — Stop placement · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
@@ -506,7 +490,7 @@ st.markdown(f"""
 
 def level_row(label, value, extra=""):
     return (f'<div class="str-row"><span class="str-label">{label}</span>'
-            f'<span class="str-val">{value}&nbsp;&nbsp;<span style="color:#8b949e;'
+            f'<span class="str-val">{value}&nbsp;&nbsp;<span style="color:#9a9a9a;'
             f'font-size:11px;">{extra}</span></span></div>')
 
 
@@ -567,10 +551,10 @@ with tab_scan:
 
     sc1, sc2, sc3, sc4 = st.columns(4)
     for col_, val_, lbl_, c_ in [
-        (sc1, cnt_both,    "Both Structures",  "#3fb950"),
+        (sc1, cnt_both,    "Both Structures",  "#00ff66"),
         (sc2, cnt_long_s,  "Long Struct Only",  "#56d364"),
-        (sc3, cnt_short_s, "Short Struct Only", "#f85149"),
-        (sc4, cnt_atr,     "ATR Fallback",      "#484f58"),
+        (sc3, cnt_short_s, "Short Struct Only", "#ff3344"),
+        (sc4, cnt_atr,     "ATR Fallback",      "#555555"),
     ]:
         with col_:
             st.markdown(
@@ -587,38 +571,38 @@ with tab_scan:
     for i, r in enumerate(scan_results):
         pair_name = r["pair"]
         is_sel    = pair_name == selected_pair
-        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
+        border    = "border:2px solid #00ff41;" if is_sel else "border:1px solid #2a2a2a;"
 
         if not r.get("ok"):
-            card_body = '<span style="font-size:11px;color:#f85149;">No data</span>'
+            card_body = '<span style="font-size:11px;color:#ff3344;">No data</span>'
         else:
             l_note = "struct" if r["use_struct_l"] else "ATR"
             s_note = "struct" if r["use_struct_s"] else "ATR"
-            l_col  = "#3fb950" if r["use_struct_l"] else "#484f58"
-            s_col  = "#f85149" if r["use_struct_s"] else "#484f58"
+            l_col  = "#00ff66" if r["use_struct_l"] else "#555555"
+            s_col  = "#ff3344" if r["use_struct_s"] else "#555555"
             rr_l   = r["rr_tp1_long"]
             rr_s   = r["rr_tp1_short"]
-            rr_l_c = "#3fb950" if rr_l >= 2 else "#e3b341"
-            rr_s_c = "#3fb950" if rr_s >= 2 else "#e3b341"
+            rr_l_c = "#00ff66" if rr_l >= 2 else "#ffcc00"
+            rr_s_c = "#00ff66" if rr_s >= 2 else "#ffcc00"
             card_body = (
                 f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
-                f'<span style="font-size:11px;color:#8b949e;font-family:monospace;">{r["price"]:,.4f}</span>'
+                f'<span style="font-size:13px;font-weight:600;color:#e6e6e6;">{pair_name}</span>'
+                f'<span style="font-size:11px;color:#9a9a9a;font-family:monospace;">{r["price"]:,.4f}</span>'
                 f'</div>'
                 f'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-                f'<span style="font-size:11px;color:#8b949e;">🔼 SL <span style="color:{l_col};font-family:monospace;">{r["sl_long_pips"]:.0f}p</span> '
-                f'<span style="font-size:10px;color:#484f58;">({l_note})</span> '
+                f'<span style="font-size:11px;color:#9a9a9a;">🔼 SL <span style="color:{l_col};font-family:monospace;">{r["sl_long_pips"]:.0f}p</span> '
+                f'<span style="font-size:10px;color:#555555;">({l_note})</span> '
                 f'<span style="color:{rr_l_c};font-size:10px;">R:{rr_l:.1f}</span></span>'
-                f'<span style="font-size:11px;color:#8b949e;">🔽 SL <span style="color:{s_col};font-family:monospace;">{r["sl_short_pips"]:.0f}p</span> '
-                f'<span style="font-size:10px;color:#484f58;">({s_note})</span> '
+                f'<span style="font-size:11px;color:#9a9a9a;">🔽 SL <span style="color:{s_col};font-family:monospace;">{r["sl_short_pips"]:.0f}p</span> '
+                f'<span style="font-size:10px;color:#555555;">({s_note})</span> '
                 f'<span style="color:{rr_s_c};font-size:10px;">R:{rr_s:.1f}</span></span>'
                 f'</div>'
-                f'<div style="font-size:10px;color:#484f58;margin-top:4px;">ATR {r["atr14"]:.5f}</div>'
+                f'<div style="font-size:10px;color:#555555;margin-top:4px;">ATR {r["atr14"]:.5f}</div>'
             )
 
         with cols3[i % 3]:
             st.markdown(
-                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'<div style="background:#0a0a0a;{border}border-radius:8px;'
                 f'padding:12px 14px;margin-bottom:8px;">{card_body}</div>',
                 unsafe_allow_html=True)
 
@@ -662,12 +646,12 @@ with tab_detail:
         # ── KPI strip ────────────────────────────────
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         for col_, val_, lbl_, c_ in [
-            (k1, f"{calc['price']:.5f}",      "Current Price",           "#c9d1d9"),
-            (k2, f"{calc['atr14']:.5f}",      f"ATR ({int(atr_period)})", "#388bfd"),
-            (k3, f"{calc['sl_pips']:.1f}",    f"SL Pips ({atr_mult}×ATR)","#f85149"),
-            (k4, f"{calc['tp1_pips']:.1f}",   "TP1 Pips (2:1)",          "#3fb950"),
+            (k1, f"{calc['price']:.5f}",      "Current Price",           "#e6e6e6"),
+            (k2, f"{calc['atr14']:.5f}",      f"ATR ({int(atr_period)})", "#00ff41"),
+            (k3, f"{calc['sl_pips']:.1f}",    f"SL Pips ({atr_mult}×ATR)","#ff3344"),
+            (k4, f"{calc['tp1_pips']:.1f}",   "TP1 Pips (2:1)",          "#00ff66"),
             (k5, f"{calc['tp2_pips']:.1f}",   "TP2 Pips (3:1)",          "#56d364"),
-            (k6, f"${calc['risk_amount']:.2f}","Risk Amount",             "#e3b341"),
+            (k6, f"${calc['risk_amount']:.2f}","Risk Amount",             "#ffcc00"),
         ]:
             with col_:
                 st.markdown(
@@ -688,7 +672,7 @@ with tab_detail:
             with col_l:
                 st.markdown(f"""
                 <div class="sl-card sl-card-long">
-                  <div style="font-size:15px;font-weight:700;color:#3fb950;margin-bottom:14px;">🔼 LONG Setup</div>
+                  <div style="font-size:15px;font-weight:700;color:#00ff66;margin-bottom:14px;">🔼 LONG Setup</div>
                   {level_row("Entry (current price)", f"{calc['price']:.5f}")}
                   {level_row("Nearest swing low", f"{calc['struct_sl']:.5f}" if calc['struct_sl'] else "—", "structural anchor")}
                   {level_row(f"Stop Loss  ({calc['sl_long_pips']:.0f} pips)", f"{calc['sl_long']:.5f}", struct_note + " + buffer")}
@@ -703,7 +687,7 @@ with tab_detail:
             with col_r if direction == "BOTH" else col_l:
                 st.markdown(f"""
                 <div class="sl-card sl-card-short">
-                  <div style="font-size:15px;font-weight:700;color:#f85149;margin-bottom:14px;">🔽 SHORT Setup</div>
+                  <div style="font-size:15px;font-weight:700;color:#ff3344;margin-bottom:14px;">🔽 SHORT Setup</div>
                   {level_row("Entry (current price)", f"{calc['price']:.5f}")}
                   {level_row("Nearest swing high", f"{calc['struct_sh']:.5f}" if calc['struct_sh'] else "—", "structural anchor")}
                   {level_row(f"Stop Loss  ({calc['sl_short_pips']:.0f} pips)", f"{calc['sl_short']:.5f}", struct_note + " + buffer")}
@@ -744,7 +728,7 @@ with tab_detail:
         with col_a:
             st.markdown(f"""
             <div class="explainer">
-            <b style="color:#3fb950;">🔼 LONG — SL below structure</b><br><br>
+            <b style="color:#00ff66;">🔼 LONG — SL below structure</b><br><br>
             <b>Step 1 — Identify swing low</b><br>
             Find the most recent confirmed swing low on the daily chart.
             This is the structural level the market has already rejected — it acts as natural support.<br><br>
@@ -759,7 +743,7 @@ with tab_detail:
         with col_b:
             st.markdown(f"""
             <div class="explainer">
-            <b style="color:#f85149;">🔽 SHORT — SL above structure</b><br><br>
+            <b style="color:#ff3344;">🔽 SHORT — SL above structure</b><br><br>
             <b>Step 1 — Identify swing high</b><br>
             Find the most recent confirmed swing high on the daily chart.
             This is where the market rejected higher prices — it acts as natural resistance.<br><br>
@@ -776,34 +760,34 @@ with tab_detail:
         <div class="formula-box">
         ATR SL distance &nbsp;= &nbsp;ATR({int(atr_period)}) &nbsp;×&nbsp; {atr_mult} &nbsp;= &nbsp;
         {calc['atr14']:.5f} × {atr_mult} &nbsp;= &nbsp;
-        <b style="color:#f85149;">{calc['atr14'] * float(atr_mult):.5f} &nbsp; ({calc['sl_pips']:.1f} pips)</b>
+        <b style="color:#ff3344;">{calc['atr14'] * float(atr_mult):.5f} &nbsp; ({calc['sl_pips']:.1f} pips)</b>
         <br>
         SL LONG  &nbsp;= &nbsp;Entry &nbsp;−&nbsp; ATR SL distance
         &nbsp;=&nbsp; {calc['price']:.5f} − {calc['atr14'] * float(atr_mult):.5f}
-        &nbsp;=&nbsp; <b style="color:#f85149;">{calc['sl_long']:.5f}</b>
+        &nbsp;=&nbsp; <b style="color:#ff3344;">{calc['sl_long']:.5f}</b>
         <br>
         SL SHORT &nbsp;= &nbsp;Entry &nbsp;+&nbsp; ATR SL distance
         &nbsp;=&nbsp; {calc['price']:.5f} + {calc['atr14'] * float(atr_mult):.5f}
-        &nbsp;=&nbsp; <b style="color:#f85149;">{calc['sl_short']:.5f}</b>
+        &nbsp;=&nbsp; <b style="color:#ff3344;">{calc['sl_short']:.5f}</b>
         <br>
         TP1 &nbsp;= &nbsp;SL distance × 2.0 &nbsp;= &nbsp;
-        <b style="color:#3fb950;">{calc['tp1_pips']:.1f} pips</b> &nbsp;&nbsp;
+        <b style="color:#00ff66;">{calc['tp1_pips']:.1f} pips</b> &nbsp;&nbsp;
         TP2 &nbsp;= &nbsp;SL distance × 3.0 &nbsp;= &nbsp;
         <b style="color:#56d364;">{calc['tp2_pips']:.1f} pips</b>
         <br>
         Lot size &nbsp;= &nbsp;Risk $ ÷ (SL pips × pip value)
         &nbsp;= &nbsp;${calc['risk_amount']:.2f} ÷ ({calc['sl_pips']:.1f} × {pip_val})
-        &nbsp;= &nbsp;<b style="color:#388bfd;">{calc['lot_long']:.2f} lots</b>
+        &nbsp;= &nbsp;<b style="color:#00ff41;">{calc['lot_long']:.2f} lots</b>
         </div>
-        <div style="font-size:11px;color:#484f58;margin-top:6px;">
+        <div style="font-size:11px;color:#555555;margin-top:6px;">
           ⚠️ If structure-based SL is more than 3× ATR away from price the calculator falls back to
           the pure ATR-based distance. Adjust the pivot lookback in the sidebar if needed.
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("""
-        <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-                    padding-top:16px;border-top:1px solid #21262d;">
+        <div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+                    padding-top:16px;border-top:1px solid #2a2a2a;">
           🛡️ Stop Below/Above Structure · Check #14 · ATR-based SL beyond swing structure · For educational purposes only
         </div>
         """, unsafe_allow_html=True)

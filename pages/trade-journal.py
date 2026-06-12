@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -13,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 st.markdown("""
 <style>
@@ -24,18 +27,18 @@ st.markdown("""
     }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     .stApp{background:var(--background-color);}
-    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
-    .card{background:var(--secondary-background-color);border:1px solid var(--border,#21262d);border-radius:12px;padding:20px;margin-bottom:16px;}
-    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#8b949e;margin-bottom:14px;}
-    .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
+    .card{background:var(--secondary-background-color);border:1px solid var(--border,#2a2a2a);border-radius:12px;padding:20px;margin-bottom:16px;}
+    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a;margin-bottom:14px;}
+    .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
     .hero::before{content:'';position:absolute;top:-40%;right:-5%;width:300px;height:300px;background:radial-gradient(circle,rgba(56,139,253,.07) 0%,transparent 70%);border-radius:50%;}
-    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:14px;text-align:center;}
-    .metric-value{font-size:22px;font-weight:700;color:#c9d1d9;}
-    .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
-    .section-title{font-size:15px;font-weight:700;color:#e6edf3;margin:20px 0 12px 0;padding-left:4px;border-left:3px solid #388bfd;}
-    .outcome-win{background:#0d2f1a;color:#3fb950;border:1px solid #238636;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
-    .outcome-loss{background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
-    .outcome-be{background:#1a1a0d;color:#e3b341;border:1px solid #9e6a03;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:14px;text-align:center;}
+    .metric-value{font-size:22px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    .section-title{font-size:15px;font-weight:700;color:#e6e6e6;margin:20px 0 12px 0;padding-left:4px;border-left:3px solid #00ff41;}
+    .outcome-win{background:#0d2f1a;color:#00ff66;border:1px solid #00a32a;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
+    .outcome-loss{background:#2f0d0d;color:#ff3344;border:1px solid #8b2d2d;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
+    .outcome-be{background:#1a1a0d;color:#ffcc00;border:1px solid #9e6a03;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
@@ -85,27 +88,6 @@ def load_journal_trades(cfg, limit: int = 500):
 
 with st.sidebar:
     st.markdown("### 📓 Trade Journal")
-    st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
-    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
-    st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
-    st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
-    st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
-    st.page_link("pages/atr-volatility.py",       label="05. ATR Volatility",       icon="📊")
-    st.page_link("pages/weekly-ema.py",           label="06. Weekly EMA",           icon="📉")
-    st.page_link("pages/weekly-rsi.py",           label="07. Weekly RSI",           icon="📡")
-    st.page_link("pages/weekly-swing.py",         label="08. Weekly Swing",         icon="🔄")
-    st.page_link("pages/daily-trend.py",          label="09. Daily Trend",          icon="📈")
-    st.page_link("pages/daily-macd.py",           label="10. Daily MACD",           icon="📊")
-    st.page_link("pages/4H-confluence-zone.py",   label="11. 4H Confluence Zone",   icon="🎯")
-    st.page_link("pages/confluence-checker.py",   label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py",        label="13. 15M Rejection",        icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py",     label="14. 15M Entry Signal",     icon="⚡")
-    st.page_link("pages/stop-structure.py",       label="15. Stop Structure",       icon="🛡️")
-    st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
-    st.page_link("pages/trade-journal.py",        label="17. Trade Journal",        icon="📓")
-    st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     st.markdown("**🗄️ PostgreSQL Database**")
     _host = st.text_input("Host",     value=st.session_state.get("db_host", "localhost"), key="jdb_host")
@@ -133,17 +115,19 @@ with st.sidebar:
         st.rerun()
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════
 
 st.markdown(f"""
 <div class="hero">
-  <div style="font-size:26px;font-weight:700;color:#e6edf3;">📓 Trade Journal</div>
-  <div style="color:#8b949e;font-size:13px;margin-top:4px;">
+  <div style="font-size:26px;font-weight:700;color:#e6e6e6;">📓 Trade Journal</div>
+  <div style="color:#9a9a9a;font-size:13px;margin-top:4px;">
     Equity Curve · Performance Breakdown · Win Rate Feedback Loop
   </div>
-  <div style="font-size:12px;color:#388bfd;margin-top:6px;">
+  <div style="font-size:12px;color:#00ff41;margin-top:6px;">
     🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · Target: 66% Win Rate
   </div>
 </div>
@@ -196,7 +180,7 @@ else:
     win_rate = avg_win_r = avg_los_r = expectancy = pf = total_r = max_dd = 0
 
 target = 66.0
-wr_color = "#3fb950" if win_rate >= target else "#f85149"
+wr_color = "#00ff66" if win_rate >= target else "#ff3344"
 
 # ══════════════════════════════════════════════════════════════════
 # KPI STRIP
@@ -206,12 +190,12 @@ k1,k2,k3,k4,k5,k6,k7 = st.columns(7)
 kpis = [
     (k1, f"{win_rate:.1f}%",      "Win Rate",    wr_color),
     (k2, f"{len(wins) if n_closed else 0}W/{len(losses) if n_closed else 0}L/{len(be_trades) if n_closed else 0}BE",
-                                   "W / L / BE",  "#c9d1d9"),
-    (k3, f"{n_closed}",            "Closed",      "#8b949e"),
-    (k4, f"{n_open}",              "Open",        "#388bfd"),
-    (k5, f"{expectancy:+.2f}R",    "Expectancy",  "#3fb950" if expectancy > 0 else "#f85149"),
-    (k6, f"{pf:.2f}",              "Profit Factor","#3fb950" if pf >= 1.5 else "#e3b341" if pf >= 1 else "#f85149"),
-    (k7, f"{total_r:+.1f}R",       "Total R",     "#3fb950" if total_r > 0 else "#f85149"),
+                                   "W / L / BE",  "#e6e6e6"),
+    (k3, f"{n_closed}",            "Closed",      "#9a9a9a"),
+    (k4, f"{n_open}",              "Open",        "#00ff41"),
+    (k5, f"{expectancy:+.2f}R",    "Expectancy",  "#00ff66" if expectancy > 0 else "#ff3344"),
+    (k6, f"{pf:.2f}",              "Profit Factor","#00ff66" if pf >= 1.5 else "#ffcc00" if pf >= 1 else "#ff3344"),
+    (k7, f"{total_r:+.1f}R",       "Total R",     "#00ff66" if total_r > 0 else "#ff3344"),
 ]
 for col, val, lbl, color in kpis:
     with col:
@@ -221,8 +205,8 @@ for col, val, lbl, color in kpis:
             unsafe_allow_html=True)
 
 # Win rate vs target banner
-banner_c = "#0d4a2f" if win_rate >= target else "#4a0d0d"
-banner_b = "#238636" if win_rate >= target else "#8b2d2d"
+banner_c = "#003a14" if win_rate >= target else "#4a0d0d"
+banner_b = "#00a32a" if win_rate >= target else "#8b2d2d"
 banner_icon = "🎯" if win_rate >= target else "⚠️"
 st.markdown(f"""
 <div style="background:{banner_c};border:1px solid {banner_b};border-radius:10px;
@@ -282,16 +266,16 @@ with tab_equity:
     fig.add_trace(go.Scatter(
         x=dates, y=df_closed["cum_r"],
         mode="lines+markers",
-        line=dict(color="#388bfd", width=2.5),
+        line=dict(color="#00ff41", width=2.5),
         marker=dict(
-            color=["#3fb950" if o == "WIN" else "#f85149" if o == "LOSS" else "#e3b341"
+            color=["#00ff66" if o == "WIN" else "#ff3344" if o == "LOSS" else "#ffcc00"
                    for o in df_closed["outcome"]],
-            size=7, line=dict(width=1, color="#0d1117"),
+            size=7, line=dict(width=1, color="#000000"),
         ),
         name="Cumulative R",
         hovertemplate="<b>%{x|%d %b}</b><br>Cum R: %{y:+.2f}R<extra></extra>",
     ), row=1, col=1)
-    fig.add_hline(y=0, line_dash="dot", line_color="#484f58", line_width=1, row=1, col=1)
+    fig.add_hline(y=0, line_dash="dot", line_color="#555555", line_width=1, row=1, col=1)
 
     # Target line (expectancy projected)
     if n_closed >= 3:
@@ -300,7 +284,7 @@ with tab_equity:
         proj_y = [trend[0] * x + trend[1] for x in x_proj]
         fig.add_trace(go.Scatter(
             x=dates, y=proj_y,
-            mode="lines", line=dict(color="#e3b341", width=1, dash="dot"),
+            mode="lines", line=dict(color="#ffcc00", width=1, dash="dot"),
             name="Trend", opacity=0.6,
             hoverinfo="skip",
         ), row=1, col=1)
@@ -310,13 +294,13 @@ with tab_equity:
         x=dates, y=-df_closed["drawdown"],
         mode="lines", fill="tozeroy",
         fillcolor="rgba(248,81,73,0.15)",
-        line=dict(color="#f85149", width=1.5),
+        line=dict(color="#ff3344", width=1.5),
         name="Drawdown",
         hovertemplate="DD: %{y:.2f}R<extra></extra>",
     ), row=2, col=1)
 
     # ── Per-trade R bar ───────────────────────────────────────────
-    bar_colors = ["#3fb950" if o == "WIN" else "#f85149" if o == "LOSS" else "#e3b341"
+    bar_colors = ["#00ff66" if o == "WIN" else "#ff3344" if o == "LOSS" else "#ffcc00"
                   for o in df_closed["outcome"]]
     fig.add_trace(go.Bar(
         x=dates, y=df_closed["r_multiple"],
@@ -324,18 +308,18 @@ with tab_equity:
         name="Trade R",
         hovertemplate="<b>%{x|%d %b}</b><br>R: %{y:+.2f}R<extra></extra>",
     ), row=3, col=1)
-    fig.add_hline(y=0, line_dash="solid", line_color="#484f58", line_width=1, row=3, col=1)
+    fig.add_hline(y=0, line_dash="solid", line_color="#555555", line_width=1, row=3, col=1)
 
     fig.update_layout(
-        height=680, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
-        font=dict(family="Inter,sans-serif", size=11, color="#8b949e"),
-        legend=dict(bgcolor="rgba(13,17,23,.6)", bordercolor="#21262d", borderwidth=1,
+        height=680, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter,sans-serif", size=11, color="#9a9a9a"),
+        legend=dict(bgcolor="rgba(13,17,23,.6)", bordercolor="#2a2a2a", borderwidth=1,
                     font=dict(size=10), orientation="h", y=1.02, x=0),
         margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified",
     )
     for row in [1, 2, 3]:
-        fig.update_xaxes(showgrid=False, linecolor="#21262d", row=row, col=1)
-        fig.update_yaxes(showgrid=True, gridcolor="#21262d", row=row, col=1)
+        fig.update_xaxes(showgrid=False, linecolor="#2a2a2a", row=row, col=1)
+        fig.update_yaxes(showgrid=True, gridcolor="#2a2a2a", row=row, col=1)
 
     st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
 
@@ -356,8 +340,8 @@ with tab_equity:
     last5 = outcomes_list[-5:] if len(outcomes_list) >= 5 else outcomes_list
     last5_html = "".join(
         f'<span style="display:inline-block;background:{"#0d2f1a" if o=="WIN" else "#2f0d0d" if o=="LOSS" else "#1a1a0d"};'
-        f'border:1px solid {"#238636" if o=="WIN" else "#8b2d2d" if o=="LOSS" else "#9e6a03"};'
-        f'color:{"#3fb950" if o=="WIN" else "#f85149" if o=="LOSS" else "#e3b341"};'
+        f'border:1px solid {"#00a32a" if o=="WIN" else "#8b2d2d" if o=="LOSS" else "#9e6a03"};'
+        f'color:{"#00ff66" if o=="WIN" else "#ff3344" if o=="LOSS" else "#ffcc00"};'
         f'font-weight:700;font-size:12px;padding:4px 12px;border-radius:5px;margin-right:6px;">{o}</span>'
         for o in last5
     )
@@ -365,11 +349,11 @@ with tab_equity:
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
         st.markdown(
-            f'<div class="metric-box"><div class="metric-value" style="color:#3fb950;">{max_win_streak}</div>'
+            f'<div class="metric-box"><div class="metric-value" style="color:#00ff66;">{max_win_streak}</div>'
             f'<div class="metric-label">Max Win Streak</div></div>', unsafe_allow_html=True)
     with sc2:
         st.markdown(
-            f'<div class="metric-box"><div class="metric-value" style="color:#f85149;">{max_los_streak}</div>'
+            f'<div class="metric-box"><div class="metric-value" style="color:#ff3344;">{max_los_streak}</div>'
             f'<div class="metric-label">Max Loss Streak</div></div>', unsafe_allow_html=True)
     with sc3:
         st.markdown(
@@ -401,22 +385,22 @@ with tab_session:
 
     # Bar chart
     fig_s = go.Figure()
-    colors_s = ["#3fb950" if w >= 66 else "#e3b341" if w >= 50 else "#f85149"
+    colors_s = ["#00ff66" if w >= 66 else "#ffcc00" if w >= 50 else "#ff3344"
                 for w in sess_group["Win Rate %"]]
     fig_s.add_trace(go.Bar(
         x=sess_group["session"], y=sess_group["Win Rate %"],
         marker_color=colors_s,
         text=[f"{w:.1f}%" for w in sess_group["Win Rate %"]],
-        textposition="outside", textfont=dict(color="#c9d1d9", size=12),
+        textposition="outside", textfont=dict(color="#e6e6e6", size=12),
         hovertemplate="<b>%{x}</b><br>Win Rate: %{y:.1f}%<extra></extra>",
         name="Win Rate",
     ))
-    fig_s.add_hline(y=66, line_dash="dash", line_color="#3fb950", line_width=1.5,
-                    annotation_text="66% target", annotation_font_color="#3fb950",
+    fig_s.add_hline(y=66, line_dash="dash", line_color="#00ff66", line_width=1.5,
+                    annotation_text="66% target", annotation_font_color="#00ff66",
                     annotation_position="right")
     fig_s.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22", height=320,
-        yaxis=dict(range=[0, 110], gridcolor="#21262d", ticksuffix="%"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a", height=320,
+        yaxis=dict(range=[0, 110], gridcolor="#2a2a2a", ticksuffix="%"),
         xaxis=dict(showgrid=False), margin=dict(l=10, r=80, t=10, b=10),
         showlegend=False,
     )
@@ -445,15 +429,15 @@ with tab_session:
 
     if not hour_group.empty:
         fig_h = go.Figure()
-        kz_bands = [(7, 9, "#3fb950", "London KZ"), (12, 14, "#3fb950", "NY KZ"),
-                    (15, 17, "#e3b341", "London Close"), (0, 3, "#f85149", "Tokyo")]
+        kz_bands = [(7, 9, "#00ff66", "London KZ"), (12, 14, "#00ff66", "NY KZ"),
+                    (15, 17, "#ffcc00", "London Close"), (0, 3, "#ff3344", "Tokyo")]
         for h0, h1, color, label in kz_bands:
             fig_h.add_vrect(x0=h0 - 0.4, x1=h1 - 0.6,
                             fillcolor=color, opacity=0.06, line_width=0,
                             annotation_text=label,
                             annotation_font=dict(size=9, color=color),
                             annotation_position="top left")
-        bar_colors_h = ["#3fb950" if w >= 66 else "#e3b341" if w >= 50 else "#f85149"
+        bar_colors_h = ["#00ff66" if w >= 66 else "#ffcc00" if w >= 50 else "#ff3344"
                         for w in hour_group["Win Rate %"]]
         fig_h.add_trace(go.Bar(
             x=hour_group["hour"], y=hour_group["Win Rate %"],
@@ -462,11 +446,11 @@ with tab_session:
             textposition="outside",
             hovertemplate="Hour %{x}:00 UTC<br>Win Rate: %{y:.1f}%<extra></extra>",
         ))
-        fig_h.add_hline(y=66, line_dash="dash", line_color="#3fb950", line_width=1)
+        fig_h.add_hline(y=66, line_dash="dash", line_color="#00ff66", line_width=1)
         fig_h.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22", height=300,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a", height=300,
             xaxis=dict(tickmode="linear", tick0=0, dtick=1, showgrid=False, title="Hour (UTC)"),
-            yaxis=dict(range=[0, 115], gridcolor="#21262d", ticksuffix="%"),
+            yaxis=dict(range=[0, 115], gridcolor="#2a2a2a", ticksuffix="%"),
             margin=dict(l=10, r=80, t=10, b=10), showlegend=False,
         )
         st.plotly_chart(fig_h, use_container_width=True, config=dict(displayModeBar=False))
@@ -495,7 +479,7 @@ with tab_pair:
     )
 
     fig_p = go.Figure()
-    bar_colors_p = ["#3fb950" if w >= 66 else "#e3b341" if w >= 50 else "#f85149"
+    bar_colors_p = ["#00ff66" if w >= 66 else "#ffcc00" if w >= 50 else "#ff3344"
                     for w in pair_group["Win Rate %"]]
     fig_p.add_trace(go.Bar(
         y=pair_group["instrument"], x=pair_group["Win Rate %"],
@@ -506,13 +490,13 @@ with tab_pair:
         hovertemplate="<b>%{y}</b><br>Win Rate: %{x:.1f}%<br>Trades: %{customdata}<extra></extra>",
         customdata=pair_group["Trades"],
     ))
-    fig_p.add_vline(x=66, line_dash="dash", line_color="#3fb950", line_width=1.5,
-                    annotation_text="66%", annotation_font_color="#3fb950",
+    fig_p.add_vline(x=66, line_dash="dash", line_color="#00ff66", line_width=1.5,
+                    annotation_text="66%", annotation_font_color="#00ff66",
                     annotation_position="top")
     fig_p.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
         height=max(320, len(pair_group) * 34),
-        xaxis=dict(range=[0, 115], gridcolor="#21262d", ticksuffix="%"),
+        xaxis=dict(range=[0, 115], gridcolor="#2a2a2a", ticksuffix="%"),
         yaxis=dict(showgrid=False),
         margin=dict(l=10, r=80, t=10, b=10), showlegend=False,
     )
@@ -553,9 +537,9 @@ with tab_dir:
     for col_, row_ in zip([d1, d2], dir_group.itertuples()):
         direction = row_.direction
         wr = row_._4  # Win Rate %
-        d_color = "#388bfd" if direction == "LONG" else "#a371f7"
+        d_color = "#00ff41" if direction == "LONG" else "#a371f7"
         d_icon  = "🔼" if direction == "LONG" else "🔽"
-        wr_c = "#3fb950" if wr >= 66 else "#e3b341" if wr >= 50 else "#f85149"
+        wr_c = "#00ff66" if wr >= 66 else "#ffcc00" if wr >= 50 else "#ff3344"
         with col_:
             st.markdown(f"""
             <div class="card" style="border-color:{d_color}33;">
@@ -572,15 +556,15 @@ with tab_dir:
                   <div class="metric-label">Trades</div>
                 </div>
                 <div class="metric-box">
-                  <div class="metric-value" style="color:{"#3fb950" if row_._6 > 0 else "#f85149"};">{row_._6:+.2f}R</div>
+                  <div class="metric-value" style="color:{"#00ff66" if row_._6 > 0 else "#ff3344"};">{row_._6:+.2f}R</div>
                   <div class="metric-label">Avg R</div>
                 </div>
                 <div class="metric-box">
-                  <div class="metric-value" style="color:{"#3fb950" if row_._7 > 0 else "#f85149"};">{row_._7:+.1f}R</div>
+                  <div class="metric-value" style="color:{"#00ff66" if row_._7 > 0 else "#ff3344"};">{row_._7:+.1f}R</div>
                   <div class="metric-label">Total R</div>
                 </div>
               </div>
-              <div style="margin-top:10px;font-size:12px;color:#8b949e;">
+              <div style="margin-top:10px;font-size:12px;color:#9a9a9a;">
                 {row_.Wins}W / {row_.Losses}L / {row_.BE}BE
               </div>
             </div>
@@ -589,7 +573,7 @@ with tab_dir:
     # Direction win rate over time (rolling 10)
     st.markdown('<div class="section-title">📉 Rolling Win Rate by Direction (10-trade window)</div>',
                 unsafe_allow_html=True)
-    for direction, color in [("LONG", "#388bfd"), ("SHORT", "#a371f7")]:
+    for direction, color in [("LONG", "#00ff41"), ("SHORT", "#a371f7")]:
         df_d = df_closed[df_closed["direction"] == direction].copy()
         if len(df_d) >= 5:
             df_d["rolling_wr"] = (df_d["outcome"] == "WIN").rolling(min(10, len(df_d))).mean() * 100
@@ -600,10 +584,10 @@ with tab_dir:
                 name=f"{direction} rolling WR",
                 hovertemplate="%{y:.1f}%<extra></extra>",
             ))
-            fig_dir.add_hline(y=66, line_dash="dash", line_color="#3fb950", line_width=1)
+            fig_dir.add_hline(y=66, line_dash="dash", line_color="#00ff66", line_width=1)
             fig_dir.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22", height=200,
-                yaxis=dict(range=[0, 105], gridcolor="#21262d", ticksuffix="%"),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a", height=200,
+                yaxis=dict(range=[0, 105], gridcolor="#2a2a2a", ticksuffix="%"),
                 xaxis=dict(showgrid=False),
                 margin=dict(l=10, r=40, t=10, b=10), showlegend=False, title_text=direction,
                 title_font=dict(color=color, size=12),
@@ -689,7 +673,7 @@ with tab_log:
 
 # Footer
 st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #2a2a2a;">
   📓 Trade Journal · Equity Curve · Performance Analytics · 66% Win Rate System
 </div>
 """, unsafe_allow_html=True)

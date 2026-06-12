@@ -80,7 +80,7 @@ class ChartBuilder:
             r=values + [values[0]],
             theta=categories + [categories[0]],
             fill="toself",
-            fillcolor=f"rgba(255,153,0,0.15)",
+            fillcolor=f"rgba(0,255,65,0.15)",
             line=dict(color=T.AMBER, width=2),
             marker=dict(color=T.AMBER, size=4),
         ))

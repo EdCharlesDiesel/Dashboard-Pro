@@ -2,7 +2,7 @@
 
 Call `BloombergTheme.apply()` once at the top of every Streamlit page after
 `st.set_page_config(...)`. It hides Streamlit chrome and lays down the
-amber-on-black palette plus a responsive grid system.
+green-on-black terminal palette plus a responsive grid system.
 """
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ class BloombergTheme:
     BG          = "#000000"
     BG_ELEV     = "#0a0a0a"
     BG_PANEL    = "#0f0f0f"
-    BG_HEADER   = "#1a1300"
+    BG_HEADER   = "#001a08"
     BORDER      = "#2a2a2a"
-    BORDER_HOT  = "#3a2f00"
+    BORDER_HOT  = "#003a14"
 
-    AMBER       = "#ff9900"     # primary action / accent
-    AMBER_DIM   = "#cc7a00"
+    AMBER       = "#00ff41"     # primary action / accent — terminal phosphor green
+    AMBER_DIM   = "#00a32a"
     CYAN        = "#00e0ff"     # info
     GREEN       = "#00ff66"     # bullish / pass
     RED         = "#ff3344"     # bearish / fail
@@ -81,6 +81,37 @@ section[data-testid="stSidebar"] h4 {{
     text-transform: uppercase;
     border-bottom: 1px solid {cls.BORDER};
     padding-bottom: 4px;
+}}
+
+/* anything sitting on the green fill gets BLACK text — readability first.
+   (The sidebar `*` rule above paints inner spans white, which made green
+   primary buttons and the active page link unreadable.) */
+.stButton button[kind="primary"],
+.stButton button[kind="primary"] *,
+section[data-testid="stSidebar"] .stButton button[kind="primary"],
+section[data-testid="stSidebar"] .stButton button[kind="primary"] * {{
+    color: {cls.BG} !important;
+}}
+
+/* sidebar page navigation links */
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] {{
+    padding: 2px 8px;
+    border: 1px solid transparent;
+    border-radius: 0 !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]:hover {{
+    background: {cls.BG_HEADER} !important;
+    border-color: {cls.AMBER_DIM} !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"]:hover * {{
+    color: {cls.AMBER} !important;
+}}
+/* current page: solid green chip, black font */
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current="page"] {{
+    background: {cls.AMBER} !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current="page"] * {{
+    color: {cls.BG} !important;
 }}
 
 /* widgets — flat, bordered, monospace */
@@ -281,7 +312,7 @@ section[data-testid="stSidebar"] h4 {{
 .bb-chip-wait  {{ color: {cls.YELLOW}; border-color: {cls.YELLOW}; background: rgba(255,204,0,0.06); }}
 .bb-chip-no    {{ color: {cls.RED};    border-color: {cls.RED};    background: rgba(255,51,68,0.06); }}
 .bb-chip-info  {{ color: {cls.CYAN};   border-color: {cls.CYAN};   background: rgba(0,224,255,0.06); }}
-.bb-chip-amber {{ color: {cls.AMBER};  border-color: {cls.AMBER};  background: rgba(255,153,0,0.06); }}
+.bb-chip-amber {{ color: {cls.AMBER};  border-color: {cls.AMBER};  background: rgba(0,255,65,0.06); }}
 
 /* Status bar — page-bottom strip */
 .bb-status-bar {{
@@ -379,6 +410,21 @@ section[data-testid="stSidebar"] h4 {{
     .bb-status-bar {{ flex-wrap: wrap; gap: 8px; }}
     .block-container {{ padding: 0.4rem 0.4rem 5rem 0.4rem !important; }}
 }}
+
+/* ── global flatten — terminals have no rounded corners ──────── */
+*, *::before, *::after {{ border-radius: 0 !important; }}
+
+/* ── legacy page classes harmonised to the terminal look ─────── */
+.hero {{
+    background: linear-gradient(90deg, {cls.BG_HEADER} 0%, {cls.BG} 100%) !important;
+    border: 1px solid {cls.AMBER_DIM} !important;
+    border-left: 4px solid {cls.AMBER} !important;
+}}
+.card, .metric-box, .ccy-card, .ccy-bank, .stat-box {{
+    background: {cls.BG_PANEL} !important;
+    border: 1px solid {cls.BORDER} !important;
+}}
+.section-title, .card-header {{ color: {cls.AMBER} !important; }}
 
 /* Bloomberg-tinted Plotly background passes through automatically */
 .js-plotly-plot {{ border: 1px solid {cls.BORDER}; background: {cls.BG_PANEL}; }}

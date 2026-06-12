@@ -17,8 +17,8 @@ from typing import Optional
 
 import streamlit as st
 
-from src.pages_lib.navigation import NAV_ENTRIES
-from src.ui.components import FunctionCodeGrid, StatusBar
+from src.pages_lib.navigation import render_sidebar_nav
+from src.ui.components import StatusBar
 from src.ui.theme import BloombergTheme
 
 
@@ -41,7 +41,11 @@ class BloombergPage:
         BloombergTheme.apply()
         with st.sidebar:
             self._sidebar_header(ctx)
+            # Page controls (symbol pickers etc.) first, navigation below —
+            # the trader's working inputs always stay within reach.
             self.sidebar(ctx)
+            st.markdown("---")
+            render_sidebar_nav()
         self.body(ctx)
         if ctx.show_status_bar:
             self._status_bar(ctx)
@@ -73,19 +77,13 @@ class BloombergPage:
             f"""
 <div style="padding:6px 0 10px 0;border-bottom:1px solid #2a2a2a;margin-bottom:8px;">
   <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;
-              color:#ff9900;letter-spacing:0.18em;">DASHBOARD&nbsp;PRO</div>
+              color:#00ff41;letter-spacing:0.18em;">DASHBOARD&nbsp;PRO</div>
   <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9a9a9a;
               letter-spacing:0.12em;margin-top:2px;">TERMINAL · {ctx.code}</div>
 </div>
 """,
             unsafe_allow_html=True,
         )
-        with st.expander("◆ FUNCTION CODES", expanded=False):
-            grid = FunctionCodeGrid([
-                (e.code, f"{e.icon} {e.label}", f"/{_link_for(e.path)}")
-                for e in NAV_ENTRIES
-            ])
-            grid.show()
 
     @staticmethod
     def _status_bar(ctx: PageContext) -> None:
@@ -96,9 +94,3 @@ class BloombergPage:
             f"LOCAL {now}",
             "DASHBOARD PRO v3.0",
         ]).show()
-
-
-def _link_for(path: str) -> str:
-    """Turn a Streamlit page path into a URL fragment for st.page_link."""
-    fname = path.rsplit("/", 1)[-1]
-    return fname.replace(".py", "")

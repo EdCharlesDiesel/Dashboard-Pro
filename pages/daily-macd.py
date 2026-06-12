@@ -1,4 +1,6 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -13,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS ────────────────────────────────────────────────────────────
 st.markdown("""
@@ -25,29 +28,29 @@ st.markdown("""
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
     .stApp{ background:var(--background-color); }
-    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
-    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px;
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#2a2a2a); border-radius:12px;
            padding:20px; margin-bottom:16px; }
     .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em;
-                  text-transform:uppercase; color:#8b949e; margin-bottom:14px; }
-    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px;
+                  text-transform:uppercase; color:#9a9a9a; margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#2a2a2a); border-radius:8px;
                  padding:14px; text-align:center; }
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
-    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500;
+    .metric-label{ font-size:11px; color:var(--muted,#9a9a9a); margin-top:2px; font-weight:500;
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color);
-                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px;
+                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #00ff41; }
+    .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:10px;
                  margin:6px 0 2px 0; overflow:hidden; }
 
     /* Verdict banners */
     .verdict-bull { background:linear-gradient(135deg,#0d3a1f,#0d5e32);
-                    border:2px solid #238636; border-radius:14px;
+                    border:2px solid #00a32a; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-bear { background:linear-gradient(135deg,#3a0d0d,#5e1414);
                     border:2px solid #8b2d2d; border-radius:14px;
@@ -55,8 +58,8 @@ st.markdown("""
     .verdict-flat { background:linear-gradient(135deg,#1c1c0d,#2e2a0d);
                     border:2px solid #9e6a03; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
-    .verdict-none { background:linear-gradient(135deg,#161b22,#1c2128);
-                    border:1px solid #30363d; border-radius:14px;
+    .verdict-none { background:linear-gradient(135deg,#0a0a0a,#1c2128);
+                    border:1px solid #2a2a2a; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-turning-bull { background:linear-gradient(135deg,#162812,#1f3d18);
                             border:2px solid #4d8c2a; border-radius:14px;
@@ -67,29 +70,29 @@ st.markdown("""
 
     /* Histogram bars table */
     .hist-row{ display:flex; align-items:center; gap:12px; padding:8px 14px;
-               border-bottom:1px solid #21262d; font-size:13px; }
+               border-bottom:1px solid #2a2a2a; font-size:13px; }
     .hist-row:last-child{ border-bottom:none; }
-    .hist-label{ color:#8b949e; min-width:100px; font-size:12px; }
-    .hist-bar-wrap{ flex:1; background:#21262d; border-radius:4px; height:8px;
+    .hist-label{ color:#9a9a9a; min-width:100px; font-size:12px; }
+    .hist-bar-wrap{ flex:1; background:#2a2a2a; border-radius:4px; height:8px;
                     overflow:hidden; }
     .hist-val{ font-family:monospace; font-weight:600; min-width:80px;
                text-align:right; font-size:12px; }
 
     /* Condition rows */
     .cond-row{ display:flex; justify-content:space-between; align-items:center;
-               padding:10px 14px; background:#0d1117; border:1px solid #21262d;
+               padding:10px 14px; background:#000000; border:1px solid #2a2a2a;
                border-radius:8px; margin-bottom:8px; font-size:13px; }
-    .cond-text{ color:#c9d1d9; }
-    .cond-badge-ok  { background:#0d4a2f; color:#3fb950; border:1px solid #238636;
+    .cond-text{ color:#e6e6e6; }
+    .cond-badge-ok  { background:#003a14; color:#00ff66; border:1px solid #00a32a;
                       border-radius:20px; padding:3px 12px; font-size:11px; font-weight:700; }
-    .cond-badge-fail{ background:#4a0d0d; color:#f85149; border:1px solid #8b2d2d;
+    .cond-badge-fail{ background:#4a0d0d; color:#ff3344; border:1px solid #8b2d2d;
                       border-radius:20px; padding:3px 12px; font-size:11px; font-weight:700; }
-    .cond-badge-warn{ background:#2a1f00; color:#e3b341; border:1px solid #9e6a03;
+    .cond-badge-warn{ background:#2a1f00; color:#ffcc00; border:1px solid #9e6a03;
                       border-radius:20px; padding:3px 12px; font-size:11px; font-weight:700; }
 
     .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
-                border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
+                border-left:3px solid #00ff41; border-radius:8px;
+                padding:14px 18px; font-size:13px; color:var(--muted,#9a9a9a); line-height:1.7; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -114,9 +117,9 @@ INSTRUMENTS = {
     "USD/ZAR":    {"ticker": "USDZAR=X", "pip_size": 0.0001},
     "EUR/ZAR":    {"ticker": "EURZAR=X", "pip_size": 0.0001},
     "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "🥇 Gold":    {"ticker": "GC=F",     "pip_size": 0.10},
-    "🥈 Silver":  {"ticker": "SI=F",     "pip_size": 0.01},
-    "🪙 Platinum":{"ticker": "PL=F",     "pip_size": 0.10},
+    "XAU/USD":    {"ticker": "GC=F",     "pip_size": 0.10},
+    "XAG/USD":  {"ticker": "SI=F",     "pip_size": 0.01},
+    "XPT/USD":{"ticker": "PL=F",     "pip_size": 0.10},
 }
 
 
@@ -207,13 +210,13 @@ def analyse_momentum(df: pd.DataFrame,
     if above_zero and rising_count >= 2:
         verdict = "BULLISH"
         label   = "📈 Bullish Momentum"
-        color   = "#3fb950"
+        color   = "#00ff66"
         grade   = "bull"
         desc    = "Histogram is positive and rising — bullish momentum is building."
     elif below_zero and falling_count >= 2:
         verdict = "BEARISH"
         label   = "📉 Bearish Momentum"
-        color   = "#f85149"
+        color   = "#ff3344"
         grade   = "bear"
         desc    = "Histogram is negative and falling — bearish momentum is building."
     elif crossed_up or (below_zero and rising_count >= 2):
@@ -231,7 +234,7 @@ def analyse_momentum(df: pd.DataFrame,
     else:
         verdict = "FLAT"
         label   = "⏳ No Clear Momentum"
-        color   = "#8b949e"
+        color   = "#9a9a9a"
         grade   = "none"
         desc    = "Histogram is flat or mixed — wait for a directional move before acting."
 
@@ -312,7 +315,7 @@ def build_chart(m: dict, pair: str,
         x=df.index,
         open=df["Open"], high=df["High"],
         low=df["Low"],   close=df["Close"],
-        increasing_line_color="#3fb950", decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63,185,80,0.20)", decreasing_fillcolor="rgba(248,81,73,0.20)",
         name="Daily", showlegend=False,
     ), row=1, col=1)
@@ -354,16 +357,16 @@ def build_chart(m: dict, pair: str,
         cross_y = [float(df.loc[i,"macd"]) for i in cross_bull_idx]
         fig.add_trace(go.Scatter(
             x=cross_bull_idx, y=cross_y, mode="markers",
-            marker=dict(symbol="circle", size=10, color="#3fb950",
-                        line=dict(color="#0d1117", width=1.5)),
+            marker=dict(symbol="circle", size=10, color="#00ff66",
+                        line=dict(color="#000000", width=1.5)),
             name="Bull Cross", showlegend=True,
         ), row=2, col=1)
     if cross_bear_idx:
         cross_y = [float(df.loc[i,"macd"]) for i in cross_bear_idx]
         fig.add_trace(go.Scatter(
             x=cross_bear_idx, y=cross_y, mode="markers",
-            marker=dict(symbol="circle", size=10, color="#f85149",
-                        line=dict(color="#0d1117", width=1.5)),
+            marker=dict(symbol="circle", size=10, color="#ff3344",
+                        line=dict(color="#000000", width=1.5)),
             name="Bear Cross", showlegend=True,
         ), row=2, col=1)
 
@@ -372,13 +375,13 @@ def build_chart(m: dict, pair: str,
     bar_colors = []
     for i, v in enumerate(hist):
         if i == 0:
-            bar_colors.append("#3fb950" if v >= 0 else "#f85149")
+            bar_colors.append("#00ff66" if v >= 0 else "#ff3344")
             continue
         prev_v = hist[i-1]
         if v >= 0:
-            bar_colors.append("#3fb950" if v >= prev_v else "rgba(86,211,100,0.53)")   # bright if rising, faded if falling
+            bar_colors.append("#00ff66" if v >= prev_v else "rgba(86,211,100,0.53)")   # bright if rising, faded if falling
         else:
-            bar_colors.append("#f85149" if v <= prev_v else "rgba(248,81,73,0.53)")   # bright if falling, faded if rising
+            bar_colors.append("#ff3344" if v <= prev_v else "rgba(248,81,73,0.53)")   # bright if falling, faded if rising
 
     fig.add_trace(go.Bar(
         x=df.index, y=df["hist"],
@@ -399,19 +402,19 @@ def build_chart(m: dict, pair: str,
     fig.update_layout(
         height=700,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         legend=dict(
-            bgcolor="rgba(13,17,23,0.60)", bordercolor="#21262d", borderwidth=1,
+            bgcolor="rgba(13,17,23,0.60)", bordercolor="#2a2a2a", borderwidth=1,
             font=dict(size=10), orientation="h",
             yanchor="bottom", y=1.01, xanchor="left", x=0,
         ),
         margin=dict(l=10, r=20, t=10, b=10),
         bargap=0.15,
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(gridcolor="#21262d", showgrid=False)
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(gridcolor="#2a2a2a", showgrid=False)
     return fig
 
 
@@ -421,27 +424,6 @@ def build_chart(m: dict, pair: str,
 
 with st.sidebar:
     st.markdown("### 📊 Daily MACD Momentum")
-    st.page_link("daily-trading-checklist.py", label="00. Checklist", icon="📋")
-    st.page_link("pages/setup-ranker.py",      label="01. Setup Ranker",      icon="🎰")
-    st.page_link("pages/macro-bias.py", label="02. Macro Bias", icon="🌐")
-    st.page_link("pages/news-filter.py", label="03. News Filter", icon="📰")
-    st.page_link("pages/correlations.py", label="04. Correlations", icon="🔗")
-    st.page_link("pages/atr-volatility.py", label="05. ATR Volatility", icon="📊")
-    st.page_link("pages/weekly-ema.py", label="06. Weekly EMA", icon="📉")
-    st.page_link("pages/weekly-rsi.py", label="07. Weekly RSI", icon="📡")
-    st.page_link("pages/weekly-swing.py", label="08. Weekly Swing", icon="🔄")
-    st.page_link("pages/daily-trend.py", label="09. Daily Trend", icon="📈")
-    st.page_link("pages/daily-macd.py", label="10. Daily MACD", icon="📊")
-    st.page_link("pages/4H-confluence-zone.py", label="11. 4H Confluence Zone", icon="🎯")
-    st.page_link("pages/confluence-checker.py", label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py", label="13. 15M Rejection", icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py", label="14. 15M Entry Signal", icon="⚡")
-    st.page_link("pages/stop-structure.py", label="15. Stop Structure", icon="🛡️")
-    st.page_link("pages/rr-calculator.py", label="16. R:R Calculator", icon="⚖️")
-    st.page_link("pages/trade-journal.py",    label="17. Trade Journal",     icon="📓")
-    st.page_link("pages/market-structure.py",  label="18. Market Structure",  icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
-    st.divider()
 
     inst_keys    = list(INSTRUMENTS.keys())
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
@@ -470,8 +452,8 @@ with st.sidebar:
 
     st.divider()
     st.markdown("""
-    <div style='font-size:11px;color:#484f58;line-height:1.9;'>
-    <b style='color:#8b949e;'>Histogram colours</b><br>
+    <div style='font-size:11px;color:#555555;line-height:1.9;'>
+    <b style='color:#9a9a9a;'>Histogram colours</b><br>
     🟢 Bright green = rising above zero<br>
     🟢 Faded green  = falling but above zero<br>
     🔴 Bright red   = falling below zero<br>
@@ -481,6 +463,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
+    st.divider()
+    render_sidebar_nav()
 # ══════════════════════════════════════════════════════════════════
 # MAIN PAGE
 # ══════════════════════════════════════════════════════════════════
@@ -498,14 +482,14 @@ GRADE_CSS = {
 
 # ── Hero ───────────────────────────────────────────────────────────
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d; border-radius:16px; padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a; border-radius:16px; padding:24px 28px;
             margin-bottom:20px; position:relative; overflow:hidden;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">📊 Daily MACD Momentum</div>
-  <div style="color:#8b949e; font-size:13px; margin-top:4px;">
+  <div style="font-size:24px; font-weight:700; color:#e6e6e6;">📊 Daily MACD Momentum</div>
+  <div style="color:#9a9a9a; font-size:13px; margin-top:4px;">
     MACD histogram turning in the direction of the trade · Daily chart · {selected_pair}
   </div>
-  <div style="font-size:12px; color:#388bfd; margin-top:6px;">
+  <div style="font-size:12px; color:#00ff41; margin-top:6px;">
     Check #09 — Daily MACD momentum · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
@@ -544,12 +528,12 @@ with tab_scan:
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     for col_, val_, lbl_, c_ in [
-        (c1, len(bull_s),    "📈 Bullish",       "#3fb950"),
+        (c1, len(bull_s),    "📈 Bullish",       "#00ff66"),
         (c2, len(t_bull_s),  "🟡 Turning Bull",  "#6ac43f"),
         (c3, len(t_bear_s),  "🟡 Turning Bear",  "#e07b39"),
-        (c4, len(bear_s),    "📉 Bearish",        "#f85149"),
-        (c5, len(flat_s),    "⏳ Flat",            "#484f58"),
-        (c6, len(no_data_s), "⛔ No Data",        "#30363d"),
+        (c4, len(bear_s),    "📉 Bearish",        "#ff3344"),
+        (c5, len(flat_s),    "⏳ Flat",            "#555555"),
+        (c6, len(no_data_s), "⛔ No Data",        "#2a2a2a"),
     ]:
         with col_:
             st.markdown(
@@ -569,61 +553,61 @@ with tab_scan:
     )
 
     SCAN_BORDER = {
-        "BULLISH":        "#3fb950",
+        "BULLISH":        "#00ff66",
         "TURNING BULLISH":"#6ac43f",
         "TURNING BEARISH":"#e07b39",
-        "BEARISH":        "#f85149",
-        "FLAT":           "#484f58",
+        "BEARISH":        "#ff3344",
+        "FLAT":           "#555555",
     }
     SCAN_BADGE = {
-        "BULLISH":        ("background:#0d2f1a;color:#3fb950;border:1px solid #238636;",  "📈 Bullish"),
+        "BULLISH":        ("background:#0d2f1a;color:#00ff66;border:1px solid #00a32a;",  "📈 Bullish"),
         "TURNING BULLISH":("background:#162812;color:#6ac43f;border:1px solid #4d8c2a;",  "🟡 Turning Bull"),
         "TURNING BEARISH":("background:#28160d;color:#e07b39;border:1px solid #8c5a2a;",  "🟡 Turning Bear"),
-        "BEARISH":        ("background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;",  "📉 Bearish"),
-        "FLAT":           ("background:#21262d;color:#8b949e;border:1px solid #30363d;",  "⏳ Flat"),
+        "BEARISH":        ("background:#2f0d0d;color:#ff3344;border:1px solid #8b2d2d;",  "📉 Bearish"),
+        "FLAT":           ("background:#2a2a2a;color:#9a9a9a;border:1px solid #2a2a2a;",  "⏳ Flat"),
     }
 
     cards_html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;">'
     for scan_pair in sorted_scan:
         if scan_pair not in loaded_s:
             cards_html += (
-                f'<div style="border:1px solid #21262d;border-left:4px solid #30363d;'
-                f'background:#161b22;border-radius:10px;padding:11px 14px;opacity:.5;">'
-                f'<div style="font-size:13px;font-weight:700;color:#8b949e;">{scan_pair}</div>'
-                f'<div style="font-size:10px;color:#484f58;margin-top:4px;">No data</div></div>'
+                f'<div style="border:1px solid #2a2a2a;border-left:4px solid #2a2a2a;'
+                f'background:#0a0a0a;border-radius:10px;padding:11px 14px;opacity:.5;">'
+                f'<div style="font-size:13px;font-weight:700;color:#9a9a9a;">{scan_pair}</div>'
+                f'<div style="font-size:10px;color:#555555;margin-top:4px;">No data</div></div>'
             )
             continue
 
         r       = loaded_s[scan_pair]
         verdict = r["verdict"]
-        bdr     = SCAN_BORDER.get(verdict, "#30363d")
+        bdr     = SCAN_BORDER.get(verdict, "#2a2a2a")
         bdg_css, bdg_txt = SCAN_BADGE.get(verdict, SCAN_BADGE["FLAT"])
-        h_col   = "#3fb950" if r["h_now"] > 0 else "#f85149"
-        outline = "outline:2px solid #388bfd;" if scan_pair == selected_pair else ""
+        h_col   = "#00ff66" if r["h_now"] > 0 else "#ff3344"
+        outline = "outline:2px solid #00ff41;" if scan_pair == selected_pair else ""
 
         accel_html = ""
         if r["accelerating"]:
-            accel_html = '<span style="color:#3fb950;font-weight:600;">▲ Accel</span>'
+            accel_html = '<span style="color:#00ff66;font-weight:600;">▲ Accel</span>'
         elif r["decelerating"]:
-            accel_html = '<span style="color:#f85149;font-weight:600;">▼ Decel</span>'
+            accel_html = '<span style="color:#ff3344;font-weight:600;">▼ Decel</span>'
 
         cross_html = ""
         if r["crossed_up"]:
-            cross_html = '<span style="color:#e3b341;font-weight:600;">⬆ Cross</span>'
+            cross_html = '<span style="color:#ffcc00;font-weight:600;">⬆ Cross</span>'
         elif r["crossed_down"]:
-            cross_html = '<span style="color:#e3b341;font-weight:600;">⬇ Cross</span>'
+            cross_html = '<span style="color:#ffcc00;font-weight:600;">⬇ Cross</span>'
 
         cards_html += (
-            f'<div style="border:1px solid #21262d;border-left:4px solid {bdr};'
-            f'background:#161b22;border-radius:10px;padding:11px 14px;{outline}">'
+            f'<div style="border:1px solid #2a2a2a;border-left:4px solid {bdr};'
+            f'background:#0a0a0a;border-radius:10px;padding:11px 14px;{outline}">'
             f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-            f'<span style="font-size:13px;font-weight:700;color:#e6edf3;">{scan_pair}</span>'
+            f'<span style="font-size:13px;font-weight:700;color:#e6e6e6;">{scan_pair}</span>'
             f'<span style="border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;{bdg_css}">{bdg_txt}</span>'
             f'</div>'
             f'<div style="display:flex;gap:8px;font-size:11px;align-items:center;flex-wrap:wrap;">'
-            f'<span style="color:#484f58;">H:</span>'
+            f'<span style="color:#555555;">H:</span>'
             f'<span style="color:{h_col};font-weight:600;font-family:monospace;">{r["h_now"]:+.5f}</span>'
-            f'<span style="color:#484f58;">↑{r["rising_count"]} ↓{r["falling_count"]}</span>'
+            f'<span style="color:#555555;">↑{r["rising_count"]} ↓{r["falling_count"]}</span>'
             f'{accel_html}{cross_html}'
             f'</div></div>'
         )
@@ -681,7 +665,7 @@ with tab_detail:
         max_abs    = max(abs(v) for v in hist_tail) or 1
         for v in hist_tail:
             h_pct = int(abs(v) / max_abs * 32)
-            sc    = "#3fb950" if v >= 0 else "#f85149"
+            sc    = "#00ff66" if v >= 0 else "#ff3344"
             align = "flex-end" if v >= 0 else "flex-start"
             spark_bars += (
                 f'<div style="display:flex;flex-direction:column;justify-content:{align};'
@@ -694,29 +678,29 @@ with tab_detail:
         <div class="{vcls}">
           <div style="font-size:23px;font-weight:800;color:{color};
                       letter-spacing:1px;margin-bottom:6px;">{m['label']}</div>
-          <div style="font-size:13px;color:#8b949e;margin-bottom:14px;">{m['desc']}</div>
+          <div style="font-size:13px;color:#9a9a9a;margin-bottom:14px;">{m['desc']}</div>
           <div style="display:flex;justify-content:center;align-items:flex-end;
                       gap:3px;margin:10px 0;">{spark_bars}</div>
-          <div style="font-size:10px;color:#484f58;margin-top:4px;">Last 8 daily histogram bars</div>
+          <div style="font-size:10px;color:#555555;margin-top:4px;">Last 8 daily histogram bars</div>
           <div style="display:flex;gap:28px;justify-content:center;flex-wrap:wrap;
-                      font-size:13px;color:#c9d1d9;margin-top:14px;">
+                      font-size:13px;color:#e6e6e6;margin-top:14px;">
             <div>MACD &nbsp;<code style="color:#0984e3;">{m['macd_now']:.5f}</code></div>
             <div>Signal &nbsp;<code style="color:#e17055;">{m['sig_now']:.5f}</code></div>
             <div>Hist &nbsp;<code style="color:{color};">{m['h_now']:.5f}</code></div>
-            <div>Close &nbsp;<code style="color:#e6edf3;">{m['price']:.5f}</code></div>
+            <div>Close &nbsp;<code style="color:#e6e6e6;">{m['price']:.5f}</code></div>
           </div>
         </div>
         """, unsafe_allow_html=True)
 
         # ── KPI strip ──────────────────────────────────────────────
         accel_val = "▲ Accel" if m["accelerating"] else ("▼ Decel" if m["decelerating"] else "—")
-        accel_col = "#3fb950" if m["accelerating"] else "#f85149" if m["decelerating"] else "#484f58"
+        accel_col = "#00ff66" if m["accelerating"] else "#ff3344" if m["decelerating"] else "#555555"
         k1, k2, k3, k4, k5 = st.columns(5)
         for col, val, lbl, c in [
             (k1, f'{m["h_now"]:+.5f}',   "Histogram Now",        color),
-            (k2, f'{m["h_prev"]:+.5f}',  "Histogram Prev Bar",   "#8b949e"),
-            (k3, str(m["rising_count"]),  f"Rising / Last {lb}",  "#3fb950"),
-            (k4, str(m["falling_count"]), f"Falling / Last {lb}", "#f85149"),
+            (k2, f'{m["h_prev"]:+.5f}',  "Histogram Prev Bar",   "#9a9a9a"),
+            (k3, str(m["rising_count"]),  f"Rising / Last {lb}",  "#00ff66"),
+            (k4, str(m["falling_count"]), f"Falling / Last {lb}", "#ff3344"),
             (k5, accel_val,               "Momentum",             accel_col),
         ]:
             with col:
@@ -743,10 +727,10 @@ with tab_detail:
             score    = sum(conds.values())
             total    = len(conds)
             pct      = int(score / total * 100)
-            prog_col = "#3fb950" if pct >= 70 else "#e3b341" if pct >= 40 else "#f85149"
+            prog_col = "#00ff66" if pct >= 70 else "#ffcc00" if pct >= 40 else "#ff3344"
             html += (f'<div style="margin-top:14px;">'
                      f'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
-                     f'<span style="font-size:11px;color:#8b949e;">Score</span>'
+                     f'<span style="font-size:11px;color:#9a9a9a;">Score</span>'
                      f'<span style="font-size:11px;font-weight:700;color:{prog_col};">{score}/{total}</span>'
                      f'</div><div class="prog-track">'
                      f'<div style="background:{prog_col};width:{pct}%;height:100%;border-radius:8px;"></div>'
@@ -812,7 +796,7 @@ with tab_detail:
         with col_a:
             st.markdown("""
             <div class="explainer">
-            <b style="color:#3fb950;">📈 Bullish histogram setup</b><br><br>
+            <b style="color:#00ff66;">📈 Bullish histogram setup</b><br><br>
             <b>1. Histogram turns positive</b><br>
             Crosses from negative to positive — MACD line has crossed above the signal line.
             The histogram bar is now above zero.<br><br>
@@ -827,7 +811,7 @@ with tab_detail:
         with col_b:
             st.markdown("""
             <div class="explainer">
-            <b style="color:#f85149;">📉 Bearish histogram setup</b><br><br>
+            <b style="color:#ff3344;">📉 Bearish histogram setup</b><br><br>
             <b>1. Histogram turns negative</b><br>
             Crosses from positive to negative — MACD line has crossed below the signal line.
             The histogram bar is now below zero.<br><br>
@@ -842,7 +826,7 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="explainer" style="margin-top:12px;">
-        <b style="color:#388bfd;">⚙️ Settings used on this page</b>&nbsp;·&nbsp;
+        <b style="color:#00ff41;">⚙️ Settings used on this page</b>&nbsp;·&nbsp;
         MACD Fast: <code>{fast}</code> &nbsp;·&nbsp;
         Slow: <code>{slow}</code> &nbsp;·&nbsp;
         Signal: <code>{sig}</code> &nbsp;·&nbsp;
@@ -855,8 +839,8 @@ with tab_detail:
 
 # Footer
 st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-            padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+            padding-top:16px;border-top:1px solid #2a2a2a;">
   📊 Daily MACD Momentum · Check #09 · Histogram direction · For educational purposes only
 </div>
 """, unsafe_allow_html=True)

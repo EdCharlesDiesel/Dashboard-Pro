@@ -57,7 +57,8 @@
       "PowerShell($deadline=\\(Get-Date\\).AddSeconds\\(45\\); while\\(\\(Get-Date\\) -lt $deadline\\){ try{ $r=Invoke-WebRequest -Uri 'http://localhost:8512/_stcore/health' -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop; if\\($r.StatusCode -eq 200\\){ \"ready: $\\($r.Content\\)\"; break } } catch { Start-Sleep -Milliseconds 800 } })",
       "PowerShell(& 'C:\\\\x\\\\Dashboard-Pro\\\\.venv\\\\Scripts\\\\python.exe' -c \"import ast; ast.parse\\(open\\(r'C:\\\\x\\\\Dashboard-Pro\\\\pages\\\\amd-scanner.py', encoding='utf-8'\\).read\\(\\)\\); print\\('amd-scanner.py: syntax OK'\\)\")",
       "PowerShell(& 'C:\\\\x\\\\Dashboard-Pro\\\\.venv\\\\Scripts\\\\python.exe' -c \"import ast; ast.parse\\(open\\(r'C:\\\\x\\\\Dashboard-Pro\\\\pages\\\\amd-scanner.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
-      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8765/)"
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8765/)",
+      "Bash(PYTHONIOENCODING=utf-8 python *)"
     ]
   }
 }
