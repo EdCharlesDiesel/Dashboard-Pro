@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
+import streamlit as st
+
 
 @dataclass(frozen=True)
 class NavEntry:
@@ -18,26 +20,66 @@ class NavEntry:
     path: str          # Streamlit page path (top-level file or pages/foo.py)
 
 
-NAV_ENTRIES: List[NavEntry] = [
-    NavEntry("CHCK", "00. Checklist",            "📋", "daily-trading-checklist.py"),
-    NavEntry("RANK", "01. Setup Ranker",         "🎰", "pages/setup-ranker.py"),
-    NavEntry("MACR", "02. Macro Bias",           "🌐", "pages/macro-bias.py"),
-    NavEntry("NEWS", "03. News Filter",          "📰", "pages/news-filter.py"),
-    NavEntry("CORR", "04. Correlations",         "🔗", "pages/correlations.py"),
-    NavEntry("ATR",  "05. ATR Volatility",       "📊", "pages/atr-volatility.py"),
-    NavEntry("WEMA", "06. Weekly EMA",           "📉", "pages/weekly-ema.py"),
-    NavEntry("WRSI", "07. Weekly RSI",           "📡", "pages/weekly-rsi.py"),
-    NavEntry("WSWG", "08. Weekly Swing",         "🔄", "pages/weekly-swing.py"),
-    NavEntry("DTRN", "09. Daily Trend",          "📈", "pages/daily-trend.py"),
-    NavEntry("DMCD", "10. Daily MACD",           "📊", "pages/daily-macd.py"),
-    NavEntry("4HCZ", "11. 4H Confluence Zone",   "🎯", "pages/4H-confluence-zone.py"),
-    NavEntry("CONF", "12. 2/3 Confluence Check", "🔀", "pages/confluence-checker.py"),
-    NavEntry("15RJ", "13. 15M Rejection",        "🕯️", "pages/15m-rejection.py"),
-    NavEntry("15EN", "14. 15M Entry Signal",     "⚡", "pages/15m-entry-signal.py"),
-    NavEntry("STOP", "15. Stop Structure",       "🛡️", "pages/stop-structure.py"),
-    NavEntry("RRC",  "16. R:R Calculator",       "⚖️", "pages/rr-calculator.py"),
-    NavEntry("JRNL", "17. Trade Journal",        "📓", "pages/trade-journal.py"),
-    NavEntry("STRC", "18. Market Structure",     "🏗️", "pages/market-structure.py"),
-    NavEntry("BTST", "19. Backtest Workflow",    "🧪", "pages/backtest-workflow.py"),
-    NavEntry("AMD",  "20. AMD Scanner",          "📊", "pages/amd-scanner.py"),
+# Ordered the way a professional day trader works a session:
+# scan for candidates → filter the day → establish bias → confirm → find the
+# zone → wait for the trigger → size the risk → final gate → review.
+NAV_SECTIONS: List[tuple] = [
+    ("1 · SCAN", [
+        NavEntry("RANK", "01. Setup Ranker",         "🎰", "pages/setup-ranker.py"),
+        NavEntry("AMD",  "02. AMD Scanner",          "📊", "pages/amd-scanner.py"),
+    ]),
+    ("2 · FILTER THE DAY", [
+        NavEntry("MACR", "03. Macro Bias",           "🌐", "pages/macro-bias.py"),
+        NavEntry("NEWS", "04. News Filter",          "📰", "pages/news-filter.py"),
+        NavEntry("CORR", "05. Correlations",         "🔗", "pages/correlations.py"),
+        NavEntry("ATR",  "06. ATR Volatility",       "📊", "pages/atr-volatility.py"),
+    ]),
+    ("3 · WEEKLY BIAS", [
+        NavEntry("WEMA", "07. Weekly EMA",           "📉", "pages/weekly-ema.py"),
+        NavEntry("WRSI", "08. Weekly RSI",           "📡", "pages/weekly-rsi.py"),
+        NavEntry("WSWG", "09. Weekly Swing",         "🔄", "pages/weekly-swing.py"),
+    ]),
+    ("4 · DAILY CONFIRM", [
+        NavEntry("DTRN", "10. Daily Trend",          "📈", "pages/daily-trend.py"),
+        NavEntry("DMCD", "11. Daily MACD",           "📊", "pages/daily-macd.py"),
+        NavEntry("STRC", "12. Market Structure",     "🏗️", "pages/market-structure.py"),
+    ]),
+    ("5 · 4H ZONE", [
+        NavEntry("4HCZ", "13. 4H Confluence Zone",   "🎯", "pages/4H-confluence-zone.py"),
+        NavEntry("CONF", "14. 2/3 Confluence Check", "🔀", "pages/confluence-checker.py"),
+    ]),
+    ("6 · 15M TRIGGER", [
+        NavEntry("15RJ", "15. 15M Rejection",        "🕯️", "pages/15m-rejection.py"),
+        NavEntry("15EN", "16. 15M Entry Signal",     "⚡", "pages/15m-entry-signal.py"),
+    ]),
+    ("7 · RISK & EXECUTE", [
+        NavEntry("STOP", "17. Stop Structure",       "🛡️", "pages/stop-structure.py"),
+        NavEntry("RRC",  "18. R:R Calculator",       "⚖️", "pages/rr-calculator.py"),
+        NavEntry("CHCK", "19. Final Checklist",      "📋", "daily-trading-checklist.py"),
+    ]),
+    ("8 · REVIEW", [
+        NavEntry("JRNL", "20. Trade Journal",        "📓", "pages/trade-journal.py"),
+        NavEntry("BTST", "21. Backtest Workflow",    "🧪", "pages/backtest-workflow.py"),
+    ]),
 ]
+
+# Flat list kept for any caller that doesn't care about grouping.
+NAV_ENTRIES: List[NavEntry] = [e for _, entries in NAV_SECTIONS for e in entries]
+
+
+def render_sidebar_nav() -> None:
+    """Render the uniform sidebar navigation (call inside `with st.sidebar:`).
+
+    Uses st.page_link so navigation is SPA-style and preserves session state.
+    Every page should call this instead of hand-maintaining its own link list.
+    """
+    for section, entries in NAV_SECTIONS:
+        st.caption(section)
+        for e in entries:
+            try:
+                st.page_link(e.path, label=e.label, icon=e.icon)
+            except Exception:
+                # st.page_link needs the multipage registry (absent in bare/test
+                # runs) and raises if a page file was renamed — skip the entry
+                # rather than crash the whole page.
+                continue

@@ -1,4 +1,5 @@
 import streamlit as st
+from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -561,26 +562,7 @@ def check_pass_rate_chart(trades: list, daily: pd.DataFrame, weekly: pd.DataFram
 # ══════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    st.page_link("daily-trading-checklist.py",    label="00. Checklist",           icon="📋")
-    st.page_link("pages/setup-ranker.py",         label="01. Setup Ranker",         icon="🎰")
-    st.page_link("pages/macro-bias.py",           label="02. Macro Bias",           icon="🌐")
-    st.page_link("pages/news-filter.py",          label="03. News Filter",          icon="📰")
-    st.page_link("pages/correlations.py",         label="04. Correlations",         icon="🔗")
-    st.page_link("pages/atr-volatility.py",       label="05. ATR Volatility",       icon="📊")
-    st.page_link("pages/weekly-ema.py",           label="06. Weekly EMA",           icon="📉")
-    st.page_link("pages/weekly-rsi.py",           label="07. Weekly RSI",           icon="📡")
-    st.page_link("pages/weekly-swing.py",         label="08. Weekly Swing",         icon="🔄")
-    st.page_link("pages/daily-trend.py",          label="09. Daily Trend",          icon="📈")
-    st.page_link("pages/daily-macd.py",           label="10. Daily MACD",           icon="📊")
-    st.page_link("pages/4H-confluence-zone.py",   label="11. 4H Confluence Zone",   icon="🎯")
-    st.page_link("pages/confluence-checker.py",   label="12. 2/3 Confluence Check", icon="🔀")
-    st.page_link("pages/15m-rejection.py",        label="13. 15M Rejection",        icon="🕯️")
-    st.page_link("pages/15m-entry-signal.py",     label="14. 15M Entry Signal",     icon="⚡")
-    st.page_link("pages/stop-structure.py",       label="15. Stop Structure",       icon="🛡️")
-    st.page_link("pages/rr-calculator.py",        label="16. R:R Calculator",       icon="⚖️")
-    st.page_link("pages/trade-journal.py",        label="17. Trade Journal",        icon="📓")
-    st.page_link("pages/market-structure.py",     label="18. Market Structure",     icon="🏗️")
-    st.page_link("pages/backtest-workflow.py",    label="19. Backtest Workflow",    icon="🧪")
+    render_sidebar_nav()
     st.markdown("---")
     st.markdown("### 🧪 Workflow Backtest")
     st.markdown("---")

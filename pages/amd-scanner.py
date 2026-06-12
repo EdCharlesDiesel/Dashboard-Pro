@@ -15,6 +15,7 @@ from email.message import EmailMessage
 import numpy as np
 import pandas as pd
 import streamlit as st
+from src.pages_lib.navigation import render_sidebar_nav
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -63,6 +64,14 @@ INSTRUMENTS = {
     "🥈 Silver":   "SI=F",
     "🪙 Platinum": "PL=F",
 }
+
+
+# Daily-trading preset: 1H bars over ~1 month. One trading day ≈ 24 hourly
+# bars, so the default range window tracks the prior day's range — the
+# reference the daily AMD cycle (Asia range → London sweep → NY leg) plays off.
+PERIOD = "1mo"
+INTERVAL = "1h"
+BARS_PER_DAY = 24
 
 
 # --------------------------------------------------------------------------- #
@@ -282,27 +291,51 @@ def _period_boundaries(idx, interval: str) -> list:
 
 
 def _volume_profile(labeled: pd.DataFrame, y_series: pd.Series,
-                    bins: int = 40) -> tuple[np.ndarray, np.ndarray]:
+                    bins: int = 40) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Volume-by-price: distribute each bar's volume across the price bins its
-    high–low range touches. Returns (bin centers, summed activity per bin)."""
+    high–low range touches. Volume from up-closing bars is tracked separately
+    so each level can be coloured by buy/sell dominance.
+    Returns (bin centers, summed activity per bin, up-share per bin 0..1)."""
     lo = float(labeled["Low"].min())
     hi = float(labeled["High"].max())
     if not (np.isfinite(lo) and np.isfinite(hi)) or hi <= lo:
-        return np.array([]), np.array([])
+        return np.array([]), np.array([]), np.array([])
     edges = np.linspace(lo, hi, bins + 1)
     centers = (edges[:-1] + edges[1:]) / 2.0
     profile = np.zeros(bins)
+    up_profile = np.zeros(bins)
     highs = labeled["High"].to_numpy()
     lows = labeled["Low"].to_numpy()
+    opens = labeled["Open"].to_numpy()
+    closes = labeled["Close"].to_numpy()
     vols = y_series.to_numpy()
-    for h, l, v in zip(highs, lows, vols):
+    for h, l, o, c, v in zip(highs, lows, opens, closes, vols):
         if not (np.isfinite(v) and np.isfinite(h) and np.isfinite(l)) or v <= 0:
             continue
         lo_i = int(np.clip(np.searchsorted(edges, l, side="right") - 1, 0, bins - 1))
         hi_i = int(np.clip(np.searchsorted(edges, h, side="right") - 1, 0, bins - 1))
         span = hi_i - lo_i + 1
         profile[lo_i:hi_i + 1] += v / span
-    return centers, profile
+        if np.isfinite(c) and np.isfinite(o) and c >= o:
+            up_profile[lo_i:hi_i + 1] += v / span
+    with np.errstate(divide="ignore", invalid="ignore"):
+        up_share = np.where(profile > 0, up_profile / profile, 0.5)
+    return centers, profile, up_share
+
+
+# Buy/sell dominance → bar colour (strong green → light green → light red → red)
+def _profile_colors(up_share: np.ndarray) -> list:
+    colors = []
+    for s in up_share:
+        if s >= 0.60:
+            colors.append("#16a34a")    # green — buyers dominate
+        elif s >= 0.50:
+            colors.append("#86efac")    # light green — buyers slightly ahead
+        elif s >= 0.40:
+            colors.append("#fca5a5")    # light red — sellers slightly ahead
+        else:
+            colors.append("#dc2626")    # red — sellers dominate
+    return colors
 
 
 def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.Figure:
@@ -313,11 +346,13 @@ def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.F
     if real_volume:
         y_vals = pd.to_numeric(labeled["Volume"], errors="coerce").fillna(0)
         prof_title = "Volume by price"
-        hover_left = "Price: %{y:,.5f}<br>Vol: %{x:,.0f}<extra></extra>"
+        hover_left = ("Price: %{y:,.5f}<br>Vol: %{x:,.0f}"
+                      "<br>Buy share: %{customdata:.0%}<extra></extra>")
     else:
         y_vals = true_range(labeled).fillna(0)
         prof_title = "Activity by price (range proxy)"
-        hover_left = "Price: %{y:,.5f}<br>Range: %{x:,.5f}<extra></extra>"
+        hover_left = ("Price: %{y:,.5f}<br>Range: %{x:,.5f}"
+                      "<br>Buy share: %{customdata:.0%}<extra></extra>")
 
     fig = make_subplots(
         rows=1, cols=2, shared_yaxes=True,
@@ -326,13 +361,14 @@ def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.F
     )
 
     # ---- LEFT: horizontal volume profile (volume by price level) ----
-    centers, profile = _volume_profile(labeled, y_vals, bins=40)
+    centers, profile, up_share = _volume_profile(labeled, y_vals, bins=40)
     if len(centers) > 0 and profile.sum() > 0:
         fig.add_trace(
             go.Bar(
                 x=profile, y=centers, orientation="h",
-                marker=dict(color="#64748b", line=dict(width=0)),
-                opacity=0.75, name=prof_title, showlegend=False,
+                marker=dict(color=_profile_colors(up_share), line=dict(width=0)),
+                opacity=0.85, name=prof_title, showlegend=False,
+                customdata=up_share,
                 hovertemplate=hover_left,
             ),
             row=1, col=1,
@@ -461,26 +497,35 @@ PLAYBOOK = {
 st.set_page_config(page_title="AMD Market-Phase Scanner", layout="wide")
 st.title("📊 AMD Market-Phase Scanner")
 st.caption(
-    "Accumulation → Manipulation → Distribution. Heuristic, educational, "
+    "Accumulation → Manipulation → Distribution on **1H bars** — tuned for "
+    "daily trading: the range window defaults to the prior day's range, and "
+    "dotted lines mark each new trading day. Heuristic, educational, "
     "**not financial advice.**"
 )
 
 with st.sidebar:
+    render_sidebar_nav()
+    st.markdown("---")
     st.header("Data")
     inst_keys = list(INSTRUMENTS.keys())
     default_idx = inst_keys.index("EUR/USD") if "EUR/USD" in inst_keys else 0
     instrument = st.selectbox("Symbol", inst_keys, index=default_idx)
     symbol = INSTRUMENTS[instrument]
-    st.caption(f"📡 Ticker: `{symbol}`")
-    period = st.selectbox("Period",
-                          ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"], index=2)
-    interval = st.selectbox("Interval",
-                            ["15m", "30m", "1h", "1d", "1wk"], index=3)
-    fetch = st.button("Fetch data", type="primary")
+    st.caption(
+        f"📡 Ticker: `{symbol}` · ⏱️ Daily-trading preset: "
+        f"**{INTERVAL} bars · {PERIOD} lookback** (auto-loads)"
+    )
+    if st.button("🔄 Refresh data", use_container_width=True):
+        load_yfinance.clear()
+        st.rerun()
 
     st.divider()
     st.header("Detection settings")
-    range_window = st.slider("Range window (bars)", 5, 60, 20)
+    range_window = st.slider(
+        "Range window (bars)", 5, 60, BARS_PER_DAY,
+        help="24 × 1H bars ≈ the prior trading day's range — the level the "
+             "daily AMD cycle sweeps.",
+    )
     atr_period = st.slider("ATR period", 5, 30, 14)
     consolidation_pctile = st.slider("Consolidation tightness (pctile)",
                                      0.10, 0.70, 0.35, 0.05)
@@ -538,17 +583,13 @@ with st.sidebar:
         )
         (st.success if ok else st.error)(f"Test: {info}")
 
-# ---- load data ----
+# ---- load data (auto, cached 5 min) ----
 df_raw = None
-if fetch and symbol:
-    try:
-        df_raw = load_yfinance(symbol, period, interval)
-        st.session_state["amd_df_cache"] = df_raw
-        st.session_state["amd_symbol_cache"] = symbol
-    except Exception as e:  # noqa: BLE001
-        st.error(f"Could not load data: {e}")
-elif "amd_df_cache" in st.session_state and st.session_state.get("amd_symbol_cache") == symbol:
-    df_raw = st.session_state["amd_df_cache"]
+try:
+    with st.spinner(f"Loading {instrument} ({INTERVAL} × {PERIOD})…"):
+        df_raw = load_yfinance(symbol, PERIOD, INTERVAL)
+except Exception as e:  # noqa: BLE001
+    st.error(f"Could not load data: {e}")
 
 tab_chart, tab_phases, tab_play, tab_about = st.tabs(
     ["📈 Chart", "🧩 Detected phases", "📘 How to trade each phase", "ℹ️ About"]
@@ -571,7 +612,7 @@ if df_raw is not None and not df_raw.empty:
         # --- Phase-transition email alert ---
         last_bar = labeled.iloc[-1]
         last_phase = str(last_bar["phase"])
-        alert_key = f"amd_last_alerted_{symbol}_{interval}"
+        alert_key = f"amd_last_alerted_{symbol}_{INTERVAL}"
         prev_alerted = st.session_state.get(alert_key)
         if (
                 enable_alerts
@@ -579,10 +620,10 @@ if df_raw is not None and not df_raw.empty:
                 and last_phase in ("manipulation", "distribution")
                 and last_phase != prev_alerted
         ):
-            subject = f"AMD: {last_phase.upper()} on {instrument} ({interval})"
+            subject = f"AMD: {last_phase.upper()} on {instrument} ({INTERVAL})"
             body = (
                 f"Symbol:    {instrument} ({symbol})\n"
-                f"Interval:  {interval}\n"
+                f"Interval:  {INTERVAL}\n"
                 f"Bar time:  {last_bar.name}\n"
                 f"Phase:     {last_phase}\n"
                 f"Sweep dir: {last_bar.get('sweep_dir', '') or '-'}\n"
@@ -601,7 +642,9 @@ if df_raw is not None and not df_raw.empty:
 
         with tab_chart:
             c1, c2, c3 = st.columns(3)
-            c1.metric("Last close", f"{labeled['Close'].iloc[-1]:,.2f}")
+            last_close = float(labeled["Close"].iloc[-1])
+            px_fmt = f"{last_close:,.5f}" if abs(last_close) < 100 else f"{last_close:,.2f}"
+            c1.metric("Last close", px_fmt)
             c2.metric("Current phase", assess["phase"].capitalize())
             c3.metric("Read / bias", str(assess["bias"]))
             st.info(assess["detail"])
@@ -613,7 +656,13 @@ if df_raw is not None and not df_raw.empty:
                     "proxy** instead. For real volume, pick a futures contract "
                     "(Gold, Silver, Platinum)."
                 )
-            st.plotly_chart(make_chart(labeled, symbol, interval), use_container_width=True)
+            st.plotly_chart(make_chart(labeled, symbol, INTERVAL), use_container_width=True)
+            st.caption(
+                "Volume-profile colours — 🟩 **green**: buyers dominate (≥60% up-bar "
+                "volume) · 🟢 **light green**: buyers slightly ahead · "
+                "🔴 **light red**: sellers slightly ahead · 🟥 **red**: sellers "
+                "dominate. Long green/red bars = high-interest price levels."
+            )
 
         with tab_phases:
             seg = summarize_phases(labeled)
@@ -640,7 +689,8 @@ if df_raw is not None and not df_raw.empty:
                 )
 else:
     with tab_chart:
-        st.write("👈 Pick a symbol in the sidebar and click **Fetch data** to begin.")
+        st.write("👈 Pick a symbol in the sidebar — data loads automatically "
+                 "(1H bars, 1-month lookback).")
 
 with tab_play:
     st.write("The AMD cycle in one line: smart money **builds** a position in a "
