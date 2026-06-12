@@ -1,4 +1,5 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
@@ -17,6 +18,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ─────────────────────────────────────────────
 #  Custom CSS — dark terminal / trading aesthetic
@@ -31,7 +33,7 @@ st.markdown("""
     }
 html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
 .stApp{ background:var(--background-color); }
-section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
 #MainMenu,footer,header{ visibility:hidden; }
 [data-testid="stSidebarCollapsedControl"]{ visibility:visible!important; }
 [data-testid="stSidebarNav"]{ display:none; }
@@ -64,7 +66,7 @@ section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!i
     color:#ff6b35;
 }
 
-hr{ border-color:#21262d; }
+hr{ border-color:#2a2a2a; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -315,14 +317,14 @@ with st.sidebar:
 #  Hero card
 # ─────────────────────────────────────────────
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d; border-radius:16px; padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a; border-radius:16px; padding:24px 28px;
             margin-bottom:20px; position:relative; overflow:hidden;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">🎯 4H Confluence Zone</div>
-  <div style="color:#8b949e; font-size:13px; margin-top:4px;">
+  <div style="font-size:24px; font-weight:700; color:#e6e6e6;">🎯 4H Confluence Zone</div>
+  <div style="color:#9a9a9a; font-size:13px; margin-top:4px;">
     Fibonacci · Pivot Points · EMA overlap · {selected_pair} · 4H chart
   </div>
-  <div style="font-size:12px; color:#388bfd; margin-top:6px;">
+  <div style="font-size:12px; color:#00ff41; margin-top:6px;">
     Check #10 — 4H Confluence Zone · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
@@ -400,15 +402,15 @@ with tab_scan:
     for col_, val_, lbl_, c_ in [
         (sc1, cnt_strong,   "Strong Zones",   "#ff6b35"),
         (sc2, cnt_moderate, "Moderate Zones", "#00d4ff"),
-        (sc3, cnt_none,     "No Zones",       "#484f58"),
-        (sc4, cnt_error,    "Errors",         "#f85149" if cnt_error else "#484f58"),
+        (sc3, cnt_none,     "No Zones",       "#555555"),
+        (sc4, cnt_error,    "Errors",         "#ff3344" if cnt_error else "#555555"),
     ]:
         with col_:
             st.markdown(
-                f'<div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;'
+                f'<div style="background:#000000;border:1px solid #2a2a2a;border-radius:8px;'
                 f'padding:14px;text-align:center;">'
                 f'<div style="font-size:28px;font-weight:700;color:{c_};font-family:monospace;">{val_}</div>'
-                f'<div style="font-size:11px;color:#8b949e;margin-top:2px;font-weight:500;'
+                f'<div style="font-size:11px;color:#9a9a9a;margin-top:2px;font-weight:500;'
                 f'letter-spacing:.04em;text-transform:uppercase;">{lbl_}</div>'
                 f'</div>',
                 unsafe_allow_html=True)
@@ -420,10 +422,10 @@ with tab_scan:
     for i, r in enumerate(scan_results):
         pair_name = r["pair"]
         is_selected = pair_name == selected_pair
-        border_style = "border:2px solid #388bfd;" if is_selected else "border:1px solid #21262d;"
+        border_style = "border:2px solid #00ff41;" if is_selected else "border:1px solid #2a2a2a;"
 
         if not r.get("ok"):
-            badge_html = '<span style="font-size:11px;color:#f85149;">No data</span>'
+            badge_html = '<span style="font-size:11px;color:#ff3344;">No data</span>'
             price_html = "—"
             zone_html  = "—"
         else:
@@ -443,8 +445,8 @@ with tab_scan:
                 )
             else:
                 badge_html = (
-                    '<span style="background:rgba(72,79,88,.2);border:1px solid #484f58;'
-                    'border-radius:4px;padding:2px 8px;font-size:11px;color:#484f58;font-weight:600;">'
+                    '<span style="background:rgba(72,79,88,.2);border:1px solid #555555;'
+                    'border-radius:4px;padding:2px 8px;font-size:11px;color:#555555;font-weight:600;">'
                     'NO ZONES</span>'
                 )
             price_html = f'{r["current_price"]:,.4f}'
@@ -458,15 +460,15 @@ with tab_scan:
 
         with cols3[i % 3]:
             st.markdown(
-                f'<div style="background:#161b22;{border_style}border-radius:8px;'
+                f'<div style="background:#0a0a0a;{border_style}border-radius:8px;'
                 f'padding:12px 14px;margin-bottom:8px;">'
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
-                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="font-size:13px;font-weight:600;color:#e6e6e6;">{pair_name}</span>'
                 f'<span>{badge_html}{key_badge}</span>'
                 f'</div>'
                 f'<div style="display:flex;gap:16px;margin-top:8px;">'
-                f'<span style="font-size:11px;color:#8b949e;">Price: <span style="color:#e6edf3;font-family:monospace;">{price_html}</span></span>'
-                f'<span style="font-size:11px;color:#8b949e;">Zones: <span style="color:#00d4ff;font-family:monospace;">{zone_html}</span></span>'
+                f'<span style="font-size:11px;color:#9a9a9a;">Price: <span style="color:#e6e6e6;font-family:monospace;">{price_html}</span></span>'
+                f'<span style="font-size:11px;color:#9a9a9a;">Zones: <span style="color:#00d4ff;font-family:monospace;">{zone_html}</span></span>'
                 f'</div>'
                 f'</div>',
                 unsafe_allow_html=True)
@@ -545,17 +547,17 @@ with tab_detail:
         # ── Top metrics ──────────────────────────
         col1, col2, col3, col4 = st.columns(4)
         for col_, val_, lbl_, c_ in [
-            (col1, f"{current_price:,.4f}", "Current Price",      "#e6edf3"),
-            (col2, f"{swing_high:,.4f}",    "Swing High (50)",    "#3fb950"),
-            (col3, f"{swing_low:,.4f}",     "Swing Low (50)",     "#f85149"),
-            (col4, str(len(zones)),         "Confluence Zones",   "#00d4ff" if zones else "#484f58"),
+            (col1, f"{current_price:,.4f}", "Current Price",      "#e6e6e6"),
+            (col2, f"{swing_high:,.4f}",    "Swing High (50)",    "#00ff66"),
+            (col3, f"{swing_low:,.4f}",     "Swing Low (50)",     "#ff3344"),
+            (col4, str(len(zones)),         "Confluence Zones",   "#00d4ff" if zones else "#555555"),
         ]:
             with col_:
                 st.markdown(
-                    f'<div style="background:#0d1117;border:1px solid #21262d;border-radius:8px;'
+                    f'<div style="background:#000000;border:1px solid #2a2a2a;border-radius:8px;'
                     f'padding:14px;text-align:center;">'
                     f'<div style="font-size:20px;font-weight:700;color:{c_};font-family:monospace;">{val_}</div>'
-                    f'<div style="font-size:11px;color:#8b949e;margin-top:2px;font-weight:500;'
+                    f'<div style="font-size:11px;color:#9a9a9a;margin-top:2px;font-weight:500;'
                     f'letter-spacing:.04em;text-transform:uppercase;">{lbl_}</div>'
                     f'</div>',
                     unsafe_allow_html=True)
@@ -629,12 +631,12 @@ with tab_detail:
                 low=df["Low"],
                 close=df["Close"],
                 increasing=dict(
-                    line=dict(color="#3fb950"),
-                    fillcolor=safe_rgba("#3fb950", 0.13),
+                    line=dict(color="#00ff66"),
+                    fillcolor=safe_rgba("#00ff66", 0.13),
                 ),
                 decreasing=dict(
-                    line=dict(color="#f85149"),
-                    fillcolor=safe_rgba("#f85149", 0.13),
+                    line=dict(color="#ff3344"),
+                    fillcolor=safe_rgba("#ff3344", 0.13),
                 ),
                 name="4H Candles",
                 showlegend=False,
@@ -754,23 +756,23 @@ with tab_detail:
         if pdh_pdl:
             fig.add_hline(
                 y=pdh_pdl["pdh"],
-                line_dash="dash", line_color="#58a6ff", line_width=1.5, opacity=0.75,
+                line_dash="dash", line_color="#00e0ff", line_width=1.5, opacity=0.75,
                 annotation_text=f"  PDH {pdh_pdl['pdh']:,.4f}",
                 annotation_position="right",
-                annotation_font=dict(size=9, color="#58a6ff"),
+                annotation_font=dict(size=9, color="#00e0ff"),
                 row=1, col=1,
             )
             fig.add_hline(
                 y=pdh_pdl["pdl"],
-                line_dash="dash", line_color="#e3b341", line_width=1.5, opacity=0.75,
+                line_dash="dash", line_color="#ffcc00", line_width=1.5, opacity=0.75,
                 annotation_text=f"  PDL {pdh_pdl['pdl']:,.4f}",
                 annotation_position="right",
-                annotation_font=dict(size=9, color="#e3b341"),
+                annotation_font=dict(size=9, color="#ffcc00"),
                 row=1, col=1,
             )
 
         colors_vol = [
-            safe_rgba("#f85149", 0.53) if close < open_ else safe_rgba("#3fb950", 0.53)
+            safe_rgba("#ff3344", 0.53) if close < open_ else safe_rgba("#00ff66", 0.53)
             for close, open_ in zip(df["Close"], df["Open"])
         ]
 
@@ -788,11 +790,11 @@ with tab_detail:
 
         fig.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="#161b22",
-            font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+            plot_bgcolor="#0a0a0a",
+            font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
             xaxis_rangeslider_visible=False,
             legend=dict(
-                bgcolor=safe_rgba("#0d1117", 0.60),
+                bgcolor=safe_rgba("#000000", 0.60),
                 bordercolor="#1e3a5f",
                 borderwidth=1,
                 font=dict(size=10),
@@ -804,8 +806,8 @@ with tab_detail:
             ),
             margin=dict(l=10, r=120, t=10, b=10),
             height=680,
-            xaxis2=dict(showgrid=True, gridcolor="#21262d"),
-            yaxis=dict(showgrid=True, gridcolor="#21262d", side="right"),
+            xaxis2=dict(showgrid=True, gridcolor="#2a2a2a"),
+            yaxis=dict(showgrid=True, gridcolor="#2a2a2a", side="right"),
             yaxis2=dict(showgrid=False, side="right"),
         )
 

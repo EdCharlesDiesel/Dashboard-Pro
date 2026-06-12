@@ -1,4 +1,5 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import requests
@@ -14,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -26,62 +28,62 @@ st.markdown("""
     }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     .stApp{background:var(--background-color);}
-    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
-    .card{background:var(--secondary-background-color);border:1px solid var(--border,#21262d);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
-    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#8b949e;margin-bottom:12px;}
-    .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
+    .card{background:var(--secondary-background-color);border:1px solid var(--border,#2a2a2a);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a;margin-bottom:12px;}
+    .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
     .hero::before{content:'';position:absolute;top:-40%;right:-5%;width:300px;height:300px;background:radial-gradient(circle,rgba(248,81,73,.06) 0%,transparent 70%);border-radius:50%;}
 
     /* Safe/Danger banner */
-    .safe-banner{background:#0d2f1a;border:2px solid #238636;border-radius:14px;padding:24px 28px;text-align:center;margin-bottom:20px;}
+    .safe-banner{background:#0d2f1a;border:2px solid #00a32a;border-radius:14px;padding:24px 28px;text-align:center;margin-bottom:20px;}
     .danger-banner{background:#2f0d0d;border:2px solid #8b2d2d;border-radius:14px;padding:24px 28px;text-align:center;margin-bottom:20px;animation:pulse 2s infinite;}
     .warning-banner{background:#2f1f0d;border:2px solid #9e6a03;border-radius:14px;padding:24px 28px;text-align:center;margin-bottom:20px;}
-    @keyframes pulse{0%{border-color:#8b2d2d;}50%{border-color:#f85149;}100%{border-color:#8b2d2d;}}
+    @keyframes pulse{0%{border-color:#8b2d2d;}50%{border-color:#ff3344;}100%{border-color:#8b2d2d;}}
 
     .banner-icon{font-size:42px;margin-bottom:8px;}
     .banner-title{font-size:22px;font-weight:700;margin-bottom:6px;}
-    .banner-sub{font-size:13px;color:#8b949e;}
+    .banner-sub{font-size:13px;color:#9a9a9a;}
 
     /* Event rows */
     .event-card{border-radius:10px;padding:14px 16px;margin-bottom:8px;border-left:4px solid transparent;}
-    .event-high   {background:#1e0d0d;border-left-color:#f85149;}
-    .event-medium {background:#1e1a0d;border-left-color:#e3b341;}
-    .event-low    {background:#161b22;border-left-color:#30363d;}
-    .event-imminent{background:#2f0d0d;border:2px solid #f85149;border-left:4px solid #f85149;animation:pulse 1.5s infinite;}
-    .event-critical{background:#2f0d0d;border:3px solid #f85149;border-left:4px solid #f85149;animation:pulse 0.8s infinite;}
+    .event-high   {background:#1e0d0d;border-left-color:#ff3344;}
+    .event-medium {background:#1e1a0d;border-left-color:#ffcc00;}
+    .event-low    {background:#0a0a0a;border-left-color:#2a2a2a;}
+    .event-imminent{background:#2f0d0d;border:2px solid #ff3344;border-left:4px solid #ff3344;animation:pulse 1.5s infinite;}
+    .event-critical{background:#2f0d0d;border:3px solid #ff3344;border-left:4px solid #ff3344;animation:pulse 0.8s infinite;}
 
-    .event-time{font-size:14px;font-weight:700;color:#e6edf3;font-family:monospace;}
-    .event-name{font-size:14px;font-weight:600;color:#e6edf3;margin:2px 0;}
-    .event-country{font-size:11px;color:#8b949e;}
-    .event-meta{display:flex;gap:12px;margin-top:6px;font-size:12px;color:#8b949e;}
+    .event-time{font-size:14px;font-weight:700;color:#e6e6e6;font-family:monospace;}
+    .event-name{font-size:14px;font-weight:600;color:#e6e6e6;margin:2px 0;}
+    .event-country{font-size:11px;color:#9a9a9a;}
+    .event-meta{display:flex;gap:12px;margin-top:6px;font-size:12px;color:#9a9a9a;}
     .event-meta span{display:flex;align-items:center;gap:4px;}
 
-    .impact-badge-high  {background:#4a0d0d;color:#f85149;border:1px solid #8b2d2d;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
-    .impact-badge-medium{background:#4a2d0d;color:#e3b341;border:1px solid #9e6a03;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
-    .impact-badge-low   {background:#21262d;color:#8b949e;border:1px solid #30363d;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
-    .impact-badge-holiday{background:#0d2040;color:#388bfd;border:1px solid #1f4f8a;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
+    .impact-badge-high  {background:#4a0d0d;color:#ff3344;border:1px solid #8b2d2d;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
+    .impact-badge-medium{background:#4a2d0d;color:#ffcc00;border:1px solid #9e6a03;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
+    .impact-badge-low   {background:#2a2a2a;color:#9a9a9a;border:1px solid #2a2a2a;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
+    .impact-badge-holiday{background:#0d2040;color:#00ff41;border:1px solid #1f4f8a;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;}
 
-    .countdown-box{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px 14px;text-align:center;}
+    .countdown-box{background:#000000;border:1px solid #2a2a2a;border-radius:8px;padding:12px 14px;text-align:center;}
     .countdown-val{font-size:28px;font-weight:700;font-family:monospace;}
-    .countdown-lbl{font-size:10px;color:#8b949e;margin-top:2px;letter-spacing:.05em;text-transform:uppercase;}
+    .countdown-lbl{font-size:10px;color:#9a9a9a;margin-top:2px;letter-spacing:.05em;text-transform:uppercase;}
 
-    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px 14px;text-align:center;}
-    .metric-value{font-size:20px;font-weight:700;color:#c9d1d9;}
-    .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:12px 14px;text-align:center;}
+    .metric-value{font-size:20px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
 
-    .day-header{font-size:13px;font-weight:700;color:#388bfd;letter-spacing:.05em;text-transform:uppercase;padding:12px 0 6px;border-bottom:1px solid #21262d;margin-bottom:10px;}
-    .now-line{background:#388bfd;height:2px;border-radius:2px;margin:8px 0;position:relative;}
-    .now-label{position:absolute;right:0;top:-10px;font-size:10px;color:#388bfd;font-weight:700;}
+    .day-header{font-size:13px;font-weight:700;color:#00ff41;letter-spacing:.05em;text-transform:uppercase;padding:12px 0 6px;border-bottom:1px solid #2a2a2a;margin-bottom:10px;}
+    .now-line{background:#00ff41;height:2px;border-radius:2px;margin:8px 0;position:relative;}
+    .now-label{position:absolute;right:0;top:-10px;font-size:10px;color:#00ff41;font-weight:700;}
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 
-    .alert-box{background:#2f0d0d;border:2px solid #f85149;border-radius:8px;padding:12px;margin:8px 0;}
+    .alert-box{background:#2f0d0d;border:2px solid #ff3344;border-radius:8px;padding:12px;margin:8px 0;}
     .alert-icon{font-size:20px;}
     .alert-text{color:#ffa198;font-size:13px;font-weight:600;}
-    .alert-time{color:#f85149;font-family:monospace;font-size:13px;font-weight:700;}
+    .alert-time{color:#ff3344;font-family:monospace;font-size:13px;font-weight:700;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -608,16 +610,16 @@ st.markdown(f"""
 <div class="hero">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
     <div>
-      <div style="font-size:26px;font-weight:700;color:#e6edf3;">📰 Economic News Filter</div>
-      <div style="color:#8b949e;font-size:14px;margin-top:6px;">High-Impact Event Tracker · Red Folder News · Checklist Item #2</div>
-      <div style="font-size:13px;color:#388bfd;font-weight:500;margin-top:4px;">
+      <div style="font-size:26px;font-weight:700;color:#e6e6e6;">📰 Economic News Filter</div>
+      <div style="color:#9a9a9a;font-size:14px;margin-top:6px;">High-Impact Event Tracker · Red Folder News · Checklist Item #2</div>
+      <div style="font-size:13px;color:#00ff41;font-weight:500;margin-top:4px;">
         🕐 {now_local.strftime('%A, %d %B %Y  |  %H:%M')} {selected_tz_str} · Source: {data_source}
       </div>
     </div>
     <div style="text-align:right;">
-      <div style="font-size:11px;color:#8b949e;">Entry Window</div>
-      <div style="font-size:22px;font-weight:700;color:#e6edf3;">{entry_local.strftime('%d %b  %H:%M')}</div>
-      <div style="font-size:12px;color:#8b949e;">±{buffer_min} min buffer</div>
+      <div style="font-size:11px;color:#9a9a9a;">Entry Window</div>
+      <div style="font-size:22px;font-weight:700;color:#e6e6e6;">{entry_local.strftime('%d %b  %H:%M')}</div>
+      <div style="font-size:12px;color:#9a9a9a;">±{buffer_min} min buffer</div>
     </div>
   </div>
 </div>
@@ -632,8 +634,8 @@ if alerts and st.session_state.alert_system:
 
     for idx, alert in enumerate(alerts[:6]):  # Show max 6 alerts
         with alert_cols[idx % 3]:
-            severity_color = "#f85149" if alert["severity"] == "high" else "#e3b341" if alert[
-                                                                                            "severity"] == "medium" else "#8b949e"
+            severity_color = "#ff3344" if alert["severity"] == "high" else "#ffcc00" if alert[
+                                                                                            "severity"] == "medium" else "#9a9a9a"
             st.markdown(f"""
             <div class="alert-box" style="border-color:{severity_color};">
                 <div class="alert-icon">{'🔴' if alert['type'] == 'critical' else '🟡'}</div>
@@ -649,7 +651,7 @@ if SAFE:
     st.markdown(f"""
     <div class="safe-banner">
       <div class="banner-icon">✅</div>
-      <div class="banner-title" style="color:#3fb950;">CLEAR TO TRADE</div>
+      <div class="banner-title" style="color:#00ff66;">CLEAR TO TRADE</div>
       <div class="banner-sub">No high-impact or critical news within {buffer_min} minutes of your entry window
         ({entry_local.strftime('%H:%M')} {selected_tz_str.split('/')[-1]})</div>
     </div>
@@ -663,7 +665,7 @@ else:
     st.markdown(f"""
     <div class="danger-banner">
       <div class="banner-icon">🚨</div>
-      <div class="banner-title" style="color:#f85149;">⛔ DO NOT ENTER — HIGH-IMPACT NEWS NEARBY</div>
+      <div class="banner-title" style="color:#ff3344;">⛔ DO NOT ENTER — HIGH-IMPACT NEWS NEARBY</div>
       <div class="banner-sub" style="color:#ffa198;font-weight:600;margin-bottom:6px;">{conflict_names}</div>
       <div class="banner-sub">Scheduled at {conflict_times} — within {buffer_min} min of your entry
         ({entry_local.strftime('%H:%M')})</div>
@@ -679,14 +681,14 @@ all_med = [e for e in events_all if e["impact"] == "Medium"]
 total_evts = len(events_all)
 
 kpis = [
-    (k1, len(all_high), "🔴 High Impact", "#f85149"),
-    (k2, len(all_med), "🟡 Medium", "#e3b341"),
-    (k3, len(high_today), "Today High", "#f85149"),
-    (k4, len(critical_today), "Critical Today", "#f85149" if critical_today else "#3fb950"),
-    (k5, len(upcoming_high), "Upcoming High", "#e3b341" if upcoming_high else "#3fb950"),
-    (k6, len(near_entry), f"Near Entry ±{buffer_min}m", "#f85149" if near_entry else "#3fb950"),
+    (k1, len(all_high), "🔴 High Impact", "#ff3344"),
+    (k2, len(all_med), "🟡 Medium", "#ffcc00"),
+    (k3, len(high_today), "Today High", "#ff3344"),
+    (k4, len(critical_today), "Critical Today", "#ff3344" if critical_today else "#00ff66"),
+    (k5, len(upcoming_high), "Upcoming High", "#ffcc00" if upcoming_high else "#00ff66"),
+    (k6, len(near_entry), f"Near Entry ±{buffer_min}m", "#ff3344" if near_entry else "#00ff66"),
     (k7, f"{mins_to_next}m" if mins_to_next is not None else "None", "Next High Event",
-     "#f85149" if mins_to_next and mins_to_next < 60 else "#e3b341" if mins_to_next else "#3fb950"),
+     "#ff3344" if mins_to_next and mins_to_next < 60 else "#ffcc00" if mins_to_next else "#00ff66"),
 ]
 for col, val, lbl, color in kpis:
     with col:
@@ -764,7 +766,7 @@ The Forex Factory feed couldn't be reached. This may be due to:
             except Exception:
                 day_label = day_str
             is_today = (day_str == today_str)
-            day_color = "#388bfd" if is_today else "#8b949e"
+            day_color = "#00ff41" if is_today else "#9a9a9a"
             today_marker = " 📍 TODAY" if is_today else ""
 
             st.markdown(f'<div class="day-header" style="color:{day_color};">{day_label}{today_marker}</div>',
@@ -814,12 +816,12 @@ The Forex Factory feed couldn't be reached. This may be due to:
                     is_past = False
 
                 past_style = "opacity:0.45;" if is_past else ""
-                near_warn = '<span style="color:#f85149;font-weight:700;font-size:12px;margin-left:8px;">⚠️ WITHIN WINDOW</span>' if is_near else ""
+                near_warn = '<span style="color:#ff3344;font-weight:700;font-size:12px;margin-left:8px;">⚠️ WITHIN WINDOW</span>' if is_near else ""
 
                 # Actual vs forecast
                 actual_str = ""
                 if e.get("actual"):
-                    actual_str = f'<span>✅ Actual: <strong style="color:#c9d1d9">{e["actual"]}</strong></span>'
+                    actual_str = f'<span>✅ Actual: <strong style="color:#e6e6e6">{e["actual"]}</strong></span>'
                 forecast_str = f'<span>📊 Forecast: {e["forecast"]}</span>' if e["forecast"] != "—" else ""
                 prev_str = f'<span>🕐 Previous: {e["previous"]}</span>' if e["previous"] != "—" else ""
 
@@ -828,9 +830,9 @@ The Forex Factory feed couldn't be reached. This may be due to:
                 if e["datetime_local"] and not is_past and is_today:
                     delta = int((e["datetime_local"] - now_local).total_seconds() / 60)
                     if delta < 60:
-                        mins_away = f'<span style="color:#f85149;font-weight:700;">⏱ In {delta} min</span>'
+                        mins_away = f'<span style="color:#ff3344;font-weight:700;">⏱ In {delta} min</span>'
                     elif delta < 180:
-                        mins_away = f'<span style="color:#e3b341;">⏱ In {delta // 60}h {delta % 60}m</span>'
+                        mins_away = f'<span style="color:#ffcc00;">⏱ In {delta // 60}h {delta % 60}m</span>'
 
                 st.markdown(f"""
                 <div class="event-card {card_cls}" style="{past_style}">
@@ -841,7 +843,7 @@ The Forex Factory feed couldn't be reached. This may be due to:
                         {impact_badge}
                         {critical_badge}
                         <span style="font-size:15px;">{e['flag']}</span>
-                        <span style="font-size:12px;color:#8b949e;font-weight:600;">{e['country']}</span>
+                        <span style="font-size:12px;color:#9a9a9a;font-weight:600;">{e['country']}</span>
                         {near_warn}
                       </div>
                       <div class="event-name">{e['title']}</div>
@@ -866,7 +868,7 @@ with right:
         hrs = int(delta.total_seconds() // 3600)
         mins = int((delta.total_seconds() % 3600) // 60)
         c1, c2, c3 = st.columns(3)
-        count_color = "#f85149" if hrs == 0 and mins < 60 else "#e3b341" if hrs < 3 else "#3fb950"
+        count_color = "#ff3344" if hrs == 0 and mins < 60 else "#ffcc00" if hrs < 3 else "#00ff66"
         with c1:
             st.markdown(
                 f'<div class="countdown-box"><div class="countdown-val" style="color:{count_color};">{hrs:02d}</div><div class="countdown-lbl">Hours</div></div>',
@@ -881,19 +883,19 @@ with right:
                 f'<div class="countdown-box"><div class="countdown-val" style="color:{count_color};">{status_emoji}</div><div class="countdown-lbl">Status</div></div>',
                 unsafe_allow_html=True)
         st.markdown(f"""
-        <div style="margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;">
-          <div style="font-size:13px;font-weight:700;color:#e6edf3;">{next_high['flag']} {next_high['title']}</div>
-          <div style="font-size:12px;color:#8b949e;margin-top:3px;">
+        <div style="margin-top:12px;padding:10px;background:#000000;border-radius:8px;">
+          <div style="font-size:13px;font-weight:700;color:#e6e6e6;">{next_high['flag']} {next_high['title']}</div>
+          <div style="font-size:12px;color:#9a9a9a;margin-top:3px;">
             {next_high['country']} · {next_high['datetime_local'].strftime('%H:%M %Z') if next_high['datetime_local'] else '?'}
           </div>
-          <div style="font-size:11px;color:#8b949e;margin-top:3px;">
+          <div style="font-size:11px;color:#9a9a9a;margin-top:3px;">
             Forecast: {next_high['forecast']} · Previous: {next_high['previous']}
           </div>
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown(
-            '<div style="text-align:center;padding:20px;color:#3fb950;font-size:16px;font-weight:700;">🟢 No upcoming high-impact events today</div>',
+            '<div style="text-align:center;padding:20px;color:#00ff66;font-size:16px;font-weight:700;">🟢 No upcoming high-impact events today</div>',
             unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -901,34 +903,34 @@ with right:
     st.markdown('<div class="card"><div class="card-header">🎯 Entry Window Conflict Check</div>',
                 unsafe_allow_html=True)
     st.markdown(
-        f'<div style="font-size:12px;color:#8b949e;margin-bottom:10px;">Entry: <strong style="color:#e6edf3;">{entry_local.strftime("%d %b %H:%M")}</strong> ±{buffer_min} min buffer</div>',
+        f'<div style="font-size:12px;color:#9a9a9a;margin-bottom:10px;">Entry: <strong style="color:#e6e6e6;">{entry_local.strftime("%d %b %H:%M")}</strong> ±{buffer_min} min buffer</div>',
         unsafe_allow_html=True)
     if near_entry:
         for diff_min, e in near_entry:
             direction = "before" if e["datetime_local"] < entry_local else "after"
             is_critical = e.get("is_critical", False)
-            border_color = "#f85149" if is_critical else "#8b2d2d"
+            border_color = "#ff3344" if is_critical else "#8b2d2d"
             bg_color = "#2f0d0d" if is_critical else "#1e0d0d"
 
             st.markdown(f"""
             <div style="background:{bg_color};border:1px solid {border_color};border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-              <div style="font-size:13px;font-weight:700;color:#f85149;">
+              <div style="font-size:13px;font-weight:700;color:#ff3344;">
                 {'⚠️ CRITICAL: ' if is_critical else '🚨 '}{e['flag']} {e['title']}
               </div>
-              <div style="font-size:12px;color:#8b949e;margin-top:3px;">
+              <div style="font-size:12px;color:#9a9a9a;margin-top:3px;">
                 {e['country']} · {e['datetime_local'].strftime('%H:%M') if e['datetime_local'] else '?'}
                 · <strong style="color:#ffa198;">{int(diff_min)} min {direction} entry</strong>
               </div>
             </div>
             """, unsafe_allow_html=True)
         st.markdown(
-            '<div style="font-size:12px;color:#f85149;font-weight:600;padding:6px 0;">⛔ Wait for all events to clear before entering.</div>',
+            '<div style="font-size:12px;color:#ff3344;font-weight:600;padding:6px 0;">⛔ Wait for all events to clear before entering.</div>',
             unsafe_allow_html=True)
     else:
         st.markdown(f"""
-        <div style="background:#0d2f1a;border:1px solid #238636;border-radius:8px;padding:16px;text-align:center;">
-          <div style="font-size:18px;font-weight:700;color:#3fb950;">✅ Entry Window is Clear</div>
-          <div style="font-size:12px;color:#8b949e;margin-top:6px;">No high-impact or critical events within {buffer_min} minutes of {entry_local.strftime('%H:%M')}</div>
+        <div style="background:#0d2f1a;border:1px solid #00a32a;border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:18px;font-weight:700;color:#00ff66;">✅ Entry Window is Clear</div>
+          <div style="font-size:12px;color:#9a9a9a;margin-top:6px;">No high-impact or critical events within {buffer_min} minutes of {entry_local.strftime('%H:%M')}</div>
         </div>
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -952,18 +954,18 @@ with right:
             critical_marker = " ⚠️" if is_critical else ""
 
             st.markdown(f"""
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #21262d;{op}">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #2a2a2a;{op}">
               <div>
                 <span style="font-size:12px;">{status_dot} {e['flag']}{critical_marker}</span>
-                <span style="font-size:13px;font-weight:600;color:#e6edf3;margin-left:6px;">{e['title']}</span>
-                <div style="font-size:11px;color:#8b949e;margin-top:2px;">{e['country']} · F: {e['forecast']} · P: {e['previous']}</div>
+                <span style="font-size:13px;font-weight:600;color:#e6e6e6;margin-left:6px;">{e['title']}</span>
+                <div style="font-size:11px;color:#9a9a9a;margin-top:2px;">{e['country']} · F: {e['forecast']} · P: {e['previous']}</div>
               </div>
-              <div style="font-size:13px;font-weight:700;font-family:monospace;color:#f85149;">{t_str}</div>
+              <div style="font-size:13px;font-weight:700;font-family:monospace;color:#ff3344;">{t_str}</div>
             </div>
             """, unsafe_allow_html=True)
     else:
         st.markdown(
-            '<div style="text-align:center;padding:16px;color:#3fb950;font-weight:600;">🟢 No high-impact events today</div>',
+            '<div style="text-align:center;padding:16px;color:#00ff66;font-weight:600;">🟢 No high-impact events today</div>',
             unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -981,12 +983,12 @@ with right:
             op = "opacity:0.5;" if is_past else ""
 
             st.markdown(f"""
-            <div style="background:#2f0d0d;border:2px solid #f85149;border-radius:8px;padding:10px 12px;margin-bottom:8px;{op}">
-              <div style="font-size:13px;font-weight:700;color:#f85149;">⚠️ {e['flag']} {e['title']}</div>
-              <div style="font-size:12px;color:#8b949e;margin-top:3px;">
+            <div style="background:#2f0d0d;border:2px solid #ff3344;border-radius:8px;padding:10px 12px;margin-bottom:8px;{op}">
+              <div style="font-size:13px;font-weight:700;color:#ff3344;">⚠️ {e['flag']} {e['title']}</div>
+              <div style="font-size:12px;color:#9a9a9a;margin-top:3px;">
                 {e['country']} · {t_str} · Impact: {e['impact']}
               </div>
-              <div style="font-size:11px;color:#8b949e;margin-top:2px;">
+              <div style="font-size:11px;color:#9a9a9a;margin-top:2px;">
                 Forecast: {e['forecast']} · Previous: {e['previous']}
               </div>
             </div>
@@ -1018,9 +1020,9 @@ with right:
             time_str = f"{t_open} ({sess_tz_str})"
 
         st.markdown(f"""
-        <div style="display:flex;justify-content:space-between;padding:6px 4px;border-bottom:1px solid #21262d;font-size:12px;">
-          <span style="color:#c9d1d9;">{sess_name}</span>
-          <span style="color:#e3b341;font-family:monospace;font-weight:600;">{time_str}</span>
+        <div style="display:flex;justify-content:space-between;padding:6px 4px;border-bottom:1px solid #2a2a2a;font-size:12px;">
+          <span style="color:#e6e6e6;">{sess_name}</span>
+          <span style="color:#ffcc00;font-family:monospace;font-weight:600;">{time_str}</span>
         </div>
         """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1097,12 +1099,12 @@ if st.session_state.manual_events:
         with c2:
             st.write(e["datetime_local"].strftime("%d %b %H:%M") if e["datetime_local"] else "?")
         with c3:
-            badge_color = "#f85149" if e["impact"] == "High" else "#e3b341" if e["impact"] == "Medium" else "#8b949e"
+            badge_color = "#ff3344" if e["impact"] == "High" else "#ffcc00" if e["impact"] == "Medium" else "#9a9a9a"
             st.markdown(f'<span style="color:{badge_color};font-weight:700;">{e["impact"]}</span>',
                         unsafe_allow_html=True)
         with c4:
             if e.get("is_critical"):
-                st.markdown('<span style="color:#f85149;font-weight:700;">⚠️ CRITICAL</span>', unsafe_allow_html=True)
+                st.markdown('<span style="color:#ff3344;font-weight:700;">⚠️ CRITICAL</span>', unsafe_allow_html=True)
         with c5:
             if st.button("🗑️", key=f"del_manual_{idx}"):
                 st.session_state.manual_events.pop(idx)
@@ -1114,7 +1116,7 @@ if st.session_state.manual_events:
 
 # Footer
 st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #2a2a2a;">
   📰 News Filter · Economic Calendar · Sources: Forex Factory / Finnhub / FMP · Refresh every 15 min · Not financial advice
 </div>
 """, unsafe_allow_html=True)

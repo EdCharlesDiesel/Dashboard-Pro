@@ -1,4 +1,5 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
@@ -13,6 +14,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 st.markdown("""
 <style>
@@ -21,17 +23,17 @@ st.markdown("""
               --muted:  color-mix(in srgb, var(--text-color) 55%, transparent); }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     .stApp{background:var(--background-color);}
-    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
-    .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
-    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px;text-align:center;}
-    .metric-value{font-size:22px;font-weight:700;color:#c9d1d9;}
-    .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
-    .check-pass{background:#1a3a2a;border:1px solid #3fb950;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
-    .check-fail{background:#3a1a1a;border:1px solid #f85149;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
-    .check-auto{background:#1a2a3a;border:1px solid #388bfd;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
-    .trade-win{border-left:3px solid #3fb950;padding:4px 8px;margin:2px 0;font-size:12px;}
-    .trade-loss{border-left:3px solid #f85149;padding:4px 8px;margin:2px 0;font-size:12px;}
-    .trade-be{border-left:3px solid #e3b341;padding:4px 8px;margin:2px 0;font-size:12px;}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
+    .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:12px;text-align:center;}
+    .metric-value{font-size:22px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    .check-pass{background:#1a3a2a;border:1px solid #00ff66;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
+    .check-fail{background:#3a1a1a;border:1px solid #ff3344;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
+    .check-auto{background:#1a2a3a;border:1px solid #00ff41;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
+    .trade-win{border-left:3px solid #00ff66;padding:4px 8px;margin:2px 0;font-size:12px;}
+    .trade-loss{border-left:3px solid #ff3344;padding:4px 8px;margin:2px 0;font-size:12px;}
+    .trade-be{border-left:3px solid #ffcc00;padding:4px 8px;margin:2px 0;font-size:12px;}
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
@@ -477,21 +479,21 @@ def equity_curve_chart(trades: list) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=df['date'], y=df['cumR'],
         mode='lines+markers',
-        line=dict(color='#388bfd', width=2),
+        line=dict(color='#00ff41', width=2),
         marker=dict(
-            color=['#3fb950' if r > 0 else '#f85149' for r in df['r']],
+            color=['#00ff66' if r > 0 else '#ff3344' for r in df['r']],
             size=8, symbol='circle',
         ),
         name='Equity (R)',
         hovertemplate='%{x}<br>Cumulative R: %{y:.2f}<extra></extra>',
     ))
-    fig.add_hline(y=0, line=dict(color='#8b949e', dash='dash', width=1))
+    fig.add_hline(y=0, line=dict(color='#9a9a9a', dash='dash', width=1))
 
     fig.update_layout(
         plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
         font=dict(color='#c0c0c0', size=11),
-        xaxis=dict(gridcolor='#21262d', showgrid=True),
-        yaxis=dict(gridcolor='#21262d', showgrid=True, title='Cumulative R'),
+        xaxis=dict(gridcolor='#2a2a2a', showgrid=True),
+        yaxis=dict(gridcolor='#2a2a2a', showgrid=True, title='Cumulative R'),
         margin=dict(l=40, r=20, t=20, b=40),
         height=280,
         showlegend=False,
@@ -501,18 +503,18 @@ def equity_curve_chart(trades: list) -> go.Figure:
 
 def r_distribution_chart(trades: list) -> go.Figure:
     df = pd.DataFrame(trades)
-    colors = ['#3fb950' if r > 0 else '#f85149' for r in df['r']]
+    colors = ['#00ff66' if r > 0 else '#ff3344' for r in df['r']]
     fig = go.Figure(go.Bar(
         x=[str(t) for t in df['date']], y=df['r'],
         marker_color=colors,
         hovertemplate='%{x}<br>R: %{y:.2f}<extra></extra>',
     ))
-    fig.add_hline(y=0, line=dict(color='#8b949e', dash='dash', width=1))
+    fig.add_hline(y=0, line=dict(color='#9a9a9a', dash='dash', width=1))
     fig.update_layout(
         plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
         font=dict(color='#c0c0c0', size=11),
-        xaxis=dict(gridcolor='#21262d', tickangle=-45, showgrid=False),
-        yaxis=dict(gridcolor='#21262d', title='R Multiple'),
+        xaxis=dict(gridcolor='#2a2a2a', tickangle=-45, showgrid=False),
+        yaxis=dict(gridcolor='#2a2a2a', title='R Multiple'),
         margin=dict(l=40, r=20, t=20, b=60),
         height=220,
     )
@@ -540,7 +542,7 @@ def check_pass_rate_chart(trades: list, daily: pd.DataFrame, weekly: pd.DataFram
 
     labels = [label for _, label, _, _ in CHECK_META]
     pcts   = [pass_counts.get(k, 0) / total_bars * 100 for k, *_ in CHECK_META]
-    colors = ['#3fb950' if p >= 60 else '#e3b341' if p >= 40 else '#f85149' for p in pcts]
+    colors = ['#00ff66' if p >= 60 else '#ffcc00' if p >= 40 else '#ff3344' for p in pcts]
 
     fig = go.Figure(go.Bar(
         x=pcts, y=labels, orientation='h',
@@ -550,8 +552,8 @@ def check_pass_rate_chart(trades: list, daily: pd.DataFrame, weekly: pd.DataFram
     fig.update_layout(
         plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
         font=dict(color='#c0c0c0', size=10),
-        xaxis=dict(gridcolor='#21262d', range=[0, 100], title='Pass Rate %'),
-        yaxis=dict(gridcolor='#21262d', autorange='reversed'),
+        xaxis=dict(gridcolor='#2a2a2a', range=[0, 100], title='Pass Rate %'),
+        yaxis=dict(gridcolor='#2a2a2a', autorange='reversed'),
         margin=dict(l=200, r=20, t=20, b=40),
         height=400,
     )
@@ -593,13 +595,13 @@ with st.sidebar:
 
 st.markdown(f"""
 <div class="hero">
-  <h2 style="margin:0;color:#e6edf3;font-size:22px;font-weight:700;">
+  <h2 style="margin:0;color:#e6e6e6;font-size:22px;font-weight:700;">
     🧪 Workflow Backtest — {pair} {direction}
   </h2>
-  <p style="margin:6px 0 0;color:#8b949e;font-size:13px;">
+  <p style="margin:6px 0 0;color:#9a9a9a;font-size:13px;">
     Simulates all 18 workflow checks on daily data · SL = {sl_mult}× ATR · TP1 = {rr}:1 R:R · Min score {min_score}/18
   </p>
-  <p style="margin:4px 0 0;color:#8b949e;font-size:11px;">
+  <p style="margin:4px 0 0;color:#9a9a9a;font-size:11px;">
     ⚠ 15M checks are proxied from daily bars. Results reflect system logic, not exact 15-minute execution.
   </p>
 </div>
@@ -661,11 +663,11 @@ if replay_date:
                 passed_flag, detail = replay_res[key]
                 crit_tag = " ⭐" if critical_flag else ""
                 if mode == "auto":
-                    col.markdown(f'<div class="check-auto">🔵 {label}{crit_tag}<br><small style="color:#8b949e">{detail}</small></div>', unsafe_allow_html=True)
+                    col.markdown(f'<div class="check-auto">🔵 {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
                 elif passed_flag:
-                    col.markdown(f'<div class="check-pass">✅ {label}{crit_tag}<br><small style="color:#8b949e">{detail}</small></div>', unsafe_allow_html=True)
+                    col.markdown(f'<div class="check-pass">✅ {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
                 else:
-                    col.markdown(f'<div class="check-fail">❌ {label}{crit_tag}<br><small style="color:#8b949e">{detail}</small></div>', unsafe_allow_html=True)
+                    col.markdown(f'<div class="check-fail">❌ {label}{crit_tag}<br><small style="color:#9a9a9a">{detail}</small></div>', unsafe_allow_html=True)
 
         st.markdown("*⭐ = critical check. All critical checks must pass regardless of total score.*")
 
@@ -736,15 +738,15 @@ if 'bt_trades' in st.session_state:
 
         def colour_outcome(val):
             if val == "TP2":
-                return 'color: #3fb950; font-weight:600'
+                return 'color: #00ff66; font-weight:600'
             if val == "TP1 → BE":
-                return 'color: #e3b341'
+                return 'color: #ffcc00'
             if val == "SL":
-                return 'color: #f85149'
-            return 'color: #8b949e'
+                return 'color: #ff3344'
+            return 'color: #9a9a9a'
 
         def colour_r(val):
-            return f'color: {"#3fb950" if val > 0 else "#f85149" if val < 0 else "#e3b341"}'
+            return f'color: {"#00ff66" if val > 0 else "#ff3344" if val < 0 else "#ffcc00"}'
 
         styled = (
             df_log[['date', 'score', 'entry', 'exit', 'sl', 'tp1', 'r', 'pips', 'outcome']]

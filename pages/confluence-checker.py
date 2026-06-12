@@ -1,4 +1,5 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
@@ -15,6 +16,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS — matches main app dark theme ─────────────────────────────
 st.markdown("""
@@ -27,20 +29,20 @@ st.markdown("""
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
     .stApp { background:var(--background-color); }
-    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
 
-    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px;
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#2a2a2a); border-radius:12px;
            padding:20px; margin-bottom:16px; }
     .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em;
-                  text-transform:uppercase; color:#8b949e; margin-bottom:14px; }
-    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px;
+                  text-transform:uppercase; color:#9a9a9a; margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#2a2a2a); border-radius:8px;
                  padding:14px; text-align:center; }
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
-    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500;
+    .metric-label{ font-size:11px; color:var(--muted,#9a9a9a); margin-top:2px; font-weight:500;
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color); margin:24px 0 12px 0;
-                    padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:12px;
+                    padding-left:4px; border-left:3px solid #00ff41; }
+    .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:12px;
                  margin:6px 0 2px 0; overflow:hidden; }
     [data-testid="stSidebarNav"]{ display:none; }
     #MainMenu,footer,header{ visibility:hidden; }
@@ -49,24 +51,24 @@ st.markdown("""
 
     /* Element confirmation cards */
     .el-card-pass{ background:linear-gradient(135deg,#0d3a1f,#0a2918);
-                   border:1px solid #238636; border-left:4px solid #3fb950;
+                   border:1px solid #00a32a; border-left:4px solid #00ff66;
                    border-radius:10px; padding:18px 20px; margin-bottom:12px; }
-    .el-card-fail{ background:linear-gradient(135deg,#1c1c1c,#161b22);
-                   border:1px solid #30363d; border-left:4px solid #484f58;
+    .el-card-fail{ background:linear-gradient(135deg,#1c1c1c,#0a0a0a);
+                   border:1px solid #2a2a2a; border-left:4px solid #555555;
                    border-radius:10px; padding:18px 20px; margin-bottom:12px; }
     .el-card-partial{ background:linear-gradient(135deg,#2a1f00,#201800);
-                      border:1px solid #9e6a03; border-left:4px solid #e3b341;
+                      border:1px solid #9e6a03; border-left:4px solid #ffcc00;
                       border-radius:10px; padding:18px 20px; margin-bottom:12px; }
     .el-title{ font-size:15px; font-weight:700; }
     .el-value{ font-size:13px; font-family:monospace; margin-top:6px; }
-    .el-detail{ font-size:12px; color:#8b949e; margin-top:4px; line-height:1.6; }
+    .el-detail{ font-size:12px; color:#9a9a9a; margin-top:4px; line-height:1.6; }
 
     /* Verdict banners */
     .verdict-pass3{ background:linear-gradient(135deg,#0d3a1f,#0d5e32);
-                    border:2px solid #238636; border-radius:14px;
+                    border:2px solid #00a32a; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-pass2{ background:linear-gradient(135deg,#1c2a00,#243300);
-                    border:2px solid #3fb950; border-radius:14px;
+                    border:2px solid #00ff66; border-radius:14px;
                     padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-fail { background:linear-gradient(135deg,#3a0d0d,#5e1414);
                     border:2px solid #8b2d2d; border-radius:14px;
@@ -77,14 +79,14 @@ st.markdown("""
 
     /* Proximity gauge */
     .prox-row{ display:flex; justify-content:space-between; align-items:center;
-               padding:8px 0; border-bottom:1px solid #21262d; font-size:13px; }
+               padding:8px 0; border-bottom:1px solid #2a2a2a; font-size:13px; }
     .prox-row:last-child{ border-bottom:none; }
-    .prox-label{ color:#8b949e; }
+    .prox-label{ color:#9a9a9a; }
     .prox-val{ font-family:monospace; font-weight:600; }
 
     .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
-                border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
+                border-left:3px solid #00ff41; border-radius:8px;
+                padding:14px 18px; font-size:13px; color:var(--muted,#9a9a9a); line-height:1.7; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -274,7 +276,7 @@ def build_chart(df: pd.DataFrame, pair: str,
         x=plot.index,
         open=plot["Open"], high=plot["High"],
         low=plot["Low"],   close=plot["Close"],
-        increasing_line_color="#3fb950", decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63,185,80,0.20)", decreasing_fillcolor="rgba(248,81,73,0.20)",
         name="4H Candles", showlegend=False,
     ), row=1, col=1)
@@ -290,7 +292,7 @@ def build_chart(df: pd.DataFrame, pair: str,
     # ── Fibonacci levels ──────────────────────────────────────────
     fib_colors = {
         "0.0%":"rgba(255,255,255,0.27)","23.6%":"#00d4ff","38.2%":"#a29bfe",
-        "50.0%":"#e3b341", "61.8%":"#ff6b35","78.6%":"#f85149","100%":"rgba(255,255,255,0.27)",
+        "50.0%":"#ffcc00", "61.8%":"#ff6b35","78.6%":"#ff3344","100%":"rgba(255,255,255,0.27)",
     }
     key_fibs = {"38.2%","50.0%","61.8%"}   # show labels only on key levels
     for lbl, val in fib_levels.items():
@@ -310,7 +312,7 @@ def build_chart(df: pd.DataFrame, pair: str,
     # ── Pivot levels ──────────────────────────────────────────────
     pivot_colors = {
         "PP":"#ffffff","R1":"#00d4ff","R2":"#0077ff","R3":"#003f8a",
-        "S1":"#ff6b35","S2":"#f85149","S3":"#8a1a00",
+        "S1":"#ff6b35","S2":"#ff3344","S3":"#8a1a00",
     }
     for lbl, val in pivots.items():
         is_nearest = (lbl == pivot_res["label"])
@@ -349,7 +351,7 @@ def build_chart(df: pd.DataFrame, pair: str,
     # ── Confluence zone band around price ─────────────────────────
     fig.add_hrect(
         y0=price - tol, y1=price + tol,
-        fillcolor="#388bfd", opacity=0.07, line_width=0,
+        fillcolor="#00ff41", opacity=0.07, line_width=0,
         row=1, col=1,
     )
     fig.add_hline(
@@ -364,18 +366,18 @@ def build_chart(df: pd.DataFrame, pair: str,
     fig.update_layout(
         height=620,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         legend=dict(
-            bgcolor="rgba(13,17,23,0.60)", bordercolor="#21262d", borderwidth=1,
+            bgcolor="rgba(13,17,23,0.60)", bordercolor="#2a2a2a", borderwidth=1,
             font=dict(size=10), orientation="h",
             yanchor="bottom", y=1.01, xanchor="left", x=0,
         ),
         margin=dict(l=10, r=110, t=10, b=10),
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(gridcolor="#21262d", showgrid=False)
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(gridcolor="#2a2a2a", showgrid=False)
     return fig
 
 
@@ -430,16 +432,16 @@ pip_size = INSTRUMENTS[selected_pair]["pip_size"]
 
 # Page header
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d; border-radius:16px; padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a; border-radius:16px; padding:24px 28px;
             margin-bottom:20px; position:relative; overflow:hidden;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">
+  <div style="font-size:24px; font-weight:700; color:#e6e6e6;">
     🔀 Min 2/3 Confluence Elements
   </div>
-  <div style="color:#8b949e; font-size:13px; margin-top:4px;">
+  <div style="color:#9a9a9a; font-size:13px; margin-top:4px;">
     At least 2 of 3 elements confirmed at zone · Fibonacci · Pivot Points · EMA · {selected_pair}
   </div>
-  <div style="font-size:12px; color:#388bfd; margin-top:6px;">
+  <div style="font-size:12px; color:#00ff41; margin-top:6px;">
     Check #11 — 2/3 Confluence Checker · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
@@ -506,10 +508,10 @@ with tab_scan:
 
     sc1, sc2, sc3, sc4 = st.columns(4)
     for col_, val_, lbl_, c_ in [
-        (sc1, cnt_3, "3/3 Perfect",    "#3fb950"),
+        (sc1, cnt_3, "3/3 Perfect",    "#00ff66"),
         (sc2, cnt_2, "2/3 Min Met",    "#a3e635"),
-        (sc3, cnt_1, "1/3 Partial",    "#e3b341"),
-        (sc4, cnt_0, "0/3 No Confluence", "#f85149"),
+        (sc3, cnt_1, "1/3 Partial",    "#ffcc00"),
+        (sc4, cnt_0, "0/3 No Confluence", "#ff3344"),
     ]:
         with col_:
             st.markdown(
@@ -523,10 +525,10 @@ with tab_scan:
 
     # ── Card grid ───────────────────────────────
     GRADE_COLOR = {
-        "pass3": "#3fb950",
+        "pass3": "#00ff66",
         "pass2": "#a3e635",
-        "wait":  "#e3b341",
-        "fail":  "#f85149",
+        "wait":  "#ffcc00",
+        "fail":  "#ff3344",
     }
     GRADE_BG = {
         "pass3": "rgba(63,185,80,.10)",
@@ -539,34 +541,34 @@ with tab_scan:
     for i, r in enumerate(scan_results):
         pair_name = r["pair"]
         is_sel    = pair_name == selected_pair
-        border    = "border:2px solid #388bfd;" if is_sel else "border:1px solid #21262d;"
+        border    = "border:2px solid #00ff41;" if is_sel else "border:1px solid #2a2a2a;"
 
         if not r.get("ok"):
-            card_body = '<span style="font-size:11px;color:#f85149;">No data</span>'
+            card_body = '<span style="font-size:11px;color:#ff3344;">No data</span>'
         else:
             grade  = r["grade"]
-            color  = GRADE_COLOR.get(grade, "#484f58")
+            color  = GRADE_COLOR.get(grade, "#555555")
             bg     = GRADE_BG.get(grade, "transparent")
             passed = r["passed"]
             dots   = "".join(
                 f'<span style="display:inline-block;width:10px;height:10px;border-radius:50%;'
-                f'background:{"#3fb950" if j < passed else "#30363d"};margin:0 2px;"></span>'
+                f'background:{"#00ff66" if j < passed else "#2a2a2a"};margin:0 2px;"></span>'
                 for j in range(3)
             )
             card_body = (
                 f'<div style="display:flex;justify-content:space-between;align-items:center;">'
-                f'<span style="font-size:13px;font-weight:600;color:#e6edf3;">{pair_name}</span>'
+                f'<span style="font-size:13px;font-weight:600;color:#e6e6e6;">{pair_name}</span>'
                 f'<span style="background:{bg};border:1px solid {color}44;border-radius:4px;'
                 f'padding:2px 8px;font-size:11px;color:{color};font-weight:700;">{passed}/3</span>'
                 f'</div>'
                 f'<div style="margin-top:6px;">{dots}</div>'
-                f'<div style="font-size:11px;color:#8b949e;margin-top:4px;font-family:monospace;">'
+                f'<div style="font-size:11px;color:#9a9a9a;margin-top:4px;font-family:monospace;">'
                 f'{r["price"]:,.5f}</div>'
             )
 
         with cols3[i % 3]:
             st.markdown(
-                f'<div style="background:#161b22;{border}border-radius:8px;'
+                f'<div style="background:#0a0a0a;{border}border-radius:8px;'
                 f'padding:12px 14px;margin-bottom:8px;">{card_body}</div>',
                 unsafe_allow_html=True)
 
@@ -639,20 +641,20 @@ with tab_detail:
 
         # ── Verdict banner ───────────────────────────
         VERDICT_STYLE = {
-            "pass3": ("verdict-pass3", "#3fb950", "🎯 PERFECT CONFLUENCE",
+            "pass3": ("verdict-pass3", "#00ff66", "🎯 PERFECT CONFLUENCE",
                       "All 3 elements confirmed at current price zone — highest conviction"),
             "pass2": ("verdict-pass2", "#a3e635", "✅ MIN CONFLUENCE MET",
                       "2 of 3 elements align — minimum threshold passed for entry consideration"),
-            "wait":  ("verdict-wait",  "#e3b341", "⚠️ PARTIAL — WAIT",
+            "wait":  ("verdict-wait",  "#ffcc00", "⚠️ PARTIAL — WAIT",
                       "Only 1 element confirmed — do not enter, wait for price to reach a stronger zone"),
-            "fail":  ("verdict-fail",  "#f85149", "❌ NO CONFLUENCE",
+            "fail":  ("verdict-fail",  "#ff3344", "❌ NO CONFLUENCE",
                       "No elements confirmed at this price — zone is invalid, stay flat"),
         }
         vcls, vcolor, vtitle, vdesc = VERDICT_STYLE[result["grade"]]
 
         dots = "".join(
             f'<span style="display:inline-block;width:22px;height:22px;border-radius:50%;'
-            f'background:{"" + vcolor if i < result["passed"] else "#30363d"};margin:0 4px;"></span>'
+            f'background:{"" + vcolor if i < result["passed"] else "#2a2a2a"};margin:0 4px;"></span>'
             for i in range(3)
         )
 
@@ -669,14 +671,14 @@ with tab_detail:
                       letter-spacing:1px; margin-bottom:8px;">{vtitle}</div>
           <div style="margin:8px 0;">{dots}</div>
           {_key_badge_html}
-          <div style="font-size:13px; color:#8b949e; margin-top:8px;">{vdesc}</div>
-          <div style="font-size:12px; color:#484f58; margin-top:10px;">
+          <div style="font-size:13px; color:#9a9a9a; margin-top:8px;">{vdesc}</div>
+          <div style="font-size:12px; color:#555555; margin-top:10px;">
             Current price &nbsp;
-            <code style="color:#c9d1d9;">{price:.5f}</code>
+            <code style="color:#e6e6e6;">{price:.5f}</code>
             &nbsp;·&nbsp; Tolerance &nbsp;
-            <code style="color:#c9d1d9;">±{tol_pct*100:.1f}%</code>
+            <code style="color:#e6e6e6;">±{tol_pct*100:.1f}%</code>
             &nbsp;·&nbsp; Zone &nbsp;
-            <code style="color:#c9d1d9;">{price*(1-tol_pct):.5f} – {price*(1+tol_pct):.5f}</code>
+            <code style="color:#e6e6e6;">{price*(1-tol_pct):.5f} – {price*(1+tol_pct):.5f}</code>
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -690,10 +692,10 @@ with tab_detail:
         k1, k2, k3, k4, k5 = st.columns(5)
         for col_, val_, lbl_, color_ in [
             (k1, f"{result['passed']}/3",   "Elements Confirmed",    vcolor),
-            (k2, f"{tol_pips:.1f}",         "Tolerance (pips)",      "#388bfd"),
-            (k3, f"{fib_dist_pips:.1f}",    "Fib Distance (pips)",   "#a29bfe" if fib_res["within"] else "#484f58"),
-            (k4, f"{pivot_dist_pips:.1f}",  "Pivot Distance (pips)", "#00d4ff" if pivot_res["within"] else "#484f58"),
-            (k5, f"{ema_dist_pips:.1f}",    "EMA Distance (pips)",   "#f59e0b" if ema_res["within"] else "#484f58"),
+            (k2, f"{tol_pips:.1f}",         "Tolerance (pips)",      "#00ff41"),
+            (k3, f"{fib_dist_pips:.1f}",    "Fib Distance (pips)",   "#a29bfe" if fib_res["within"] else "#555555"),
+            (k4, f"{pivot_dist_pips:.1f}",  "Pivot Distance (pips)", "#00d4ff" if pivot_res["within"] else "#555555"),
+            (k5, f"{ema_dist_pips:.1f}",    "EMA Distance (pips)",   "#f59e0b" if ema_res["within"] else "#555555"),
         ]:
             with col_:
                 st.markdown(
@@ -714,13 +716,13 @@ with tab_detail:
                          dist_pips, pct_away, detail_lines):
             card_cls = "el-card-pass" if passed else "el-card-fail"
             status   = "✅ CONFIRMED" if passed else "❌ NOT AT ZONE"
-            color    = "#3fb950" if passed else "#484f58"
+            color    = "#00ff66" if passed else "#555555"
             with col:
                 lines_html = "".join(
                     f'<div style="display:flex;justify-content:space-between;'
                     f'padding:3px 0;border-bottom:1px solid rgba(33,38,45,0.40);">'
-                    f'<span style="color:#8b949e;font-size:11px;">{k}</span>'
-                    f'<span style="font-family:monospace;font-size:11px;color:#c9d1d9;">{v}</span>'
+                    f'<span style="color:#9a9a9a;font-size:11px;">{k}</span>'
+                    f'<span style="font-family:monospace;font-size:11px;color:#e6e6e6;">{v}</span>'
                     f'</div>'
                     for k, v in detail_lines.items()
                 )
@@ -788,13 +790,13 @@ with tab_detail:
         st.markdown('<div class="section-title">📊 Confluence Score</div>', unsafe_allow_html=True)
 
         for el_name, el_passed in result["elements"].items():
-            el_color = "#3fb950" if el_passed else "#f85149"
+            el_color = "#00ff66" if el_passed else "#ff3344"
             el_icon  = "✅" if el_passed else "❌"
             el_pct   = 100 if el_passed else 0
             st.markdown(f"""
             <div style="margin-bottom:12px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                <span style="font-size:13px;color:#c9d1d9;">{el_icon} &nbsp;{el_name}</span>
+                <span style="font-size:13px;color:#e6e6e6;">{el_icon} &nbsp;{el_name}</span>
                 <span style="font-size:12px;font-weight:700;color:{el_color};">
                   {"CONFIRMED" if el_passed else "NOT AT ZONE"}
                 </span>
@@ -806,11 +808,11 @@ with tab_detail:
             """, unsafe_allow_html=True)
 
         overall_pct = int(result["passed"] / 3 * 100)
-        overall_col = "#3fb950" if result["passed"] >= 2 else "#f85149"
+        overall_col = "#00ff66" if result["passed"] >= 2 else "#ff3344"
         st.markdown(f"""
         <div style="margin-top:16px;">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-            <span style="font-size:14px;font-weight:700;color:#e6edf3;">Overall Confluence</span>
+            <span style="font-size:14px;font-weight:700;color:#e6e6e6;">Overall Confluence</span>
             <span style="font-size:14px;font-weight:800;color:{overall_col};">
               {result['passed']}/3 · {overall_pct}%
             </span>
@@ -820,7 +822,7 @@ with tab_detail:
                         width:{overall_pct}%;height:100%;border-radius:8px;
                         transition:width .4s;"></div>
           </div>
-          <div style="font-size:12px;color:#8b949e;margin-top:6px;">
+          <div style="font-size:12px;color:#9a9a9a;margin-top:6px;">
             Minimum required: 2/3 (66%) · {"✅ Threshold met" if result["passed"] >= 2 else "❌ Below threshold — do not enter"}
           </div>
         </div>
@@ -913,14 +915,14 @@ with tab_detail:
 
         st.markdown(f"""
         <div class="explainer" style="margin-top:12px;">
-        <b style="color:#388bfd;">⚙️ The 2/3 Minimum Rule</b><br><br>
+        <b style="color:#00ff41;">⚙️ The 2/3 Minimum Rule</b><br><br>
         A single indicator at a price level is coincidence. Two or more is confluence — a statistically stronger
         reaction zone where multiple market participants are watching the same level.<br><br>
         <b>Score guide:</b>&nbsp;
-        <span style="color:#f85149;">0/3 — No trade</span> &nbsp;·&nbsp;
-        <span style="color:#e3b341;">1/3 — Wait</span> &nbsp;·&nbsp;
+        <span style="color:#ff3344;">0/3 — No trade</span> &nbsp;·&nbsp;
+        <span style="color:#ffcc00;">1/3 — Wait</span> &nbsp;·&nbsp;
         <span style="color:#a3e635;">2/3 — Minimum to consider entry</span> &nbsp;·&nbsp;
-        <span style="color:#3fb950;">3/3 — Highest conviction setup</span><br><br>
+        <span style="color:#00ff66;">3/3 — Highest conviction setup</span><br><br>
         This is <em>Check #11</em>. Pair with Check #10 (4H confluence zone confirmed) and
         Check #12 (15M rejection candle) before triggering entry.
         </div>
@@ -928,8 +930,8 @@ with tab_detail:
 
         # Footer
         st.markdown("""
-        <div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-                    padding-top:16px;border-top:1px solid #21262d;">
+        <div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+                    padding-top:16px;border-top:1px solid #2a2a2a;">
           🔀 Min 2/3 Confluence Elements · Check #11 · Fibonacci · Pivot · EMA · For educational purposes only
         </div>
         """, unsafe_allow_html=True)

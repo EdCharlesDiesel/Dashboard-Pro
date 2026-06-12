@@ -1,4 +1,5 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
@@ -13,6 +14,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -25,47 +27,47 @@ st.markdown("""
     }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     .stApp{background:var(--background-color);}
-    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
-    .card{background:var(--secondary-background-color);border:1px solid var(--border,#21262d);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
-    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#8b949e;margin-bottom:14px;}
-    .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
+    .card{background:var(--secondary-background-color);border:1px solid var(--border,#2a2a2a);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a;margin-bottom:14px;}
+    .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
     .hero::before{content:'';position:absolute;top:-40%;right:-5%;width:300px;height:300px;background:radial-gradient(circle,rgba(56,139,253,.07) 0%,transparent 70%);border-radius:50%;}
 
-    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px 14px;text-align:center;}
-    .metric-value{font-size:20px;font-weight:700;color:#c9d1d9;}
-    .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:12px 14px;text-align:center;}
+    .metric-value{font-size:20px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
 
     /* Pair grid cards */
-    .ema-card{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:14px 15px;margin-bottom:8px;}
-    .ema-card-bull{border-left:4px solid #3fb950;}
-    .ema-card-bear{border-left:4px solid #f85149;}
-    .ema-card-neut{border-left:4px solid #e3b341;}
-    .ema-card-na  {border-left:4px solid #30363d;opacity:.5;}
+    .ema-card{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:10px;padding:14px 15px;margin-bottom:8px;}
+    .ema-card-bull{border-left:4px solid #00ff66;}
+    .ema-card-bear{border-left:4px solid #ff3344;}
+    .ema-card-neut{border-left:4px solid #ffcc00;}
+    .ema-card-na  {border-left:4px solid #2a2a2a;opacity:.5;}
 
-    .pair-label{font-size:15px;font-weight:700;color:#e6edf3;}
-    .price-tag{font-size:12px;font-family:monospace;color:#8b949e;margin-left:8px;}
+    .pair-label{font-size:15px;font-weight:700;color:#e6e6e6;}
+    .price-tag{font-size:12px;font-family:monospace;color:#9a9a9a;margin-left:8px;}
 
     .badge{border-radius:20px;padding:4px 13px;font-size:12px;font-weight:700;display:inline-block;}
-    .badge-bull {background:#0d4a2f;color:#3fb950;border:1px solid #238636;}
-    .badge-bear {background:#4a0d0d;color:#f85149;border:1px solid #8b2d2d;}
-    .badge-neut {background:#21262d;color:#e3b341;border:1px solid #9e6a03;}
-    .badge-na   {background:#21262d;color:#484f58;border:1px solid #30363d;}
+    .badge-bull {background:#003a14;color:#00ff66;border:1px solid #00a32a;}
+    .badge-bear {background:#4a0d0d;color:#ff3344;border:1px solid #8b2d2d;}
+    .badge-neut {background:#2a2a2a;color:#ffcc00;border:1px solid #9e6a03;}
+    .badge-na   {background:#2a2a2a;color:#555555;border:1px solid #2a2a2a;}
 
     .align-pill{border-radius:6px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;margin-left:6px;}
-    .align-yes{background:#0d2f1a;color:#3fb950;border:1px solid #238636;}
-    .align-no {background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;}
+    .align-yes{background:#0d2f1a;color:#00ff66;border:1px solid #00a32a;}
+    .align-no {background:#2f0d0d;color:#ff3344;border:1px solid #8b2d2d;}
 
     .ema-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;}
-    .ema-lbl{color:#8b949e;}
-    .ema-val{font-family:monospace;font-weight:600;color:#e6edf3;}
-    .ema-above{color:#3fb950;}
-    .ema-below{color:#f85149;}
+    .ema-lbl{color:#9a9a9a;}
+    .ema-val{font-family:monospace;font-weight:600;color:#e6e6e6;}
+    .ema-above{color:#00ff66;}
+    .ema-below{color:#ff3344;}
 
-    .slope-arrow-up  {color:#3fb950;font-size:14px;font-weight:900;}
-    .slope-arrow-down{color:#f85149;font-size:14px;font-weight:900;}
-    .slope-arrow-flat{color:#e3b341;font-size:14px;font-weight:900;}
+    .slope-arrow-up  {color:#00ff66;font-size:14px;font-weight:900;}
+    .slope-arrow-down{color:#ff3344;font-size:14px;font-weight:900;}
+    .slope-arrow-flat{color:#ffcc00;font-size:14px;font-weight:900;}
 
-    .prog-track{background:var(--border,#21262d);border-radius:6px;height:5px;overflow:hidden;margin:4px 0;}
+    .prog-track{background:var(--border,#2a2a2a);border-radius:6px;height:5px;overflow:hidden;margin:4px 0;}
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
@@ -246,16 +248,16 @@ not_aligned = bear if trade_direction == "LONG" else bull
 # HERO
 # ══════════════════════════════════════════════════════════════════
 dir_icon  = "🔼" if trade_direction == "LONG" else "🔽"
-dir_color = "#3fb950" if trade_direction == "LONG" else "#f85149"
+dir_color = "#00ff66" if trade_direction == "LONG" else "#ff3344"
 st.markdown(f"""
 <div class="hero">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
     <div>
-      <div style="font-size:26px;font-weight:700;color:#e6edf3;">📉 Weekly EMA Alignment</div>
-      <div style="color:#8b949e;font-size:14px;margin-top:6px;">
+      <div style="font-size:26px;font-weight:700;color:#e6e6e6;">📉 Weekly EMA Alignment</div>
+      <div style="color:#9a9a9a;font-size:14px;margin-top:6px;">
         EMA {', '.join(str(p) for p in EMA_PERIODS)} · Weekly Timeframe · Checklist Item #5
       </div>
-      <div style="font-size:13px;color:#388bfd;font-weight:500;margin-top:4px;">
+      <div style="font-size:13px;color:#00ff41;font-weight:500;margin-top:4px;">
         🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M')} · {lookback} lookback · Weekly bars
       </div>
     </div>
@@ -265,15 +267,15 @@ st.markdown(f"""
         <div class="metric-label">Your Direction</div>
       </div>
       <div class="metric-box" style="min-width:80px;">
-        <div class="metric-value" style="color:#3fb950;">{len(bull)}</div>
+        <div class="metric-value" style="color:#00ff66;">{len(bull)}</div>
         <div class="metric-label">🟢 Bullish</div>
       </div>
       <div class="metric-box" style="min-width:80px;">
-        <div class="metric-value" style="color:#f85149;">{len(bear)}</div>
+        <div class="metric-value" style="color:#ff3344;">{len(bear)}</div>
         <div class="metric-label">🔴 Bearish</div>
       </div>
       <div class="metric-box" style="min-width:80px;">
-        <div class="metric-value" style="color:#e3b341;">{len(neutral)}</div>
+        <div class="metric-value" style="color:#ffcc00;">{len(neutral)}</div>
         <div class="metric-label">🟡 Neutral</div>
       </div>
     </div>
@@ -286,12 +288,12 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════
 k1,k2,k3,k4,k5,k6 = st.columns(6)
 kpis = [
-    (k1, len(aligned),     f"✅ Aligned ({trade_direction})", "#3fb950"),
-    (k2, len(not_aligned), f"❌ Against ({trade_direction})", "#f85149"),
-    (k3, len(neutral),     "⚪ Neutral",                      "#e3b341"),
-    (k4, sum(1 for d in loaded.values() if d["stack_bull"]),  "Full Bull Stack", "#3fb950"),
-    (k5, sum(1 for d in loaded.values() if d["stack_bear"]),  "Full Bear Stack", "#f85149"),
-    (k6, len(loaded),      "Pairs Loaded",                   "#c9d1d9"),
+    (k1, len(aligned),     f"✅ Aligned ({trade_direction})", "#00ff66"),
+    (k2, len(not_aligned), f"❌ Against ({trade_direction})", "#ff3344"),
+    (k3, len(neutral),     "⚪ Neutral",                      "#ffcc00"),
+    (k4, sum(1 for d in loaded.values() if d["stack_bull"]),  "Full Bull Stack", "#00ff66"),
+    (k5, sum(1 for d in loaded.values() if d["stack_bear"]),  "Full Bear Stack", "#ff3344"),
+    (k6, len(loaded),      "Pairs Loaded",                   "#e6e6e6"),
 ]
 for col, val, lbl, color in kpis:
     with col:
@@ -358,7 +360,7 @@ with left:
 
         # Stack alignment
         stack_ok   = d["stack_bull"] if trade_direction == "LONG" else d["stack_bear"]
-        stack_html = '<span style="font-size:10px;color:#3fb950;margin-left:6px;">⬆ Full stack</span>' \
+        stack_html = '<span style="font-size:10px;color:#00ff66;margin-left:6px;">⬆ Full stack</span>' \
             if stack_ok else ""
 
         # EMA rows
@@ -369,7 +371,7 @@ with left:
             pri  = " ★" if p == primary_period else ""
             above_cls = "ema-above" if ev["above"] else "ema-below"
             above_txt = f"Price {'above' if ev['above'] else 'below'}"
-            dist_col  = "#3fb950" if ev["dist_pct"] > 0 else "#f85149"
+            dist_col  = "#00ff66" if ev["dist_pct"] > 0 else "#ff3344"
             ema_rows_html += f"""
             <div class="ema-row" style="{bold}">
               <span class="ema-lbl">EMA {p}{pri}</span>
@@ -381,7 +383,7 @@ with left:
             """
 
         # Highlight if it's the focus pair
-        focus_border = "border-color:#388bfd!important;" if pair == focus_pair else ""
+        focus_border = "border-color:#00ff41!important;" if pair == focus_pair else ""
 
         st.markdown(html_block(f"""
         <div class="ema-card {card_cls}" style="{focus_border}">
@@ -409,7 +411,7 @@ with right:
     else:
         overall   = d["overall"]
         is_aligned= overall == ("Bullish" if trade_direction == "LONG" else "Bearish")
-        ok_color  = "#3fb950" if is_aligned else "#f85149"
+        ok_color  = "#00ff66" if is_aligned else "#ff3344"
         ok_icon   = "✅" if is_aligned else "❌"
         ok_txt    = f"Weekly EMA is {overall} — {'Aligned' if is_aligned else 'Against'} your {trade_direction}"
 
@@ -419,10 +421,10 @@ with right:
 
         st.markdown(f"""
         <div style="background:{'#0d2f1a' if is_aligned else '#2f0d0d'};
-             border:1px solid {'#238636' if is_aligned else '#8b2d2d'};
+             border:1px solid {'#00a32a' if is_aligned else '#8b2d2d'};
              border-radius:10px;padding:14px 18px;margin-bottom:16px;">
           <div style="font-size:16px;font-weight:700;color:{ok_color};">{ok_icon} {ok_txt}</div>
-          <div style="font-size:12px;color:#8b949e;margin-top:4px;">
+          <div style="font-size:12px;color:#9a9a9a;margin-top:4px;">
             Primary EMA {primary_period} slope: {d['ema_data'][primary_period]['slope_lbl']} &nbsp;{stack_note}
           </div>
         </div>
@@ -449,13 +451,13 @@ with right:
             open=hist["Open"], high=hist["High"],
             low=hist["Low"],   close=hist["Close"],
             name="Price",
-            increasing=dict(line=dict(color="#3fb950"), fillcolor="#0d2f1a"),
-            decreasing=dict(line=dict(color="#f85149"), fillcolor="#2f0d0d"),
+            increasing=dict(line=dict(color="#00ff66"), fillcolor="#0d2f1a"),
+            decreasing=dict(line=dict(color="#ff3344"), fillcolor="#2f0d0d"),
             hoverinfo="x+y",
         ), row=1, col=1)
 
         # EMA lines
-        ema_colors = {10: "#f0c040", 20: "#388bfd", 50: "#a371f7"}
+        ema_colors = {10: "#f0c040", 20: "#00ff41", 50: "#a371f7"}
         ema_widths = {10: 1.5,       20: 2.5,       50: 2.0}
         for p in EMA_PERIODS:
             fig.add_trace(go.Scatter(
@@ -469,9 +471,9 @@ with right:
         # Current price line
         fig.add_hline(
             y=d["price"], line_dash="dot",
-            line_color="#e3b341", line_width=1,
+            line_color="#ffcc00", line_width=1,
             annotation_text=f"Now {d['price']:.5f}",
-            annotation_font_color="#e3b341",
+            annotation_font_color="#ffcc00",
             annotation_position="right",
             row=1, col=1,
         )
@@ -487,7 +489,7 @@ with right:
             slopes.append(s)
 
         slope_dates  = hist.index[SLOPE_BARS:]
-        slope_colors = ["#3fb950" if s > 0.10 else "#f85149" if s < -0.10 else "#e3b341"
+        slope_colors = ["#00ff66" if s > 0.10 else "#ff3344" if s < -0.10 else "#ffcc00"
                         for s in slopes]
 
         fig.add_trace(go.Bar(
@@ -497,27 +499,27 @@ with right:
             hovertemplate="Slope: %{y:.3f}%<extra></extra>",
         ), row=2, col=1)
 
-        fig.add_hline(y=0, line_dash="dot", line_color="#484f58", line_width=1, row=2, col=1)
-        fig.add_hline(y=0.10,  line_dash="dot", line_color="#238636", line_width=1, row=2, col=1,
-                      annotation_text="Rising",   annotation_font_color="#238636", annotation_position="right")
+        fig.add_hline(y=0, line_dash="dot", line_color="#555555", line_width=1, row=2, col=1)
+        fig.add_hline(y=0.10,  line_dash="dot", line_color="#00a32a", line_width=1, row=2, col=1,
+                      annotation_text="Rising",   annotation_font_color="#00a32a", annotation_position="right")
         fig.add_hline(y=-0.10, line_dash="dot", line_color="#8b2d2d", line_width=1, row=2, col=1,
                       annotation_text="Falling",  annotation_font_color="#8b2d2d", annotation_position="right")
 
         fig.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
-            legend=dict(font=dict(color="#8b949e", size=11), bgcolor="#161b22",
-                        bordercolor="#21262d", orientation="h", x=0, y=1.06),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#000000",
+            legend=dict(font=dict(color="#9a9a9a", size=11), bgcolor="#0a0a0a",
+                        bordercolor="#2a2a2a", orientation="h", x=0, y=1.06),
             margin=dict(l=10, r=80, t=30, b=10),
             height=530,
             hovermode="x unified",
             xaxis_rangeslider_visible=False,
         )
         for row in [1, 2]:
-            fig.update_xaxes(showgrid=False, tickfont=dict(color="#8b949e", size=9),
-                             linecolor="#21262d", row=row, col=1)
-            fig.update_yaxes(showgrid=True, gridcolor="#21262d",
-                             tickfont=dict(color="#8b949e", size=9), row=row, col=1)
-        fig.update_annotations(font_color="#8b949e", font_size=11)
+            fig.update_xaxes(showgrid=False, tickfont=dict(color="#9a9a9a", size=9),
+                             linecolor="#2a2a2a", row=row, col=1)
+            fig.update_yaxes(showgrid=True, gridcolor="#2a2a2a",
+                             tickfont=dict(color="#9a9a9a", size=9), row=row, col=1)
+        fig.update_annotations(font_color="#9a9a9a", font_size=11)
 
         st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
 
@@ -587,7 +589,7 @@ with right:
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #2a2a2a;">
   📉 Weekly EMA · EMA 10 / 20 / 50 · Weekly bars · Slope = 3-bar rate of change · Not financial advice
 </div>
 """, unsafe_allow_html=True)
