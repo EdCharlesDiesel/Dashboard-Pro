@@ -15,6 +15,7 @@ from email.message import EmailMessage
 import numpy as np
 import pandas as pd
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import yfinance as yf
 import plotly.graph_objects as go
@@ -526,6 +527,7 @@ PLAYBOOK = {
 # UI
 # --------------------------------------------------------------------------- #
 st.set_page_config(page_title="AMD Market-Phase Scanner", layout="wide")
+BloombergTheme.apply()
 st.title("📊 AMD Market-Phase Scanner")
 st.caption(
     "Accumulation → Manipulation → Distribution on **1H bars** — tuned for "

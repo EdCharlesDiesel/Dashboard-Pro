@@ -1,4 +1,5 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
@@ -14,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS — matches main app dark theme ─────────────────────────────
 st.markdown("""
@@ -26,20 +28,20 @@ st.markdown("""
     }
     html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
     .stApp{ background:var(--background-color); }
-    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#21262d); }
+    section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
 
-    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#21262d); border-radius:12px;
+    .card{ background:var(--secondary-background-color); border:1px solid var(--border,#2a2a2a); border-radius:12px;
            padding:20px; margin-bottom:16px; }
     .card-header{ font-size:13px; font-weight:600; letter-spacing:.08em;
-                  text-transform:uppercase; color:var(--muted,#8b949e); margin-bottom:14px; }
-    .metric-box{ background:var(--background-color); border:1px solid var(--border,#21262d); border-radius:8px;
+                  text-transform:uppercase; color:var(--muted,#9a9a9a); margin-bottom:14px; }
+    .metric-box{ background:var(--background-color); border:1px solid var(--border,#2a2a2a); border-radius:8px;
                  padding:14px; text-align:center; }
     .metric-value{ font-size:22px; font-weight:700; color:var(--text-color); }
-    .metric-label{ font-size:11px; color:var(--muted,#8b949e); margin-top:2px; font-weight:500;
+    .metric-label{ font-size:11px; color:var(--muted,#9a9a9a); margin-top:2px; font-weight:500;
                    letter-spacing:.04em; text-transform:uppercase; }
     .section-title{ font-size:16px; font-weight:700; color:var(--text-color);
-                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #388bfd; }
-    .prog-track{ background:var(--border,#21262d); border-radius:8px; height:10px;
+                    margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #00ff41; }
+    .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:10px;
                  margin:6px 0 2px 0; overflow:hidden; }
     #MainMenu,footer,header{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
@@ -47,7 +49,7 @@ st.markdown("""
 
     /* Verdict banners */
     .verdict-aligned  { background:linear-gradient(135deg,#0d3a1f,#0d5e32);
-                        border:2px solid #238636; border-radius:14px;
+                        border:2px solid #00a32a; border-radius:14px;
                         padding:22px 28px; text-align:center; margin-bottom:18px; }
     .verdict-conflict { background:linear-gradient(135deg,#3a0d0d,#5e1414);
                         border:2px solid #8b2d2d; border-radius:14px;
@@ -55,25 +57,25 @@ st.markdown("""
     .verdict-neutral  { background:linear-gradient(135deg,#1c1c0d,#2e2a0d);
                         border:2px solid #9e6a03; border-radius:14px;
                         padding:22px 28px; text-align:center; margin-bottom:18px; }
-    .verdict-unclear  { background:linear-gradient(135deg,#161b22,#1c2128);
-                        border:1px solid #30363d; border-radius:14px;
+    .verdict-unclear  { background:linear-gradient(135deg,#0a0a0a,#1c2128);
+                        border:1px solid #2a2a2a; border-radius:14px;
                         padding:22px 28px; text-align:center; margin-bottom:18px; }
 
     /* Swing structure cards */
-    .swing-card{ background:var(--background-color); border:1px solid var(--border,#21262d);
+    .swing-card{ background:var(--background-color); border:1px solid var(--border,#2a2a2a);
                  border-radius:10px; padding:16px 20px; margin-bottom:10px; }
-    .swing-card-bull{ border-left:4px solid #3fb950; }
-    .swing-card-bear{ border-left:4px solid #f85149; }
-    .swing-card-neutral{ border-left:4px solid #8b949e; }
+    .swing-card-bull{ border-left:4px solid #00ff66; }
+    .swing-card-bear{ border-left:4px solid #ff3344; }
+    .swing-card-neutral{ border-left:4px solid #9a9a9a; }
 
     /* HH/HL LL/LH tags */
-    .hh-tag{ display:inline-block; background:#0d4a2f; color:#3fb950;
-             border:1px solid #238636; border-radius:4px;
+    .hh-tag{ display:inline-block; background:#003a14; color:#00ff66;
+             border:1px solid #00a32a; border-radius:4px;
              padding:2px 8px; font-size:11px; font-weight:700; margin:2px; }
     .hl-tag{ display:inline-block; background:#0a3522; color:#56d364;
              border:1px solid #2ea043; border-radius:4px;
              padding:2px 8px; font-size:11px; font-weight:700; margin:2px; }
-    .ll-tag{ display:inline-block; background:#4a0d0d; color:#f85149;
+    .ll-tag{ display:inline-block; background:#4a0d0d; color:#ff3344;
              border:1px solid #8b2d2d; border-radius:4px;
              padding:2px 8px; font-size:11px; font-weight:700; margin:2px; }
     .lh-tag{ display:inline-block; background:#3a0d0d; color:#ff7b72;
@@ -82,24 +84,24 @@ st.markdown("""
 
     /* Alignment row */
     .align-row{ display:flex; align-items:center; gap:14px; padding:12px 16px;
-                background:var(--background-color); border:1px solid var(--border,#21262d);
+                background:var(--background-color); border:1px solid var(--border,#2a2a2a);
                 border-radius:8px; margin-bottom:8px; font-size:13px; }
     .align-icon{ font-size:20px; flex-shrink:0; }
-    .align-label{ color:var(--muted,#8b949e); min-width:160px; }
+    .align-label{ color:var(--muted,#9a9a9a); min-width:160px; }
     .align-value{ font-weight:600; color:var(--text-color); }
-    .align-badge-ok  { margin-left:auto; background:#0d4a2f; color:#3fb950;
-                       border:1px solid #238636; border-radius:20px;
+    .align-badge-ok  { margin-left:auto; background:#003a14; color:#00ff66;
+                       border:1px solid #00a32a; border-radius:20px;
                        padding:3px 12px; font-size:11px; font-weight:700; }
-    .align-badge-fail{ margin-left:auto; background:#4a0d0d; color:#f85149;
+    .align-badge-fail{ margin-left:auto; background:#4a0d0d; color:#ff3344;
                        border:1px solid #8b2d2d; border-radius:20px;
                        padding:3px 12px; font-size:11px; font-weight:700; }
-    .align-badge-warn{ margin-left:auto; background:#2a1f00; color:#e3b341;
+    .align-badge-warn{ margin-left:auto; background:#2a1f00; color:#ffcc00;
                        border:1px solid #9e6a03; border-radius:20px;
                        padding:3px 12px; font-size:11px; font-weight:700; }
 
     .explainer{ background:var(--background-color); border:1px solid #1e3a5f;
-                border-left:3px solid #388bfd; border-radius:8px;
-                padding:14px 18px; font-size:13px; color:var(--muted,#8b949e); line-height:1.7; }
+                border-left:3px solid #00ff41; border-radius:8px;
+                padding:14px 18px; font-size:13px; color:var(--muted,#9a9a9a); line-height:1.7; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -316,7 +318,7 @@ def determine_alignment(weekly_bias: str, daily_trend: str) -> dict:
             "grade": "aligned",
             "desc": "Weekly swing and daily trend point in the same direction — "
                     "trade in the direction of both timeframes for maximum confluence.",
-            "color": "#3fb950",
+            "color": "#00ff66",
         }
     elif pair in conflict_combos:
         return {
@@ -325,7 +327,7 @@ def determine_alignment(weekly_bias: str, daily_trend: str) -> dict:
             "grade": "conflict",
             "desc": "Weekly swing and daily trend are in opposite directions — "
                     "counter-trend setups carry elevated risk; avoid or size down significantly.",
-            "color": "#f85149",
+            "color": "#ff3344",
         }
     elif weekly_bias == "RANGING":
         return {
@@ -334,7 +336,7 @@ def determine_alignment(weekly_bias: str, daily_trend: str) -> dict:
             "grade": "neutral",
             "desc": "Weekly structure is ranging or transitioning — "
                     "no clear swing bias. Wait for a confirmed weekly breakout before trading.",
-            "color": "#e3b341",
+            "color": "#ffcc00",
         }
     else:
         return {
@@ -343,7 +345,7 @@ def determine_alignment(weekly_bias: str, daily_trend: str) -> dict:
             "grade": "unclear",
             "desc": "Not enough pivot data to determine weekly swing structure. "
                     "Try increasing the lookback period or reducing the pivot sensitivity.",
-            "color": "#8b949e",
+            "color": "#9a9a9a",
         }
 
 
@@ -362,8 +364,8 @@ def build_weekly_chart(sw: dict, pair: str, show_n: int = 52) -> go.Figure:
         x=df.index,
         open=df["Open"], high=df["High"],
         low=df["Low"], close=df["Close"],
-        increasing_line_color="#3fb950",
-        decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66",
+        decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63, 185, 80, 0.20)",
         decreasing_fillcolor="rgba(248, 81, 73, 0.20)",
         name="Weekly",
@@ -384,10 +386,10 @@ def build_weekly_chart(sw: dict, pair: str, show_n: int = 52) -> go.Figure:
             y=sh_df["High"] * 1.0008,
             mode="markers+text",
             marker=dict(symbol="triangle-down", size=11,
-                        color="#f85149", line=dict(color="#0d1117", width=1)),
+                        color="#ff3344", line=dict(color="#000000", width=1)),
             text=["SH"] * len(sh_df),
             textposition="top center",
-            textfont=dict(size=8, color="#f85149"),
+            textfont=dict(size=8, color="#ff3344"),
             name="Swing High",
         ), row=1, col=1)
 
@@ -398,10 +400,10 @@ def build_weekly_chart(sw: dict, pair: str, show_n: int = 52) -> go.Figure:
             y=sl_df["Low"] * 0.9992,
             mode="markers+text",
             marker=dict(symbol="triangle-up", size=11,
-                        color="#3fb950", line=dict(color="#0d1117", width=1)),
+                        color="#00ff66", line=dict(color="#000000", width=1)),
             text=["SL"] * len(sl_df),
             textposition="bottom center",
-            textfont=dict(size=8, color="#3fb950"),
+            textfont=dict(size=8, color="#00ff66"),
             name="Swing Low",
         ), row=1, col=1)
 
@@ -429,18 +431,18 @@ def build_weekly_chart(sw: dict, pair: str, show_n: int = 52) -> go.Figure:
 
     fig.update_layout(
         height=500,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         title=dict(text=f"<b>{pair}</b> — Weekly Swing Structure",
-                   font=dict(color="#e6edf3", size=14), x=0.01),
-        legend=dict(bgcolor="rgba(13, 17, 23, 0.60)", bordercolor="#21262d", borderwidth=1,
+                   font=dict(color="#e6e6e6", size=14), x=0.01),
+        legend=dict(bgcolor="rgba(13, 17, 23, 0.60)", bordercolor="#2a2a2a", borderwidth=1,
                     font=dict(size=10), orientation="h",
                     yanchor="bottom", y=1.01, xanchor="left", x=0),
         margin=dict(l=10, r=10, t=10, b=10),
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(gridcolor="#21262d", showgrid=False)
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(gridcolor="#2a2a2a", showgrid=False)
     return fig
 
 
@@ -456,8 +458,8 @@ def build_daily_chart(dt: dict, pair: str, fast: int, slow: int,
         x=df.index,
         open=df["Open"], high=df["High"],
         low=df["Low"], close=df["Close"],
-        increasing_line_color="#3fb950",
-        decreasing_line_color="#f85149",
+        increasing_line_color="#00ff66",
+        decreasing_line_color="#ff3344",
         increasing_fillcolor="rgba(63, 185, 80, 0.20)",
         decreasing_fillcolor="rgba(248, 81, 73, 0.20)",
         name="Daily",
@@ -490,16 +492,16 @@ def build_daily_chart(dt: dict, pair: str, fast: int, slow: int,
         fig.add_trace(go.Scatter(
             x=sh_d.index, y=sh_d["High"],
             mode="markers",
-            marker=dict(symbol="x", size=9, color="#f85149",
-                        line=dict(width=2, color="#f85149")),
+            marker=dict(symbol="x", size=9, color="#ff3344",
+                        line=dict(width=2, color="#ff3344")),
             name="Daily SH",
         ), row=1, col=1)
     if not sl_d.empty:
         fig.add_trace(go.Scatter(
             x=sl_d.index, y=sl_d["Low"],
             mode="markers",
-            marker=dict(symbol="x", size=9, color="#3fb950",
-                        line=dict(width=2, color="#3fb950")),
+            marker=dict(symbol="x", size=9, color="#00ff66",
+                        line=dict(width=2, color="#00ff66")),
             name="Daily SL",
         ), row=1, col=1)
 
@@ -514,18 +516,18 @@ def build_daily_chart(dt: dict, pair: str, fast: int, slow: int,
 
     fig.update_layout(
         height=500,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#161b22",
-        font=dict(family="Inter, sans-serif", size=11, color="#8b949e"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
+        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         title=dict(text=f"<b>{pair}</b> — Daily Trend Confirmation",
-                   font=dict(color="#e6edf3", size=14), x=0.01),
-        legend=dict(bgcolor="rgba(13, 17, 23, 0.60)", bordercolor="#21262d", borderwidth=1,
+                   font=dict(color="#e6e6e6", size=14), x=0.01),
+        legend=dict(bgcolor="rgba(13, 17, 23, 0.60)", bordercolor="#2a2a2a", borderwidth=1,
                     font=dict(size=10), orientation="h",
                     yanchor="bottom", y=1.01, xanchor="left", x=0),
         margin=dict(l=10, r=10, t=10, b=10),
     )
-    fig.update_yaxes(gridcolor="#21262d", zeroline=False)
-    fig.update_xaxes(gridcolor="#21262d", showgrid=False)
+    fig.update_yaxes(gridcolor="#2a2a2a", zeroline=False)
+    fig.update_xaxes(gridcolor="#2a2a2a", showgrid=False)
     return fig
 
 
@@ -566,14 +568,14 @@ with st.sidebar:
 
     st.divider()
     st.markdown("""
-    <div style='font-size:11px;color:#484f58;line-height:1.9;'>
-    <b style='color:#8b949e;'>Bullish swing =</b><br>
+    <div style='font-size:11px;color:#555555;line-height:1.9;'>
+    <b style='color:#9a9a9a;'>Bullish swing =</b><br>
     &nbsp;&nbsp;Higher Highs (HH)<br>
     &nbsp;&nbsp;+ Higher Lows (HL)<br><br>
-    <b style='color:#8b949e;'>Bearish swing =</b><br>
+    <b style='color:#9a9a9a;'>Bearish swing =</b><br>
     &nbsp;&nbsp;Lower Lows (LL)<br>
     &nbsp;&nbsp;+ Lower Highs (LH)<br><br>
-    <b style='color:#8b949e;'>✅ Aligned =</b><br>
+    <b style='color:#9a9a9a;'>✅ Aligned =</b><br>
     &nbsp;&nbsp;Weekly swing matches<br>
     &nbsp;&nbsp;the daily EMA trend
     </div>
@@ -589,16 +591,16 @@ with st.sidebar:
 ticker = INSTRUMENTS[selected_pair]["ticker"]
 
 st.markdown(f"""
-<div style="background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);
-            border:1px solid #21262d; border-radius:16px; padding:24px 28px;
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid #2a2a2a; border-radius:16px; padding:24px 28px;
             margin-bottom:20px; position:relative; overflow:hidden;">
-  <div style="font-size:24px; font-weight:700; color:#e6edf3;">
+  <div style="font-size:24px; font-weight:700; color:#e6e6e6;">
     🔄 Weekly Swing Alignment
   </div>
-  <div style="color:#8b949e; font-size:13px; margin-top:4px;">
+  <div style="color:#9a9a9a; font-size:13px; margin-top:4px;">
     Weekly swing structure vs daily trend confirmation · {selected_pair}
   </div>
-  <div style="font-size:12px; color:#388bfd; margin-top:6px;">
+  <div style="font-size:12px; color:#00ff41; margin-top:6px;">
     Check #7 — Weekly Swing ✅ Aligned · {datetime.now().strftime('%A %d %B %Y  |  %H:%M')}
   </div>
 </div>
@@ -639,11 +641,11 @@ with tab_scan:
 
     s1, s2, s3, s4, s5 = st.columns(5)
     for col_, val_, lbl_, c_ in [
-        (s1, len(aligned),  "✅ Aligned",  "#3fb950"),
-        (s2, len(conflict), "❌ Conflict", "#f85149"),
-        (s3, len(ranging),  "↔️ Ranging",  "#e3b341"),
-        (s4, len(unclear),  "⚠️ Unclear",  "#8b949e"),
-        (s5, len(no_data),  "⛔ No Data",  "#484f58"),
+        (s1, len(aligned),  "✅ Aligned",  "#00ff66"),
+        (s2, len(conflict), "❌ Conflict", "#ff3344"),
+        (s3, len(ranging),  "↔️ Ranging",  "#ffcc00"),
+        (s4, len(unclear),  "⚠️ Unclear",  "#9a9a9a"),
+        (s5, len(no_data),  "⛔ No Data",  "#555555"),
     ]:
         with col_:
             st.markdown(
@@ -661,60 +663,60 @@ with tab_scan:
             loaded_s[p]["aln"]["status"] if p in loaded_s else "UNCLEAR", 9), p)
     )
 
-    BORDER_COL = {"ALIGNED": "#3fb950", "CONFLICT": "#f85149",
-                  "RANGING": "#e3b341", "UNCLEAR":  "#484f58"}
+    BORDER_COL = {"ALIGNED": "#00ff66", "CONFLICT": "#ff3344",
+                  "RANGING": "#ffcc00", "UNCLEAR":  "#555555"}
     BADGE_STYLE = {
-        "ALIGNED":  ("background:#0d2f1a;color:#3fb950;border:1px solid #238636;", "✅ Aligned"),
-        "CONFLICT": ("background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;", "❌ Conflict"),
-        "RANGING":  ("background:#2f1f0d;color:#e3b341;border:1px solid #9e6a03;", "↔️ Ranging"),
-        "UNCLEAR":  ("background:#21262d;color:#8b949e;border:1px solid #30363d;", "⚠️ Unclear"),
+        "ALIGNED":  ("background:#0d2f1a;color:#00ff66;border:1px solid #00a32a;", "✅ Aligned"),
+        "CONFLICT": ("background:#2f0d0d;color:#ff3344;border:1px solid #8b2d2d;", "❌ Conflict"),
+        "RANGING":  ("background:#2f1f0d;color:#ffcc00;border:1px solid #9e6a03;", "↔️ Ranging"),
+        "UNCLEAR":  ("background:#2a2a2a;color:#9a9a9a;border:1px solid #2a2a2a;", "⚠️ Unclear"),
     }
 
     def _tag(css_class, text):
         return (f'<span style="border-radius:3px;padding:1px 5px;font-size:9px;'
                 f'font-weight:700;margin-right:2px;{css_class}">{text}</span>')
 
-    HH_CSS = "background:#0d4a2f;color:#3fb950;border:1px solid #238636;"
+    HH_CSS = "background:#003a14;color:#00ff66;border:1px solid #00a32a;"
     HL_CSS = "background:#0a3522;color:#56d364;border:1px solid #2ea043;"
-    LL_CSS = "background:#4a0d0d;color:#f85149;border:1px solid #8b2d2d;"
+    LL_CSS = "background:#4a0d0d;color:#ff3344;border:1px solid #8b2d2d;"
     LH_CSS = "background:#3a0d0d;color:#ff7b72;border:1px solid #6e1414;"
 
     cards_html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;">'
     for pair in sorted_scan:
         if pair not in loaded_s:
             cards_html += (
-                f'<div style="border:1px solid #21262d;border-left:4px solid #30363d;'
-                f'background:#161b22;border-radius:10px;padding:11px 14px;opacity:.5;">'
-                f'<div style="font-size:13px;font-weight:700;color:#8b949e;">{pair}</div>'
-                f'<div style="font-size:10px;color:#484f58;margin-top:4px;">No data</div></div>'
+                f'<div style="border:1px solid #2a2a2a;border-left:4px solid #2a2a2a;'
+                f'background:#0a0a0a;border-radius:10px;padding:11px 14px;opacity:.5;">'
+                f'<div style="font-size:13px;font-weight:700;color:#9a9a9a;">{pair}</div>'
+                f'<div style="font-size:10px;color:#555555;margin-top:4px;">No data</div></div>'
             )
             continue
 
         r   = loaded_s[pair]
         st_ = r["aln"]["status"]
-        bdr = BORDER_COL.get(st_, "#30363d")
+        bdr = BORDER_COL.get(st_, "#2a2a2a")
         bdg_css, bdg_txt = BADGE_STYLE.get(st_, BADGE_STYLE["UNCLEAR"])
         w_bias  = r["sw"]["bias"]
         d_trend = r["dt"]["trend"]
-        w_col   = "#3fb950" if w_bias == "BULLISH" else "#f85149" if w_bias == "BEARISH" else "#e3b341"
-        d_col   = "#3fb950" if d_trend == "BULLISH" else "#f85149" if d_trend == "BEARISH" else "#e3b341"
+        w_col   = "#00ff66" if w_bias == "BULLISH" else "#ff3344" if w_bias == "BEARISH" else "#ffcc00"
+        d_col   = "#00ff66" if d_trend == "BULLISH" else "#ff3344" if d_trend == "BEARISH" else "#ffcc00"
         tags    = ((_tag(HH_CSS, "HH") if r["sw"].get("hh") else "") +
                    (_tag(HL_CSS, "HL") if r["sw"].get("hl") else "") +
                    (_tag(LL_CSS, "LL") if r["sw"].get("ll") else "") +
                    (_tag(LH_CSS, "LH") if r["sw"].get("lh") else ""))
-        outline = "outline:2px solid #388bfd;" if pair == selected_pair else ""
+        outline = "outline:2px solid #00ff41;" if pair == selected_pair else ""
 
         cards_html += (
-            f'<div style="border:1px solid #21262d;border-left:4px solid {bdr};'
-            f'background:#161b22;border-radius:10px;padding:11px 14px;{outline}">'
+            f'<div style="border:1px solid #2a2a2a;border-left:4px solid {bdr};'
+            f'background:#0a0a0a;border-radius:10px;padding:11px 14px;{outline}">'
             f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-            f'<span style="font-size:13px;font-weight:700;color:#e6edf3;">{pair}</span>'
+            f'<span style="font-size:13px;font-weight:700;color:#e6e6e6;">{pair}</span>'
             f'<span style="border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;{bdg_css}">{bdg_txt}</span>'
             f'</div>'
             f'<div style="display:flex;gap:10px;font-size:11px;margin-bottom:5px;">'
-            f'<span style="color:#484f58;">W:</span>'
+            f'<span style="color:#555555;">W:</span>'
             f'<span style="color:{w_col};font-weight:600;">{w_bias}</span>'
-            f'<span style="color:#484f58;">D:</span>'
+            f'<span style="color:#555555;">D:</span>'
             f'<span style="color:{d_col};font-weight:600;">{d_trend}</span>'
             f'</div>'
             f'<div>{tags}</div>'
@@ -786,29 +788,29 @@ with tab_detail:
                       letter-spacing:1px; margin-bottom:10px;">{aln['verdict']}</div>
           <div style="display:flex; justify-content:center; align-items:center;
                       gap:20px; margin:12px 0; flex-wrap:wrap;">
-            <div style="background:rgba(13,17,23,.40); border:1px solid #30363d;
+            <div style="background:rgba(13,17,23,.40); border:1px solid #2a2a2a;
                         border-radius:10px; padding:12px 24px; text-align:center;">
               <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase;
-                          color:#8b949e; margin-bottom:6px;">Weekly Swing</div>
+                          color:#9a9a9a; margin-bottom:6px;">Weekly Swing</div>
               <div style="font-size:22px;">{w_arrow}</div>
               <div style="font-size:13px; font-weight:700;
-                          color:{'#3fb950' if sw['bias']=='BULLISH' else '#f85149' if sw['bias']=='BEARISH' else '#e3b341'};">
+                          color:{'#00ff66' if sw['bias']=='BULLISH' else '#ff3344' if sw['bias']=='BEARISH' else '#ffcc00'};">
                 {sw["bias"]}
               </div>
             </div>
             <div style="font-size:28px;">{match_icon}</div>
-            <div style="background:rgba(13,17,23,.40); border:1px solid #30363d;
+            <div style="background:rgba(13,17,23,.40); border:1px solid #2a2a2a;
                         border-radius:10px; padding:12px 24px; text-align:center;">
               <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase;
-                          color:#8b949e; margin-bottom:6px;">Daily Trend</div>
+                          color:#9a9a9a; margin-bottom:6px;">Daily Trend</div>
               <div style="font-size:22px;">{d_arrow}</div>
               <div style="font-size:13px; font-weight:700;
-                          color:{'#3fb950' if dt['trend']=='BULLISH' else '#f85149' if dt['trend']=='BEARISH' else '#e3b341'};">
+                          color:{'#00ff66' if dt['trend']=='BULLISH' else '#ff3344' if dt['trend']=='BEARISH' else '#ffcc00'};">
                 {dt["trend"]}
               </div>
             </div>
           </div>
-          <div style="font-size:13px; color:#8b949e; margin-top:10px;">{aln['desc']}</div>
+          <div style="font-size:13px; color:#9a9a9a; margin-top:10px;">{aln['desc']}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -820,11 +822,11 @@ with tab_detail:
         for col, val, lbl, c in [
             (k1, sw["bias"], "Weekly Bias", color),
             (k2, dt["trend"], "Daily Trend",
-             "#3fb950" if dt["trend"]=="BULLISH" else "#f85149" if dt["trend"]=="BEARISH" else "#e3b341"),
-            (k3, str(num_sh), "Weekly Swing Highs", "#f85149"),
-            (k4, str(num_sl), "Weekly Swing Lows",  "#3fb950"),
+             "#00ff66" if dt["trend"]=="BULLISH" else "#ff3344" if dt["trend"]=="BEARISH" else "#ffcc00"),
+            (k3, str(num_sh), "Weekly Swing Highs", "#ff3344"),
+            (k4, str(num_sl), "Weekly Swing Lows",  "#00ff66"),
             (k5, ema_cross, f"EMA {int(daily_fast)}/{int(daily_slow)} Cross",
-             "#3fb950" if dt["ema_bull"] else "#f85149"),
+             "#00ff66" if dt["ema_bull"] else "#ff3344"),
         ]:
             with col:
                 st.markdown(
@@ -872,7 +874,7 @@ with tab_detail:
             align_row("🔢", "Confirmed pivots", f'{num_sh} SH · {num_sl} SL',
                       "Sufficient" if num_sh >= 2 and num_sl >= 2 else "Need more",
                       num_sh >= 2 and num_sl >= 2)
-            st.markdown(f'<div style="padding:10px 0 4px 0;font-size:12px;color:#8b949e;">'
+            st.markdown(f'<div style="padding:10px 0 4px 0;font-size:12px;color:#9a9a9a;">'
                         f'Structure tags: &nbsp;{struct_tags}</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -941,7 +943,7 @@ with tab_detail:
         with col_a:
             st.markdown("""
             <div class="explainer">
-            <b style="color:#3fb950;">📅 Weekly Swing Structure</b><br><br>
+            <b style="color:#00ff66;">📅 Weekly Swing Structure</b><br><br>
             The weekly chart defines the <em>primary bias</em> — the dominant force driving price.<br><br>
             <b>Bullish structure (HH + HL):</b><br>
             Each successive swing high and swing low is higher than the previous.
@@ -956,7 +958,7 @@ with tab_detail:
         with col_b:
             st.markdown(f"""
             <div class="explainer">
-            <b style="color:#388bfd;">📆 Daily Trend & Alignment Rule</b><br><br>
+            <b style="color:#00ff41;">📆 Daily Trend & Alignment Rule</b><br><br>
             The daily trend acts as the <em>execution timeframe filter</em>.<br><br>
             <b>EMA crossover:</b><br>
             EMA {int(daily_fast)} above EMA {int(daily_slow)} = daily bullish.<br>
@@ -970,8 +972,8 @@ with tab_detail:
             """, unsafe_allow_html=True)
 
 st.markdown("""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;
-            padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;
+            padding-top:16px;border-top:1px solid #2a2a2a;">
   🔄 Weekly Swing Alignment · Check #7 · Weekly structure + Daily confirmation · For educational purposes only
 </div>
 """, unsafe_allow_html=True)

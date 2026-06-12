@@ -380,6 +380,21 @@ section[data-testid="stSidebar"] h4 {{
     .block-container {{ padding: 0.4rem 0.4rem 5rem 0.4rem !important; }}
 }}
 
+/* ── global flatten — terminals have no rounded corners ──────── */
+*, *::before, *::after {{ border-radius: 0 !important; }}
+
+/* ── legacy page classes harmonised to the terminal look ─────── */
+.hero {{
+    background: linear-gradient(90deg, {cls.BG_HEADER} 0%, {cls.BG} 100%) !important;
+    border: 1px solid {cls.AMBER_DIM} !important;
+    border-left: 4px solid {cls.AMBER} !important;
+}}
+.card, .metric-box, .ccy-card, .ccy-bank, .stat-box {{
+    background: {cls.BG_PANEL} !important;
+    border: 1px solid {cls.BORDER} !important;
+}}
+.section-title, .card-header {{ color: {cls.AMBER} !important; }}
+
 /* Bloomberg-tinted Plotly background passes through automatically */
 .js-plotly-plot {{ border: 1px solid {cls.BORDER}; background: {cls.BG_PANEL}; }}
 

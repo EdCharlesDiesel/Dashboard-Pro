@@ -1,4 +1,5 @@
 import streamlit as st
+from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import numpy as np
@@ -14,6 +15,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+BloombergTheme.apply()
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -26,56 +28,56 @@ st.markdown("""
     }
     html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     .stApp{background:var(--background-color);}
-    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#21262d);}
-    .card{background:var(--secondary-background-color);border:1px solid var(--border,#21262d);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
-    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#8b949e;margin-bottom:12px;}
-    .hero{background:linear-gradient(135deg,#0d1117 0%,#161b22 50%,#0d1117 100%);border:1px solid #21262d;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
+    section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
+    .card{background:var(--secondary-background-color);border:1px solid var(--border,#2a2a2a);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+    .card-header{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#9a9a9a;margin-bottom:12px;}
+    .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
     .hero::before{content:'';position:absolute;top:-40%;right:-5%;width:280px;height:280px;background:radial-gradient(circle,rgba(56,139,253,.07) 0%,transparent 70%);border-radius:50%;}
 
     /* Currency cards */
-    .ccy-card{background:#161b22;border:1px solid #21262d;border-radius:12px;padding:16px;margin-bottom:12px;transition:border-color .2s;}
-    .ccy-card:hover{border-color:#388bfd55;}
+    .ccy-card{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:12px;padding:16px;margin-bottom:12px;transition:border-color .2s;}
+    .ccy-card:hover{border-color:#00ff4155;}
     .ccy-flag{font-size:22px;margin-right:8px;}
-    .ccy-name{font-size:16px;font-weight:700;color:#e6edf3;}
-    .ccy-bank{font-size:11px;color:#8b949e;margin-top:1px;}
+    .ccy-name{font-size:16px;font-weight:700;color:#e6e6e6;}
+    .ccy-bank{font-size:11px;color:#9a9a9a;margin-top:1px;}
 
     /* Metric pills */
     .pill{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;margin:2px;}
-    .pill-bull{background:#0d2f1a;color:#3fb950;border:1px solid #238636;}
-    .pill-bear{background:#2f0d0d;color:#f85149;border:1px solid #8b2d2d;}
-    .pill-neut{background:#1c1c24;color:#8b949e;border:1px solid #30363d;}
-    .pill-warn{background:#2f1f0d;color:#e3b341;border:1px solid #9e6a03;}
+    .pill-bull{background:#0d2f1a;color:#00ff66;border:1px solid #00a32a;}
+    .pill-bear{background:#2f0d0d;color:#ff3344;border:1px solid #8b2d2d;}
+    .pill-neut{background:#1c1c24;color:#9a9a9a;border:1px solid #2a2a2a;}
+    .pill-warn{background:#2f1f0d;color:#ffcc00;border:1px solid #9e6a03;}
 
     /* Bias score bar */
-    .bias-track{background:#21262d;border-radius:8px;height:8px;margin:6px 0 2px;overflow:hidden;}
-    .bias-bull{background:linear-gradient(90deg,#238636,#3fb950);height:100%;border-radius:8px;}
-    .bias-bear{background:linear-gradient(90deg,#8b2d2d,#f85149);height:100%;border-radius:8px;}
-    .bias-neut{background:linear-gradient(90deg,#30363d,#484f58);height:100%;border-radius:8px;}
+    .bias-track{background:#2a2a2a;border-radius:8px;height:8px;margin:6px 0 2px;overflow:hidden;}
+    .bias-bull{background:linear-gradient(90deg,#00a32a,#00ff66);height:100%;border-radius:8px;}
+    .bias-bear{background:linear-gradient(90deg,#8b2d2d,#ff3344);height:100%;border-radius:8px;}
+    .bias-neut{background:linear-gradient(90deg,#2a2a2a,#555555);height:100%;border-radius:8px;}
 
     /* Data rows */
-    .data-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #21262d;font-size:13px;}
+    .data-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2a2a2a;font-size:13px;}
     .data-row:last-child{border-bottom:none;}
-    .data-label{color:#8b949e;font-size:12px;}
-    .data-val{font-weight:600;color:#e6edf3;font-family:monospace;}
-    .data-val-up{font-weight:700;color:#3fb950;font-family:monospace;}
-    .data-val-dn{font-weight:700;color:#f85149;font-family:monospace;}
-    .data-val-warn{font-weight:700;color:#e3b341;font-family:monospace;}
+    .data-label{color:#9a9a9a;font-size:12px;}
+    .data-val{font-weight:600;color:#e6e6e6;font-family:monospace;}
+    .data-val-up{font-weight:700;color:#00ff66;font-family:monospace;}
+    .data-val-dn{font-weight:700;color:#ff3344;font-family:monospace;}
+    .data-val-warn{font-weight:700;color:#ffcc00;font-family:monospace;}
 
     /* Pair bias table */
-    .pair-row{display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-bottom:1px solid #21262d;}
+    .pair-row{display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-bottom:1px solid #2a2a2a;}
     .pair-row:last-child{border-bottom:none;}
-    .pair-name{font-size:15px;font-weight:700;color:#e6edf3;}
-    .pair-sub{font-size:11px;color:#8b949e;margin-top:2px;}
+    .pair-name{font-size:15px;font-weight:700;color:#e6e6e6;}
+    .pair-sub{font-size:11px;color:#9a9a9a;margin-top:2px;}
 
     .badge{border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;display:inline-block;}
-    .badge-bull{background:#0d4a2f;color:#3fb950;border:1px solid #238636;}
-    .badge-bear{background:#4a0d0d;color:#f85149;border:1px solid #8b2d2d;}
-    .badge-neut{background:#21262d;color:#8b949e;border:1px solid #30363d;}
-    .badge-watch{background:#4a2d0d;color:#e3b341;border:1px solid #9e6a03;}
+    .badge-bull{background:#003a14;color:#00ff66;border:1px solid #00a32a;}
+    .badge-bear{background:#4a0d0d;color:#ff3344;border:1px solid #8b2d2d;}
+    .badge-neut{background:#2a2a2a;color:#9a9a9a;border:1px solid #2a2a2a;}
+    .badge-watch{background:#4a2d0d;color:#ffcc00;border:1px solid #9e6a03;}
 
-    .metric-box{background:var(--background-color);border:1px solid var(--border,#21262d);border-radius:8px;padding:12px 14px;text-align:center;}
-    .metric-value{font-size:20px;font-weight:700;color:#c9d1d9;}
-    .metric-label{font-size:10px;color:#8b949e;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:12px 14px;text-align:center;}
+    .metric-value{font-size:20px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
 
     [data-testid="stSidebarNav"]{display:none;}
     #MainMenu,footer,header{visibility:hidden;}
@@ -505,37 +507,37 @@ st.markdown(f"""
 <div class="hero">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
     <div>
-      <div style="font-size:26px;font-weight:700;color:#e6edf3;">🌐 Macro Bias Dashboard</div>
-      <div style="color:#8b949e;font-size:14px;margin-top:6px;">
+      <div style="font-size:26px;font-weight:700;color:#e6e6e6;">🌐 Macro Bias Dashboard</div>
+      <div style="color:#9a9a9a;font-size:14px;margin-top:6px;">
         Real-Time FX · Interest Rates · GDP Growth · Inflation · Currency Bias Scoring
       </div>
-      <div style="font-size:13px;color:#388bfd;font-weight:500;margin-top:4px;">
+      <div style="font-size:13px;color:#00ff41;font-weight:500;margin-top:4px;">
         🕐 {datetime.now().strftime('%A, %d %B %Y  |  %H:%M UTC')} · Data Sources: FRED · World Bank · Yahoo Finance
       </div>
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <div class="metric-box" style="min-width:90px;">
-        <div class="metric-value" style="color:#388bfd;">
+        <div class="metric-value" style="color:#00ff41;">
           {f'${dxy_data["value"]:.1f}' if dxy_data else 'N/A'}
         </div>
         <div class="metric-label">💵 DXY Index</div>
       </div>
       <div class="metric-box" style="min-width:90px;">
-        <div class="metric-value" style="color:#e3b341;">
+        <div class="metric-value" style="color:#ffcc00;">
           {f'{vix_data:.1f}' if vix_data else 'N/A'}
         </div>
         <div class="metric-label">😰 VIX</div>
       </div>
       <div class="metric-box" style="min-width:90px;">
-        <div class="metric-value" style="color:#3fb950;">{len(bull_ccys)}</div>
+        <div class="metric-value" style="color:#00ff66;">{len(bull_ccys)}</div>
         <div class="metric-label">🟢 Bullish</div>
       </div>
       <div class="metric-box" style="min-width:90px;">
-        <div class="metric-value" style="color:#8b949e;">{len(neut_ccys)}</div>
+        <div class="metric-value" style="color:#9a9a9a;">{len(neut_ccys)}</div>
         <div class="metric-label">⚪ Neutral</div>
       </div>
       <div class="metric-box" style="min-width:90px;">
-        <div class="metric-value" style="color:#f85149;">{len(bear_ccys)}</div>
+        <div class="metric-value" style="color:#ff3344;">{len(bear_ccys)}</div>
         <div class="metric-label">🔴 Bearish</div>
       </div>
     </div>
@@ -553,12 +555,12 @@ if fx_rates:
     fx_cols = st.columns(6)
     for idx, (pair, data) in enumerate(fx_rates.items()):
         with fx_cols[idx % 6]:
-            change_color = "#3fb950" if data["change_pct"] >= 0 else "#f85149"
+            change_color = "#00ff66" if data["change_pct"] >= 0 else "#ff3344"
             change_sign = "+" if data["change_pct"] >= 0 else ""
             st.markdown(f"""
             <div class="card" style="padding:10px 12px;margin-bottom:8px;">
-              <div style="font-size:11px;color:#8b949e;margin-bottom:4px;">{pair}</div>
-              <div style="font-size:18px;font-weight:700;color:#e6edf3;">{data['rate']:.4f}</div>
+              <div style="font-size:11px;color:#9a9a9a;margin-bottom:4px;">{pair}</div>
+              <div style="font-size:18px;font-weight:700;color:#e6e6e6;">{data['rate']:.4f}</div>
               <div style="font-size:11px;color:{change_color};font-weight:600;">
                 {change_sign}{data['change_pct']:.2f}%
               </div>
@@ -576,7 +578,7 @@ st.caption("Source: FRED (Federal Reserve Economic Data) + World Bank")
 rate_names = [f"{CURRENCIES[c]['flag']} {c}" for c in CURRENCIES]
 rate_vals = [CURRENCIES[c]["cb_rate"] for c in CURRENCIES]
 rate_trends = [CURRENCIES[c]["rate_trend"] for c in CURRENCIES]
-rate_colors = ["#3fb950" if t == "Hiking" else "#f85149" if t == "Cutting" else "#e3b341" for t in rate_trends]
+rate_colors = ["#00ff66" if t == "Hiking" else "#ff3344" if t == "Cutting" else "#ffcc00" for t in rate_trends]
 
 fig_rates = go.Figure()
 fig_rates.add_trace(go.Bar(
@@ -584,22 +586,22 @@ fig_rates.add_trace(go.Bar(
     marker_color=rate_colors,
     text=[f"{v:.2f}%<br><span style='font-size:9px'>{t}</span>" for v, t in zip(rate_vals, rate_trends)],
     textposition="outside",
-    textfont=dict(color="#c9d1d9", size=11),
+    textfont=dict(color="#e6e6e6", size=11),
     hovertemplate="<b>%{x}</b><br>Rate: %{y:.2f}%<extra></extra>",
 ))
 if rate_vals:
     avg_rate = float(np.mean(rate_vals))
     fig_rates.add_hline(
         y=avg_rate,
-        line_dash="dot", line_color="#8b949e", line_width=1.5,
+        line_dash="dot", line_color="#9a9a9a", line_width=1.5,
         annotation_text=f"Avg {avg_rate:.2f}%",
-        annotation_font_color="#8b949e", annotation_position="right",
+        annotation_font_color="#9a9a9a", annotation_position="right",
     )
 fig_rates.update_layout(
-    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
+    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#000000",
     margin=dict(l=10, r=80, t=30, b=10), height=300,
-    xaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False, linecolor="#21262d"),
-    yaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d",
+    xaxis=dict(tickfont=dict(color="#e6e6e6", size=12), showgrid=False, linecolor="#2a2a2a"),
+    yaxis=dict(tickfont=dict(color="#9a9a9a"), showgrid=True, gridcolor="#2a2a2a",
                ticksuffix="%", range=[0, max(rate_vals) * 1.3] if rate_vals else [0, 10]),
     showlegend=False,
     bargap=0.25,
@@ -607,7 +609,7 @@ fig_rates.update_layout(
 st.plotly_chart(fig_rates, use_container_width=True, config=dict(displayModeBar=False))
 
 st.markdown("""
-<div style="display:flex;gap:20px;font-size:12px;color:#8b949e;padding:4px 0 16px 0;">
+<div style="display:flex;gap:20px;font-size:12px;color:#9a9a9a;padding:4px 0 16px 0;">
   <span>🟢 Hiking = hawkish = currency bullish pressure</span>
   <span>🟡 Holding = neutral</span>
   <span>🔴 Cutting = dovish = currency bearish pressure</span>
@@ -630,7 +632,7 @@ if yields:
             }.get(ccy, ccy)
             st.markdown(f"""
             <div class="metric-box">
-              <div class="metric-value" style="color:#e3b341;">{value:.2f}%</div>
+              <div class="metric-value" style="color:#ffcc00;">{value:.2f}%</div>
               <div class="metric-label">{yield_name}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -653,7 +655,7 @@ for row in rows:
         s = sc["score"]
         signals = sc["signals"]
 
-        bias_color = "#3fb950" if bias == "Bullish" else "#f85149" if bias == "Bearish" else "#8b949e"
+        bias_color = "#00ff66" if bias == "Bullish" else "#ff3344" if bias == "Bearish" else "#9a9a9a"
         bias_icon = "🟢" if bias == "Bullish" else "🔴" if bias == "Bearish" else "⚪"
         bar_pct = int((s + 4) / 8 * 100)
         bar_class = "bias-bull" if s > 0 else "bias-bear" if s < 0 else "bias-neut"
@@ -689,14 +691,14 @@ for row in rows:
                 </div>
                 <div style="text-align:right;">
                   <div style="font-size:18px;font-weight:700;color:{bias_color};">{bias_icon} {bias}</div>
-                  <div style="font-size:11px;color:#8b949e;">Score {s:+.1f}</div>
+                  <div style="font-size:11px;color:#9a9a9a;">Score {s:+.1f}</div>
                 </div>
               </div>
 
               <div class="bias-track">
                 <div class="{bar_class}" style="width:{bar_pct}%;"></div>
               </div>
-              <div style="display:flex;justify-content:space-between;font-size:10px;color:#484f58;margin-bottom:10px;">
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:#555555;margin-bottom:10px;">
                 <span>Bearish</span><span>Neutral</span><span>Bullish</span>
               </div>
 
@@ -710,7 +712,7 @@ for row in rows:
               </div>
               <div class="data-row">
                 <span class="data-label">🔥 Inflation ({cpi_yr})</span>
-                <span class="{cpi_cls}">{cpi_val} <span style="color:#484f58;font-size:10px;">tgt {cfg['inflation_target']}%</span></span>
+                <span class="{cpi_cls}">{cpi_val} <span style="color:#555555;font-size:10px;">tgt {cfg['inflation_target']}%</span></span>
               </div>
 
               <div style="margin-top:10px;line-height:1.8;">{pill_html}</div>
@@ -741,7 +743,7 @@ with chart_col1:
     st.markdown('<div class="card"><div class="card-header">📈 Latest GDP Growth Rate (%)</div>', unsafe_allow_html=True)
     if gdp_plot:
         df_gdp = pd.DataFrame(gdp_plot).sort_values("GDP Growth (%)", ascending=True)
-        colors_gdp = ["#3fb950" if v > 2 else "#f85149" if v < 0.5 else "#e3b341" for v in df_gdp["GDP Growth (%)"]]
+        colors_gdp = ["#00ff66" if v > 2 else "#ff3344" if v < 0.5 else "#ffcc00" for v in df_gdp["GDP Growth (%)"]]
         fig_gdp = go.Figure(go.Bar(
             y=[f"{r['Flag']} {r['Currency']}" for _, r in df_gdp.iterrows()],
             x=df_gdp["GDP Growth (%)"],
@@ -749,18 +751,18 @@ with chart_col1:
             marker_color=colors_gdp,
             text=[f"{v:.1f}%" for v in df_gdp["GDP Growth (%)"]],
             textposition="outside",
-            textfont=dict(color="#c9d1d9", size=11),
+            textfont=dict(color="#e6e6e6", size=11),
             hovertemplate="<b>%{y}</b><br>GDP Growth: %{x:.2f}%<extra></extra>",
         ))
-        fig_gdp.add_vline(x=2.0, line_dash="dot", line_color="#238636", line_width=1.5,
-                          annotation_text="Solid +2%", annotation_font_color="#238636")
+        fig_gdp.add_vline(x=2.0, line_dash="dot", line_color="#00a32a", line_width=1.5,
+                          annotation_text="Solid +2%", annotation_font_color="#00a32a")
         fig_gdp.add_vline(x=0.0, line_dash="dot", line_color="#8b2d2d", line_width=1,
                           annotation_text="Recession", annotation_font_color="#8b2d2d")
         fig_gdp.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#000000",
             margin=dict(l=10, r=60, t=10, b=10), height=280,
-            xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d", ticksuffix="%"),
-            yaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False),
+            xaxis=dict(tickfont=dict(color="#9a9a9a"), showgrid=True, gridcolor="#2a2a2a", ticksuffix="%"),
+            yaxis=dict(tickfont=dict(color="#e6e6e6", size=12), showgrid=False),
             showlegend=False,
         )
         st.plotly_chart(fig_gdp, use_container_width=True, config=dict(displayModeBar=False))
@@ -776,13 +778,13 @@ with chart_col2:
             tgt = CURRENCIES[r["Currency"]]["inflation_target"]
             v = r["Inflation (%)"]
             if abs(v - tgt) < 0.5:
-                colors_cpi.append("#3fb950")
+                colors_cpi.append("#00ff66")
             elif v > tgt * 1.5:
-                colors_cpi.append("#f85149")
+                colors_cpi.append("#ff3344")
             elif v < tgt * 0.5:
-                colors_cpi.append("#8b949e")
+                colors_cpi.append("#9a9a9a")
             else:
-                colors_cpi.append("#e3b341")
+                colors_cpi.append("#ffcc00")
 
         fig_cpi = go.Figure(go.Bar(
             y=[f"{r['Flag']} {r['Currency']}" for _, r in df_cpi.iterrows()],
@@ -791,14 +793,14 @@ with chart_col2:
             marker_color=colors_cpi,
             text=[f"{v:.1f}%" for v in df_cpi["Inflation (%)"]],
             textposition="outside",
-            textfont=dict(color="#c9d1d9", size=11),
+            textfont=dict(color="#e6e6e6", size=11),
             hovertemplate="<b>%{y}</b><br>Inflation: %{x:.2f}%<extra></extra>",
         ))
         fig_cpi.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0d1117",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#000000",
             margin=dict(l=10, r=60, t=10, b=10), height=280,
-            xaxis=dict(tickfont=dict(color="#8b949e"), showgrid=True, gridcolor="#21262d", ticksuffix="%"),
-            yaxis=dict(tickfont=dict(color="#c9d1d9", size=12), showgrid=False),
+            xaxis=dict(tickfont=dict(color="#9a9a9a"), showgrid=True, gridcolor="#2a2a2a", ticksuffix="%"),
+            yaxis=dict(tickfont=dict(color="#e6e6e6", size=12), showgrid=False),
             showlegend=False,
         )
         st.plotly_chart(fig_cpi, use_container_width=True, config=dict(displayModeBar=False))
@@ -841,12 +843,12 @@ def render_pair_group(pairs, badge_cls, badge_lbl, dir_icon):
         st.markdown(f"""
         <div class="pair-row">
           <div style="flex:1;">
-            <div class="pair-name">{pair} <span style="font-size:11px;color:#484f58;">{fx_display}</span></div>
+            <div class="pair-name">{pair} <span style="font-size:11px;color:#555555;">{fx_display}</span></div>
             <div class="pair-sub">{pb['reason']}</div>
           </div>
           <div style="text-align:right;margin-left:16px;">
             <div class="badge {badge_cls}">{dir_icon} {badge_lbl}</div>
-            <div style="font-size:12px;color:#e3b341;margin-top:4px;letter-spacing:1px;">{stars}</div>
+            <div style="font-size:12px;color:#ffcc00;margin-top:4px;letter-spacing:1px;">{stars}</div>
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -876,7 +878,7 @@ with pcol3:
 
 # Footer
 st.markdown(f"""
-<div style="text-align:center;color:#484f58;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #21262d;">
+<div style="text-align:center;color:#555555;font-size:11px;margin-top:32px;padding-top:16px;border-top:1px solid #2a2a2a;">
   🌐 Macro Bias Dashboard · Sources: FRED (St. Louis Fed) · World Bank API · Yahoo Finance
   <br>Last refresh: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} · Auto-refresh available in sidebar · Not financial advice
 </div>
