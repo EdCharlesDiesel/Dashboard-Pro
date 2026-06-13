@@ -11,7 +11,7 @@ tenacity
 streamlit
 scipy
 pytz
-psycopg2
+psycopg2-binary==2.9.12
 pandas_datareader
 statsmodels
 
