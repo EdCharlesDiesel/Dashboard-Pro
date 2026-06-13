@@ -12,4 +12,6 @@ streamlit
 scipy
 pytz
 psycopg2
+pandas_datareader
+statsmodels
 

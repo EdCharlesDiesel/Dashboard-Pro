@@ -75,13 +75,18 @@ CANDLE_STYLE = dict(
     line_width=1,
 )
 
-# Dark chart background applied via fig.update_layout(**CHART_LAYOUT)
+# Dark chart background applied via fig.update_layout(**CHART_LAYOUT).
+# Legend + hover use green text on a solid black box so EMA/series labels read.
 CHART_LAYOUT = dict(
-    plot_bgcolor="#0e1117",
-    paper_bgcolor="#0e1117",
-    font=dict(color="#c0c0c0", size=11),
+    plot_bgcolor="#0f0f0f",
+    paper_bgcolor="#000000",
+    font=dict(color="#e6e6e6", size=11),
     xaxis_rangeslider_visible=False,
     hovermode="x unified",
+    legend=dict(bgcolor="#000000", bordercolor="#00ff41", borderwidth=1,
+                font=dict(color="#00ff41", size=11)),
+    hoverlabel=dict(bgcolor="#000000", bordercolor="#00ff41",
+                    font=dict(color="#00ff41", size=11)),
 )
 
 # EMA overlay colours

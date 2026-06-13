@@ -18,13 +18,12 @@ BloombergTheme.apply()
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     /* Theme-adaptive layout vars */
     .stApp {
       --border: color-mix(in srgb, var(--text-color) 12%, transparent);
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
-    html,body,[class*="css"]{font-family:'Inter',sans-serif;}
+    html,body,[class*="css"]{font-family:'JetBrains Mono','Fira Code',monospace;}
     .stApp{background:var(--background-color);}
     section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
     .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
