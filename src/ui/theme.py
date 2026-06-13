@@ -36,6 +36,16 @@ class BloombergTheme:
     # ── public API ─────────────────────────────────────────────────────────
     @classmethod
     def apply(cls) -> None:
+        # Universal chokepoint: every page (framework + legacy) calls apply()
+        # right after set_page_config, so this is where we initialise logging
+        # and record a page view. Guarded — observability must never break a
+        # page render.
+        try:
+            from src.core import observability
+            observability.init_logging()
+            observability.log_page_view()
+        except Exception:
+            pass
         st.markdown(cls._css(), unsafe_allow_html=True)
 
     # ── internal CSS builder ───────────────────────────────────────────────
@@ -65,32 +75,34 @@ html, body, [class*="css"] {{
 [data-testid="stToolbar"] {{ display: none !important; }}
 [data-testid="stDecoration"] {{ display: none !important; }}
 [data-testid="stSidebarNav"] {{ display: none; }}
-header[data-testid="stHeader"] {{ background: transparent !important; }}
-
-/* Force the sidebar permanently on-screen. Streamlit collapses it by sliding
-   it off with transform: translateX(-100%) and/or width:0 — override both so
-   it can never disappear regardless of viewport width or collapse state. */
-section[data-testid="stSidebar"],
-div[data-testid="stSidebar"] {{
-    display: flex !important;
+/* Keep the header visible — the sidebar collapse/expand arrow lives inside it.
+   Legacy pages hide it with `header{{visibility:hidden}}`; override that so a
+   collapsed sidebar can always be reopened. */
+header[data-testid="stHeader"] {{
+    background: transparent !important;
     visibility: visible !important;
-    transform: none !important;
-    min-width: 250px !important;
-    width: 250px !important;
-    margin-left: 0 !important;
-    left: 0 !important;
+}}
+
+/* Sidebar APPEARANCE ONLY — never pin it open. The previous build forced
+   `transform: none` + a fixed 250px width, which made the collapse arrow do
+   nothing on every viewport (desktop included) and swallowed mobile screens.
+   We now leave Streamlit's native collapse/expand intact and only restyle the
+   surface. */
+section[data-testid="stSidebar"] {{
     background: {cls.BG_ELEV} !important;
     border-right: 1px solid {cls.BORDER};
 }}
-section[data-testid="stSidebar"][aria-expanded="false"] {{
-    margin-left: 0 !important;
-    transform: none !important;
-}}
-/* the collapse arrow can stay, but it's no longer load-bearing on desktop */
+/* Always-tappable toggle controls so the sidebar can be hidden AND reopened,
+   even on touch (the arrow is normally hover-only) and on legacy pages that
+   hide the header. */
 [data-testid="stSidebarCollapseButton"],
-[data-testid="stExpandSidebarButton"] {{
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="stExpandSidebarButton"],
+[data-testid="stExpandSidebarButton"] button,
+[data-testid="stSidebarCollapsedControl"] {{
     visibility: visible !important;
     display: flex !important;
+    opacity: 1 !important;
 }}
 section[data-testid="stSidebar"] * {{
     color: {cls.WHITE} !important;
@@ -458,10 +470,9 @@ section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current
     .bb-ticker-strip {{ font-size: 10px; gap: 12px; }}
 }}
 
-/* Phones & small tablets: turn the permanently-pinned sidebar into an
-   off-canvas drawer. The desktop rules above force it open at a fixed 250px
-   with `transform: none` — that swallows a narrow screen and can't be
-   dismissed. Restore Streamlit's native collapse so it slides away.
+/* Phones & small tablets: make the sidebar an off-canvas drawer that overlays
+   the content (instead of reserving a column) and slides fully away when
+   collapsed, so it never swallows a narrow screen.
 
    Two touch-specific fixes (Streamlit 1.57 DOM):
      • The collapse arrow (stSidebarCollapseButton) is only revealed on hover,

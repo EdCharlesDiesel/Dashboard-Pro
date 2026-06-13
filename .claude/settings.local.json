@@ -73,7 +73,9 @@
       "Bash(grep -oE 'data-testid\":`[A-Za-z]*\\([Cc]ollaps|[Ee]xpand\\)[A-Za-z]*`' index.D2ZqaFuW.js)",
       "Bash(grep -oE '.{40}stSidebarCollapseButton`.{120}' index.D2ZqaFuW.js)",
       "Bash(grep -oE '.{160}stExpandSidebarButton`' index.D2ZqaFuW.js)",
-      "Bash(grep -oE 'showSidebarCollapse[^,;]{0,30}' index.D2ZqaFuW.js)"
+      "Bash(grep -oE 'showSidebarCollapse[^,;]{0,30}' index.D2ZqaFuW.js)",
+      "Bash(sed -E 's/\\(=\\).*/\\\\1 <redacted>/')",
+      "Skill(claude-api)"
     ]
   }
 }

@@ -17,6 +17,8 @@ import pandas as pd
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.core import observability
+from src.instruments import INSTRUMENTS
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -39,32 +41,9 @@ def send_gmail(sender: str, app_password: str, recipient: str,
     except Exception as e:  # noqa: BLE001
         return False, str(e)
 
-# --------------------------------------------------------------------------- #
-# Instrument registry (mirrors daily-trading-checklist.py)
-# --------------------------------------------------------------------------- #
-INSTRUMENTS = {
-    "EUR/USD":     "EURUSD=X",
-    "GBP/USD":     "GBPUSD=X",
-    "AUD/USD":     "AUDUSD=X",
-    "NZD/USD":     "NZDUSD=X",
-    "USD/JPY":     "USDJPY=X",
-    "USD/CHF":     "USDCHF=X",
-    "USD/CAD":     "USDCAD=X",
-    "EUR/GBP":     "EURGBP=X",
-    "EUR/JPY":     "EURJPY=X",
-    "GBP/JPY":     "GBPJPY=X",
-    "AUD/JPY":     "AUDJPY=X",
-    "EUR/AUD":     "EURAUD=X",
-    "GBP/AUD":     "GBPAUD=X",
-    "EUR/CAD":     "EURCAD=X",
-    "GBP/CAD":     "GBPCAD=X",
-    "USD/ZAR":     "USDZAR=X",
-    "EUR/ZAR":     "EURZAR=X",
-    "GBP/ZAR":     "GBPZAR=X",
-    "XAU/USD":     "GC=F",
-    "XAG/USD":   "SI=F",
-    "XPT/USD": "PL=F",
-}
+# Instruments come from the single source of truth, src/instruments/registry.py
+# (imported above as INSTRUMENTS), so this page scans the identical universe and
+# tickers as the rest of the system.
 
 
 # Daily-trading preset: 1H bars over ~1 month. One trading day ≈ 24 hourly
@@ -541,7 +520,7 @@ with st.sidebar:
     inst_keys = list(INSTRUMENTS.keys())
     default_idx = inst_keys.index("EUR/USD") if "EUR/USD" in inst_keys else 0
     instrument = st.selectbox("Symbol", inst_keys, index=default_idx)
-    symbol = INSTRUMENTS[instrument]
+    symbol = INSTRUMENTS[instrument]["ticker"]
     st.caption(
         f"📡 Ticker: `{symbol}` · ⏱️ Daily-trading preset: "
         f"**{INTERVAL} bars · {PERIOD} lookback** (auto-loads)"
@@ -642,6 +621,25 @@ if df_raw is not None and not df_raw.empty:
     if labeled is not None:
         assess = current_assessment(labeled)
 
+        # --- Record this scan (data/event tracking) so it feeds the Reports page ---
+        try:
+            phase_counts = {
+                str(k): int(v) for k, v in
+                labeled["phase"].value_counts().items()
+            }
+            observability.log_event(
+                "amd_scan", page="amd-scanner",
+                instrument=instrument, ticker=symbol, interval=INTERVAL,
+                period=PERIOD,
+                phase=str(assess.get("phase")), bias=str(assess.get("bias")),
+                detail=str(assess.get("detail")),
+                last_close=float(labeled["Close"].iloc[-1]),
+                bars=int(len(labeled)),
+                phase_counts=phase_counts,
+            )
+        except Exception:
+            pass
+
         # --- Phase-transition email alert ---
         last_bar = labeled.iloc[-1]
         last_phase = str(last_bar["phase"])
@@ -666,6 +664,11 @@ if df_raw is not None and not df_raw.empty:
             )
             ok, info = send_gmail(
                 gmail_sender, gmail_app_pw, gmail_recipient, subject, body,
+            )
+            observability.log_event(
+                "amd_alert", page="amd-scanner", level="INFO" if ok else "ERROR",
+                instrument=instrument, interval=INTERVAL, phase=last_phase,
+                ok=ok, error=None if ok else str(info)[:200],
             )
             if ok:
                 st.session_state[alert_key] = last_phase

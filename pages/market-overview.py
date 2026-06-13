@@ -16,6 +16,7 @@ from email.mime.multipart import MIMEMultipart
 from typing import Dict, Tuple, List, Optional
 from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
+from src.core import secrets
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
@@ -35,21 +36,15 @@ BloombergTheme.apply()
 logger = logging.getLogger("ForexDashboard")
 
 # ============================================================================
-# EMAIL CONFIGURATION  (set these in .streamlit/secrets.toml under [email])
+# EMAIL CONFIGURATION  (read from .streamlit/secrets.toml via src/core/secrets.py)
 # ============================================================================
-def _email_cfg(key: str, default: str = "") -> str:
-    """Read a value from st.secrets [email] section, fall back to env or default."""
-    try:
-        return str(st.secrets["email"][key])
-    except Exception:
-        return os.environ.get(f"EMAIL_{key.upper()}", default)
-
-EMAIL_SMTP_HOST = _email_cfg("smtp_host", "smtp.gmail.com")
-EMAIL_SMTP_PORT = int(_email_cfg("smtp_port", "587"))
-EMAIL_USER      = _email_cfg("smtp_user")
-EMAIL_PASSWORD  = _email_cfg("smtp_password")
-EMAIL_SENDER    = _email_cfg("sender", EMAIL_USER)
-EMAIL_RECIPIENT = _email_cfg("recipient")
+_EMAIL = secrets.email_config()
+EMAIL_SMTP_HOST = _EMAIL["smtp_host"]
+EMAIL_SMTP_PORT = _EMAIL["smtp_port"]
+EMAIL_USER      = _EMAIL["user"]
+EMAIL_PASSWORD  = _EMAIL["password"]
+EMAIL_SENDER    = _EMAIL["sender"]
+EMAIL_RECIPIENT = _EMAIL["recipient"]
 
 st.markdown("""
 <style>
@@ -178,7 +173,7 @@ def send_email_alert(new_ideas: List[Dict]) -> None:
     if not new_ideas:
         return
     if not all([EMAIL_USER, EMAIL_PASSWORD, EMAIL_RECIPIENT]):
-        logger.warning("Email config incomplete — set [email] section in .streamlit/secrets.toml")
+        logger.warning("Email config incomplete — set [gmail] section in .streamlit/secrets.toml")
         return
     try:
         msg = MIMEMultipart("alternative")
@@ -346,7 +341,7 @@ def render_sidebar(fred_api_key: str = "") -> str:
             st.success(f"✅ Alerts → {EMAIL_RECIPIENT}")
             st.caption(f"Sending via {EMAIL_USER}")
         else:
-            st.warning("⚠️ Email not configured — add [email] to .streamlit/secrets.toml")
+            st.warning("⚠️ Email not configured — add [gmail] to .streamlit/secrets.toml")
 
         st.divider()
         log = st.session_state.get('notification_log', [])
@@ -369,7 +364,8 @@ def render_sidebar(fred_api_key: str = "") -> str:
 
 
 def render_kpis(daily_data: Dict) -> None:
-    kpi_pairs = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "XAU/USD", "BTC/USD"]
+    # Representative headline instruments, all drawn from the registry universe.
+    kpi_pairs = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "XAU/USD", "XAG/USD"]
     cols = st.columns(len(kpi_pairs))
     for i, pair in enumerate(kpi_pairs):
         df = daily_data.get(pair)
@@ -377,7 +373,9 @@ def render_kpis(daily_data: Dict) -> None:
             if df is not None and not df.empty:
                 price = df["Close"].iloc[-1]
                 change = df["Close"].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
-                fmt = f"{price:,.2f}" if pair in ("BTC/USD", "XAU/USD") else f"{price:.4f}"
+                # Domain convention: 5 decimals for FX (<100), 2–3 for JPY
+                # crosses / metals / indices.
+                fmt = f"{price:.5f}" if abs(price) < 100 else f"{price:,.2f}"
                 st.metric(pair, fmt, f"{change:+.2f}%")
             else:
                 st.metric(pair, "N/A", "—")
@@ -1380,7 +1378,7 @@ def main():
 
     init_notification_state()
 
-    fred_api_key = st.secrets.get("FRED_API_KEY", os.environ.get("FRED_API_KEY", ""))
+    fred_api_key = secrets.fred_api_key()
 
     selected_tf = render_sidebar(fred_api_key)
 
