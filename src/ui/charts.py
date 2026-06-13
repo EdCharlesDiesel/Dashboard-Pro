@@ -67,7 +67,19 @@ class ChartBuilder:
             font=dict(color=T.WHITE, family=T.FONT_MONO, size=10),
             showlegend=True, xaxis_rangeslider_visible=False,
             margin=dict(l=30, r=20, t=40, b=20),
+            # green text on a solid black box so EMA/series labels are legible
+            legend=dict(
+                bgcolor=T.BG, bordercolor=T.AMBER, borderwidth=1,
+                font=dict(color=T.AMBER, family=T.FONT_MONO, size=10),
+            ),
+            hoverlabel=dict(
+                bgcolor=T.BG, bordercolor=T.AMBER,
+                font=dict(color=T.AMBER, family=T.FONT_MONO, size=11),
+            ),
         )
+        # subplot titles ("Price with EMAs", etc.) — green, not white
+        for ann in fig.layout.annotations:
+            ann.font.color = T.AMBER
         fig.update_yaxes(gridcolor=T.BORDER, linecolor=T.BORDER, zerolinecolor=T.BORDER)
         fig.update_xaxes(gridcolor=T.BORDER, linecolor=T.BORDER)
         return fig
