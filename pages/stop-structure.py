@@ -20,13 +20,12 @@ BloombergTheme.apply()
 # ── CSS ────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     /* Theme-adaptive layout vars */
     .stApp {
       --border: color-mix(in srgb, var(--text-color) 12%, transparent);
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
-    html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
+    html,body,[class*="css"]{ font-family:'JetBrains Mono','Fira Code',monospace; }
     .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
     #MainMenu,footer,header{ visibility:hidden; }
@@ -401,7 +400,7 @@ def build_chart(df: pd.DataFrame, pair: str,
     fig.update_layout(
         height=620,
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
-        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
+        font=dict(family="JetBrains Mono, monospace", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         legend=dict(
             bgcolor="rgba(13,17,23,0.60)", bordercolor="#2a2a2a", borderwidth=1,

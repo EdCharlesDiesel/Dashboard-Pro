@@ -19,13 +19,12 @@ BloombergTheme.apply()
 # ── CSS ────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
     /* Theme-adaptive layout vars */
     .stApp {
       --border: color-mix(in srgb, var(--text-color) 12%, transparent);
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
-    html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
+    html,body,[class*="css"]{ font-family:'JetBrains Mono','Fira Code',monospace; }
     .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
     #MainMenu,footer,header{ visibility:hidden; }
@@ -277,7 +276,7 @@ def build_rr_chart(c: dict, pair: str) -> go.Figure:
     fig.update_layout(
         height=460,
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
-        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
+        font=dict(family="JetBrains Mono, monospace", size=11, color="#9a9a9a"),
         margin=dict(l=10, r=160, t=30, b=20),
         title=dict(text=f"<b>{pair}</b> — R:R Visual Diagram",
                    font=dict(color="#e6e6e6", size=14), x=0.01),
@@ -328,7 +327,7 @@ def build_winrate_chart(c: dict) -> go.Figure:
     fig.update_layout(
         height=280,
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
-        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
+        font=dict(family="JetBrains Mono, monospace", size=11, color="#9a9a9a"),
         margin=dict(l=10, r=20, t=30, b=20),
         title=dict(text="Breakeven Win Rate required at each R:R",
                    font=dict(color="#e6e6e6", size=13), x=0.01),
