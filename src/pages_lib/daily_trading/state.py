@@ -1,14 +1,21 @@
 """Session-state initialisation and accessors for the Daily Trading page."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict
 
 import streamlit as st
 
+from src.core import secrets
+
 
 CHECKS_TOTAL = 18
 CRITICAL_CHECKS = (11, 12, 13, 14, 15, 16)
+
+
+def _db_default(key: str):
+    """Pull a DB connection default from .streamlit/secrets.toml [database]."""
+    return secrets.db_config()[key]
 
 
 @dataclass
@@ -19,11 +26,11 @@ class StateDefaults:
     notes: str = ""
     account_bal: float = 10000.0
     risk_pct: float = 1.0
-    db_host: str = "localhost"
-    db_port: int = 5432
-    db_name: str = "trading"
-    db_user: str = "postgres"
-    db_pass: str = ""
+    db_host: str = field(default_factory=lambda: _db_default("host"))
+    db_port: int = field(default_factory=lambda: _db_default("port"))
+    db_name: str = field(default_factory=lambda: _db_default("dbname"))
+    db_user: str = field(default_factory=lambda: _db_default("user"))
+    db_pass: str = field(default_factory=lambda: _db_default("password"))
     db_ok: bool = False
     db_msg: str = "Not connected"
 

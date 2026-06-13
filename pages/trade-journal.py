@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.core import secrets
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -89,11 +90,12 @@ with st.sidebar:
     st.markdown("### 📓 Trade Journal")
 
     st.markdown("**🗄️ PostgreSQL Database**")
-    _host = st.text_input("Host",     value=st.session_state.get("db_host", "localhost"), key="jdb_host")
-    _port = st.number_input("Port",   value=int(st.session_state.get("db_port", 5432)),   step=1, key="jdb_port")
-    _name = st.text_input("Database", value=st.session_state.get("db_name", "trading"),   key="jdb_name")
-    _user = st.text_input("User",     value=st.session_state.get("db_user", "postgres"),  key="jdb_user")
-    _pass = st.text_input("Password", value=st.session_state.get("db_pass", ""),          type="password", key="jdb_pass")
+    _db = secrets.db_config()  # defaults from .streamlit/secrets.toml [database]
+    _host = st.text_input("Host",     value=st.session_state.get("db_host", _db["host"]),     key="jdb_host")
+    _port = st.number_input("Port",   value=int(st.session_state.get("db_port", _db["port"])), step=1, key="jdb_port")
+    _name = st.text_input("Database", value=st.session_state.get("db_name", _db["dbname"]),   key="jdb_name")
+    _user = st.text_input("User",     value=st.session_state.get("db_user", _db["user"]),     key="jdb_user")
+    _pass = st.text_input("Password", value=st.session_state.get("db_pass", _db["password"]), type="password", key="jdb_pass")
 
     db_cfg = {"host": _host, "port": int(_port), "dbname": _name, "user": _user, "password": _pass}
 

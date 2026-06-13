@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.core import secrets
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -188,7 +189,7 @@ def fetch_fred_rate(series_id: str) -> dict:
         url = f"https://api.stlouisfed.org/fred/series/observations"
         params = {
             "series_id": series_id,
-            "api_key": "YOUR_FRED_API_KEY",  # Get free key from https://fred.stlouisfed.org/docs/api/api_key.html
+            "api_key": secrets.fred_api_key(),  # from .streamlit/secrets.toml [api]
             "file_type": "json",
             "sort_order": "desc",
             "limit": 3,
