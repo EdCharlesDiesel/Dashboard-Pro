@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.core import secrets
 import pandas as pd
 import requests
 from datetime import datetime, timedelta, date, time
@@ -498,12 +499,12 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("**🔑 API Keys**")
-    fmp_key = st.secrets.get("database", {}).get("FMP_API-KEY", "")
+    fmp_key = secrets.fmp_api_key()
     if fmp_key:
         st.success("FMP ✓ loaded from secrets", icon="🔑")
     else:
         st.caption("FMP key not found in secrets.toml")
-    finnhub_key = st.secrets.get("database", {}).get("FINNHUB_API_KEY", "")
+    finnhub_key = secrets.finnhub_api_key()
     if finnhub_key:
         st.success("Finnhub ✓ loaded from secrets", icon="🔑")
     else:
