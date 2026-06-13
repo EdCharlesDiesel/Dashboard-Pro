@@ -67,7 +67,13 @@
       "Bash(sed -i \"s/plot_bgcolor='#0e1117', paper_bgcolor='#0e1117'/plot_bgcolor='#0f0f0f', paper_bgcolor='#000000'/g\" pages/backtest-workflow.py)",
       "Bash(sed -i 's/family=\"Inter, sans-serif\"/family=\"JetBrains Mono, monospace\"/g; s/family=\"Inter,sans-serif\"/family=\"JetBrains Mono, monospace\"/g' pages/*.py)",
       "Bash(sed -i \"s/font-family: 'Syne', sans-serif !important;/font-family: 'JetBrains Mono', monospace !important;/g\" pages/*.py)",
-      "Bash(sed -i \"/family=Syne/d; /'Syne'/d\" pages/*.py)"
+      "Bash(sed -i \"/family=Syne/d; /'Syne'/d\" pages/*.py)",
+      "Bash(grep -oE 'aria-expanded[^,;]{0,40}' index.D2ZqaFuW.js)",
+      "Bash(grep -oE '.{60}translateX\\\\\\(-\\\\$\\\\{?[a-z]' index.D2ZqaFuW.js)",
+      "Bash(grep -oE 'data-testid\":`[A-Za-z]*\\([Cc]ollaps|[Ee]xpand\\)[A-Za-z]*`' index.D2ZqaFuW.js)",
+      "Bash(grep -oE '.{40}stSidebarCollapseButton`.{120}' index.D2ZqaFuW.js)",
+      "Bash(grep -oE '.{160}stExpandSidebarButton`' index.D2ZqaFuW.js)",
+      "Bash(grep -oE 'showSidebarCollapse[^,;]{0,30}' index.D2ZqaFuW.js)"
     ]
   }
 }

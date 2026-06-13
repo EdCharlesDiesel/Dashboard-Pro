@@ -221,42 +221,60 @@ class ChecklistController:
             "Fetch ATR data from sidebar"
         )
 
+        # Section headers and the per-check OPEN ▸ deep-links are kept in sync
+        # with the 8-step workflow in src/pages_lib/navigation.py — every check
+        # that has a matching nav page links to it, and the section names mirror
+        # the nav step labels. The check numbers (1–18) are unchanged: they are
+        # already in workflow order, so CRITICAL_CHECKS (11–16), the radar and
+        # autofill indices stay valid.
+        def link(slug: str) -> str:
+            return (f" · <a href='/{slug}' target='_self' "
+                    f"style='color:#00e0ff;'>OPEN ▸</a>")
+
         sections = [
-            ("MACRO BIAS & NEWS FILTER", [
-                (1, "Macro bias confirmed", "Rates, GDP, inflation favour direction"),
-                (2, "No red-folder news", "No high-impact news within 1 hour"),
-                (3, "Correlated markets align", f"Expected: {inst['corr']}"),
-                (4, "ATR above 20-period avg", atr_hint),
+            ("2 · FILTER THE DAY", [
+                (1, "Macro bias confirmed",
+                 "Rates, GDP, inflation favour direction" + link("macro-bias")),
+                (2, "No red-folder news",
+                 "No high-impact news within 1 hour" + link("news-filter")),
+                (3, "Correlated markets align",
+                 f"Expected: {inst['corr']}" + link("correlations")),
+                (4, "ATR above 20-period avg", atr_hint + link("atr-volatility")),
             ]),
-            ("WEEKLY TIMEFRAME BIAS", [
-                (5, "Weekly EMA aligned", "Weekly EMA direction matches trade direction"),
-                (6, "Weekly RSI has room", "Not yet OB (>70) or OS (<30)"),
+            ("3 · WEEKLY BIAS", [
+                (5, "Weekly EMA aligned",
+                 "Weekly EMA direction matches trade direction" + link("weekly-ema")),
+                (6, "Weekly RSI has room",
+                 "Not yet OB (>70) or OS (<30)" + link("weekly-rsi")),
                 (7, "Weekly Swing aligned",
-                 "Daily confirmation shows aligned · <a href='/weekly-swing' target='_self' style='color:#00e0ff;'>OPEN ▸</a>"),
+                 "Daily confirmation shows aligned" + link("weekly-swing")),
             ]),
-            ("DAILY TREND CONFIRMATION", [
-                (8, "Daily trend intact", "EMA20 > EMA50 for longs / inverse for shorts"),
+            ("4 · DAILY CONFIRM", [
+                (8, "Daily trend intact",
+                 "EMA20 > EMA50 for longs / inverse for shorts" + link("daily-trend")),
                 (9, "Daily MACD momentum",
-                 "MACD histogram turning into trade direction · <a href='/daily-macd' target='_self' style='color:#00e0ff;'>OPEN ▸</a>"),
+                 "MACD histogram turning into trade direction" + link("daily-macd")),
                 (10, "Entry in kill zone",
                  f"NOW: {sess['icon']} {sess['window']} ({sess['time']}) — {sess['desc']}"),
             ]),
-            ("4H CONFLUENCE ZONE", [
-                (11, "Price at 4H zone", "Overlap of Fib + Pivot + EMA on 4H"),
+            ("5 · 4H ZONE", [
+                (11, "Price at 4H zone",
+                 "Overlap of Fib + Pivot + EMA on 4H" + link("4H-confluence-zone")),
                 (12, "Min 2/3 confluence",
-                 "≥2 of 3 elements confirmed · <a href='/confluence-checker' target='_self' style='color:#00e0ff;'>OPEN ▸</a>"),
-                (13, "15M rejection",
-                 "Rejection candle on 15M · <a href='/15m-rejection' target='_self' style='color:#00e0ff;'>OPEN ▸</a>"),
+                 "≥2 of 3 elements confirmed" + link("confluence-checker")),
             ]),
-            ("ENTRY SIGNAL & RISK MGMT", [
+            ("6 · 15M TRIGGER", [
+                (13, "15M rejection",
+                 "Rejection candle on 15M" + link("15m-rejection")),
                 (14, "15M entry fired",
-                 "Stoch crossover + RSI reset · <a href='/15m-entry-signal' target='_self' style='color:#00e0ff;'>OPEN ▸</a>"),
+                 "Stoch crossover + RSI reset" + link("15m-entry-signal")),
+            ]),
+            ("7 · RISK & EXECUTE", [
                 (15, "Stop below/above structure",
-                 f"SL = {sl_pips} pips (1.5×ATR14) · <a href='/stop-structure' target='_self' style='color:#00e0ff;'>OPEN ▸</a>"),
+                 f"SL = {sl_pips} pips (1.5×ATR14)" + link("stop-structure")),
                 (16, "R:R ≥ 2:1 to TP1",
                  f"TP1 = {tp1_pips} pips → R:R {risk.rr_tp1:.2f}:1 "
-                 f"{'✓' if risk.rr_tp1 >= 2 else '✗'} · "
-                 f"<a href='/rr-calculator' target='_self' style='color:#00e0ff;'>OPEN ▸</a>"),
+                 f"{'✓' if risk.rr_tp1 >= 2 else '✗'}" + link("rr-calculator")),
                 (17, "Partial TP + BE rule set",
                  f"50% close TP1 → SL to BE; runner trails to TP2"),
                 (18, "Position within limit",
@@ -405,11 +423,12 @@ class ChecklistController:
 
         # Section breakdown
         secs = {
-            "Macro & News (1–4)": [1, 2, 3, 4],
-            "Weekly (5–7)": [5, 6, 7],
-            "Daily (8–10)": [8, 9, 10],
-            "4H Zone (11–13)": [11, 12, 13],
-            "Entry & Risk (14–18)": [14, 15, 16, 17, 18],
+            "Filter the Day (1–4)": [1, 2, 3, 4],
+            "Weekly Bias (5–7)": [5, 6, 7],
+            "Daily Confirm (8–10)": [8, 9, 10],
+            "4H Zone (11–12)": [11, 12],
+            "15M Trigger (13–14)": [13, 14],
+            "Risk & Execute (15–18)": [15, 16, 17, 18],
         }
         with Panel("SECTION BREAKDOWN").context():
             for name, ids in secs.items():
