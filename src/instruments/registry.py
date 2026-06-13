@@ -109,6 +109,9 @@ class InstrumentRegistry:
     def __iter__(self):
         return iter(self._by_name)
 
+    def __len__(self) -> int:
+        return len(self._by_name)
+
     def keys(self) -> List[str]:
         return list(self._by_name.keys())
 

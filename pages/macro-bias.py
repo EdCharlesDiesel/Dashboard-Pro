@@ -310,7 +310,7 @@ def fetch_dxy():
                 "value": round(latest, 2),
                 "change": round(((latest - prev) / prev) * 100, 2)
             }
-    except:
+    except Exception:
         pass
     return None
 
@@ -322,7 +322,7 @@ def fetch_vix():
         vix = yf.download("^VIX", period="5d", interval="1d", progress=False, auto_adjust=True)
         if not vix.empty:
             return round(float(vix["Close"].iloc[-1]), 2)
-    except:
+    except Exception:
         pass
     return None
 
