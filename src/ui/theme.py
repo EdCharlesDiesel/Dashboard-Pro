@@ -86,11 +86,9 @@ section[data-testid="stSidebar"][aria-expanded="false"] {{
     margin-left: 0 !important;
     transform: none !important;
 }}
-/* the collapse arrow can stay, but it's no longer load-bearing */
-[data-testid="stSidebarCollapsedControl"],
+/* the collapse arrow can stay, but it's no longer load-bearing on desktop */
 [data-testid="stSidebarCollapseButton"],
-[data-testid="stExpandSidebarButton"],
-[data-testid="collapsedControl"] {{
+[data-testid="stExpandSidebarButton"] {{
     visibility: visible !important;
     display: flex !important;
 }}
@@ -425,16 +423,88 @@ section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"][aria-current
 .bb-mosaic-3 {{ grid-template-columns: repeat(3, 1fr); }}
 .bb-mosaic-4 {{ grid-template-columns: repeat(4, 1fr); }}
 
-/* Responsive collapse */
+/* ── Responsive / mobile-first collapse ───────────────────────── */
 @media (max-width: 1100px) {{
     .bb-mosaic-4 {{ grid-template-columns: repeat(2, 1fr); }}
     .bb-mosaic-3 {{ grid-template-columns: repeat(2, 1fr); }}
 }}
-@media (max-width: 720px) {{
+@media (max-width: 768px) {{
     .bb-mosaic-2, .bb-mosaic-3, .bb-mosaic-4 {{ grid-template-columns: 1fr; }}
     .bb-cmd-bar {{ flex-wrap: wrap; }}
     .bb-status-bar {{ flex-wrap: wrap; gap: 8px; }}
-    .block-container {{ padding: 0.4rem 0.4rem 5rem 0.4rem !important; }}
+    .block-container {{ padding: 0.4rem 0.5rem 5rem 0.5rem !important; }}
+
+    /* Stack every Streamlit st.columns() row — by default the horizontal
+       block keeps its children side-by-side and squeezes them to unusable
+       widths on a phone. Force a single column. (Layout only — no Python
+       change to the [3,2] / [0.06,0.94] column ratios.) */
+    [data-testid="stHorizontalBlock"] {{ flex-wrap: wrap !important; }}
+    [data-testid="stColumn"],
+    [data-testid="column"] {{
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+        width: 100% !important;
+    }}
+
+    /* Larger touch targets + scrollable tab bar */
+    .stButton button {{ min-height: 42px; }}
+    .stTabs [data-baseweb="tab-list"] {{ overflow-x: auto; }}
+    .stTabs [data-baseweb="tab"] {{ padding: 8px 12px; white-space: nowrap; }}
+
+    /* Trim oversized hero / metric type for small screens */
+    .bb-hero-title  {{ font-size: 13px; }}
+    .bb-hero-symbol {{ font-size: 18px; }}
+    .bb-metric-value {{ font-size: 15px; }}
+    .bb-ticker-strip {{ font-size: 10px; gap: 12px; }}
+}}
+
+/* Phones & small tablets: turn the permanently-pinned sidebar into an
+   off-canvas drawer. The desktop rules above force it open at a fixed 250px
+   with `transform: none` — that swallows a narrow screen and can't be
+   dismissed. Restore Streamlit's native collapse so it slides away.
+
+   Two touch-specific fixes (Streamlit 1.57 DOM):
+     • The collapse arrow (stSidebarCollapseButton) is only revealed on hover,
+       which never fires on touch — force it visible so there IS a control to
+       tap to close the drawer.
+     • When collapsed, the reopen control is stExpandSidebarButton (lives in
+       the header) — float it top-left, above the content, so the drawer can
+       be brought back. */
+@media (max-width: 768px) {{
+    section[data-testid="stSidebar"],
+    div[data-testid="stSidebar"] {{
+        position: fixed !important;
+        top: 0; bottom: 0; left: 0;
+        width: 85vw !important;
+        min-width: 85vw !important;
+        max-width: 320px !important;
+        z-index: 1000 !important;
+        box-shadow: 2px 0 18px rgba(0, 0, 0, 0.7);
+    }}
+    section[data-testid="stSidebar"][aria-expanded="false"] {{
+        transform: translateX(-100%) !important;
+        margin-left: 0 !important;
+        box-shadow: none !important;
+    }}
+    /* the collapse (close) arrow inside the drawer — always tappable */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapseButton"] button {{
+        opacity: 1 !important;
+        visibility: visible !important;
+        display: flex !important;
+    }}
+    /* the reopen control floats over the content, top-left */
+    [data-testid="stExpandSidebarButton"] {{
+        opacity: 1 !important;
+        visibility: visible !important;
+        display: flex !important;
+        position: fixed !important;
+        top: 6px;
+        left: 6px;
+        z-index: 1001 !important;
+        background: {cls.BG_HEADER} !important;
+        border: 1px solid {cls.AMBER_DIM} !important;
+    }}
 }}
 
 /* ── global flatten — terminals have no rounded corners ──────── */
