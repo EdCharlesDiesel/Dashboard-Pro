@@ -19,10 +19,9 @@ BloombergTheme.apply()
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     .stApp { --border: color-mix(in srgb, var(--text-color) 12%, transparent);
               --muted:  color-mix(in srgb, var(--text-color) 55%, transparent); }
-    html,body,[class*="css"]{font-family:'Inter',sans-serif;}
+    html,body,[class*="css"]{font-family:'JetBrains Mono','Fira Code',monospace;}
     .stApp{background:var(--background-color);}
     section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
     .hero{background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);border:1px solid #2a2a2a;border-radius:16px;padding:24px 32px;margin-bottom:20px;position:relative;overflow:hidden;}
@@ -491,7 +490,7 @@ def equity_curve_chart(trades: list) -> go.Figure:
     fig.add_hline(y=0, line=dict(color='#9a9a9a', dash='dash', width=1))
 
     fig.update_layout(
-        plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
+        plot_bgcolor='#0f0f0f', paper_bgcolor='#000000',
         font=dict(color='#c0c0c0', size=11),
         xaxis=dict(gridcolor='#2a2a2a', showgrid=True),
         yaxis=dict(gridcolor='#2a2a2a', showgrid=True, title='Cumulative R'),
@@ -512,7 +511,7 @@ def r_distribution_chart(trades: list) -> go.Figure:
     ))
     fig.add_hline(y=0, line=dict(color='#9a9a9a', dash='dash', width=1))
     fig.update_layout(
-        plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
+        plot_bgcolor='#0f0f0f', paper_bgcolor='#000000',
         font=dict(color='#c0c0c0', size=11),
         xaxis=dict(gridcolor='#2a2a2a', tickangle=-45, showgrid=False),
         yaxis=dict(gridcolor='#2a2a2a', title='R Multiple'),
@@ -551,7 +550,7 @@ def check_pass_rate_chart(trades: list, daily: pd.DataFrame, weekly: pd.DataFram
         hovertemplate='%{y}<br>Pass rate: %{x:.0f}%<extra></extra>',
     ))
     fig.update_layout(
-        plot_bgcolor='#0e1117', paper_bgcolor='#0e1117',
+        plot_bgcolor='#0f0f0f', paper_bgcolor='#000000',
         font=dict(color='#c0c0c0', size=10),
         xaxis=dict(gridcolor='#2a2a2a', range=[0, 100], title='Pass Rate %'),
         yaxis=dict(gridcolor='#2a2a2a', autorange='reversed'),

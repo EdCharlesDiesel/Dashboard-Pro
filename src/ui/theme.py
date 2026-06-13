@@ -57,16 +57,42 @@ html, body, [class*="css"] {{
     max-width: 100% !important;
 }}
 
-/* hide streamlit chrome */
-#MainMenu, footer, header {{ visibility: hidden; }}
+/* hide streamlit chrome — but NEVER the header itself: in current Streamlit
+   the sidebar expand/collapse arrow lives inside the header, so hiding the
+   whole header makes a collapsed sidebar impossible to reopen. Hide only the
+   menu, footer, toolbar (Deploy cluster) and the auto page-nav. */
+#MainMenu, footer {{ visibility: hidden; }}
+[data-testid="stToolbar"] {{ display: none !important; }}
+[data-testid="stDecoration"] {{ display: none !important; }}
 [data-testid="stSidebarNav"] {{ display: none; }}
-[data-testid="stSidebarCollapsedControl"] {{ visibility: visible !important; display: flex !important; }}
-[data-testid="stSidebarCollapseButton"] {{ visibility: visible !important; display: flex !important; }}
+header[data-testid="stHeader"] {{ background: transparent !important; }}
 
-/* sidebar */
-section[data-testid="stSidebar"] {{
+/* Force the sidebar permanently on-screen. Streamlit collapses it by sliding
+   it off with transform: translateX(-100%) and/or width:0 — override both so
+   it can never disappear regardless of viewport width or collapse state. */
+section[data-testid="stSidebar"],
+div[data-testid="stSidebar"] {{
+    display: flex !important;
+    visibility: visible !important;
+    transform: none !important;
+    min-width: 250px !important;
+    width: 250px !important;
+    margin-left: 0 !important;
+    left: 0 !important;
     background: {cls.BG_ELEV} !important;
     border-right: 1px solid {cls.BORDER};
+}}
+section[data-testid="stSidebar"][aria-expanded="false"] {{
+    margin-left: 0 !important;
+    transform: none !important;
+}}
+/* the collapse arrow can stay, but it's no longer load-bearing */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stExpandSidebarButton"],
+[data-testid="collapsedControl"] {{
+    visibility: visible !important;
+    display: flex !important;
 }}
 section[data-testid="stSidebar"] * {{
     color: {cls.WHITE} !important;
