@@ -4,23 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A professional forex/metals day-trading dashboard built on Streamlit. Two apps share one repo:
+A professional forex/metals day-trading dashboard built on Streamlit, one
+multipage app:
 
-- **`daily-trading-checklist.py` + `pages/`** — the main multipage "terminal" system (22 pages). This is where active development happens.
-- **`app.py`** — an older single-page tab dashboard ("Macro Dashboard Pro") kept running in parallel. It shares `src/core/` with the multipage app.
+- **`app.py`** — the entry point. A thin shim that runs `DailyTradingPage`
+  (the 18-point checklist). This is the master: every page follows its
+  terminal look (`BloombergPage` + `BloombergTheme`).
+- **`pages/`** — the 22 workflow pages, including `market-overview.py` (the
+  former standalone "Macro Dashboard Pro", now a tabbed page sharing
+  `src/core/`).
 - **`archive/`** — dead experiments; never touch.
 
 ## Commands
 
 ```bash
-# Run the main app (registers pages/ as a multipage app)
-streamlit run daily-trading-checklist.py
-
-# Run the legacy tab dashboard
+# Run the app (app.py is the entry; pages/ auto-register as multipage)
 streamlit run app.py
 
 # Syntax-check everything you changed (no linter is configured)
-python -m py_compile daily-trading-checklist.py pages/*.py $(find src -name '*.py')
+python -m py_compile app.py pages/*.py $(find src -name '*.py')
 ```
 
 There is no test suite. Smoke-test a page headlessly with Streamlit's AppTest:

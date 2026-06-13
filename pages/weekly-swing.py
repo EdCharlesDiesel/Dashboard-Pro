@@ -20,13 +20,12 @@ BloombergTheme.apply()
 # ── CSS — matches main app dark theme ─────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     /* Theme-adaptive layout vars */
     .stApp {
       --border: color-mix(in srgb, var(--text-color) 12%, transparent);
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
-    html,body,[class*="css"]{ font-family:'Inter',sans-serif; }
+    html,body,[class*="css"]{ font-family:'JetBrains Mono','Fira Code',monospace; }
     .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
 
@@ -432,7 +431,7 @@ def build_weekly_chart(sw: dict, pair: str, show_n: int = 52) -> go.Figure:
     fig.update_layout(
         height=500,
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
-        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
+        font=dict(family="JetBrains Mono, monospace", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         title=dict(text=f"<b>{pair}</b> — Weekly Swing Structure",
                    font=dict(color="#e6e6e6", size=14), x=0.01),
@@ -517,7 +516,7 @@ def build_daily_chart(dt: dict, pair: str, fast: int, slow: int,
     fig.update_layout(
         height=500,
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
-        font=dict(family="Inter, sans-serif", size=11, color="#9a9a9a"),
+        font=dict(family="JetBrains Mono, monospace", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         title=dict(text=f"<b>{pair}</b> — Daily Trend Confirmation",
                    font=dict(color="#e6e6e6", size=14), x=0.01),
