@@ -97,7 +97,12 @@ def _get_provider_lazy() -> MarketDataProvider:
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def fetch_data(symbol: str, interval: str, period: str) -> pd.DataFrame:
-    return _get_provider_lazy().get_data(symbol, interval, period)
+    from src.core import observability
+    with observability.track_fetch("yfinance", symbol=symbol,
+                                   interval=interval, period=period) as fetch:
+        df = _get_provider_lazy().get_data(symbol, interval, period)
+        fetch.rows = 0 if df is None else len(df)
+        return df
 
 
 # --- MACRO DATA ---
@@ -155,14 +160,22 @@ def _yoy_pct(series: pd.Series) -> Optional[float]:
 
 @st.cache_data(ttl=3600)
 def get_macro_data(api_key: str) -> Tuple[Dict[str, Dict[str, float]], bool]:
+    from src.core import observability
     if not api_key:
+        observability.log_event("data_fetch", source="fred_macro", ok=False,
+                                reason="no_api_key")
         return MACRO_FALLBACKS.copy(), False
 
-    try:
-        fred = Fred(api_key=api_key)
-    except Exception:
-        return MACRO_FALLBACKS.copy(), False
+    with observability.track_fetch("fred_macro", series=len(FRED_SERIES)) as fetch:
+        try:
+            fred = Fred(api_key=api_key)
+        except Exception:
+            fetch.rows = 0
+            return MACRO_FALLBACKS.copy(), False
+        return _get_macro_data_impl(fred, fetch)
 
+
+def _get_macro_data_impl(fred, fetch) -> Tuple[Dict[str, Dict[str, float]], bool]:
     result: Dict[str, Dict[str, float]] = {}
     any_success = False
 
@@ -208,22 +221,27 @@ def get_macro_data(api_key: str) -> Tuple[Dict[str, Dict[str, float]], bool]:
 
         result[currency] = entry
 
+    fetch.rows = len(result)
     return (result if result else MACRO_FALLBACKS.copy()), any_success
 
 
 @st.cache_data(ttl=3600)
 def fetch_fred_series(series_id, fred_key, limit=36):
+    from src.core import observability
     if not fred_key:
         return None
     url = (f"https://api.stlouisfed.org/fred/series/observations"
            f"?series_id={series_id}&api_key={fred_key}&file_type=json&sort_order=desc&limit={limit}")
-    try:
-        r = requests.get(url, timeout=8)
-        data = r.json()
-        obs = data.get("observations", [])
-        df = pd.DataFrame(obs)[["date", "value"]]
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
-        df["date"] = pd.to_datetime(df["date"])
-        return df.dropna().sort_values("date")
-    except Exception:
-        return None
+    with observability.track_fetch("fred_series", series_id=series_id, limit=limit) as fetch:
+        try:
+            r = requests.get(url, timeout=8)
+            data = r.json()
+            obs = data.get("observations", [])
+            df = pd.DataFrame(obs)[["date", "value"]]
+            df["value"] = pd.to_numeric(df["value"], errors="coerce")
+            df["date"] = pd.to_datetime(df["date"])
+            out = df.dropna().sort_values("date")
+            fetch.rows = len(out)
+            return out
+        except Exception:
+            return None

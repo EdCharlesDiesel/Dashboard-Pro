@@ -64,6 +64,10 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("JRNL", "22. Trade Journal",        "📓", "pages/trade-journal.py"),
         NavEntry("BTST", "23. Forecast & Backtest",  "🧪", "pages/backtest-workflow.py"),
     ]),
+    ("9 · SYSTEM", [
+        NavEntry("RPRT", "24. Reports",              "📑", "pages/reports.py"),
+        NavEntry("LOGS", "25. System Logs",          "🧾", "pages/system-logs.py"),
+    ]),
 ]
 
 # Flat list kept for any caller that doesn't care about grouping.

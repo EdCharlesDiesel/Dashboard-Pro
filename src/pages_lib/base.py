@@ -39,16 +39,27 @@ class BloombergPage:
         ctx = self.configure()
         self._page_config(ctx)
         BloombergTheme.apply()
-        with st.sidebar:
-            self._sidebar_header(ctx)
-            # Page controls (symbol pickers etc.) first, navigation below —
-            # the trader's working inputs always stay within reach.
-            self.sidebar(ctx)
-            st.markdown("---")
-            render_sidebar_nav()
-        self.body(ctx)
-        if ctx.show_status_bar:
-            self._status_bar(ctx)
+        try:
+            with st.sidebar:
+                self._sidebar_header(ctx)
+                # Page controls (symbol pickers etc.) first, navigation below —
+                # the trader's working inputs always stay within reach.
+                self.sidebar(ctx)
+                st.markdown("---")
+                render_sidebar_nav()
+            self.body(ctx)
+            if ctx.show_status_bar:
+                self._status_bar(ctx)
+        except Exception as exc:
+            # Record the crash with full context, then re-raise so Streamlit
+            # still shows its error UI.
+            try:
+                from src.core import observability
+                observability.log_exception(exc, where="BloombergPage.run",
+                                            page=ctx.code)
+            except Exception:
+                pass
+            raise
 
     # ── hooks (override these) ──────────────────────────────────────────────
     def configure(self) -> PageContext:

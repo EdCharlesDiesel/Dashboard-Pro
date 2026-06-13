@@ -6,6 +6,8 @@ __pycache__/
 venv/
 ENV/
 *.log
+logs/
+*.jsonl
 *.png
 *.jpg
 *.jpeg
