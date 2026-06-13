@@ -75,7 +75,12 @@
       "Bash(grep -oE '.{160}stExpandSidebarButton`' index.D2ZqaFuW.js)",
       "Bash(grep -oE 'showSidebarCollapse[^,;]{0,30}' index.D2ZqaFuW.js)",
       "Bash(sed -E 's/\\(=\\).*/\\\\1 <redacted>/')",
-      "Skill(claude-api)"
+      "Skill(claude-api)",
+      "Bash(xargs wc -l)",
+      "Bash(grep -iE 'forex_notify_cache|\\\\.err$|\\\\.log$|logs/')",
+      "Bash(git rm *)",
+      "Bash(grep -iE '\\\\.err$|streamlit_run')",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)"
     ]
   }
 }

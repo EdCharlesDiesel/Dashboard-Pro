@@ -77,7 +77,7 @@ def get_provider():
         test = provider.get_data("EURUSD=X", "1d", "1mo")
         if test is not None and not test.empty:
             return provider
-    except:
+    except Exception:
         pass
     return FallbackProvider()
 

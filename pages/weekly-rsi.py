@@ -1,11 +1,13 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.instruments.registry import INSTRUMENTS
+from src.core.data_provider import fetch_data
+from src.indicators.technical import TechnicalIndicators
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import yfinance as yf
 from datetime import datetime
 
 st.set_page_config(
@@ -74,29 +76,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Instruments ────────────────────────────────────────────────────────────────
-INSTRUMENTS = {
-    "EUR/USD":    {"ticker": "EURUSD=X", "pip_size": 0.0001},
-    "GBP/USD":    {"ticker": "GBPUSD=X", "pip_size": 0.0001},
-    "AUD/USD":    {"ticker": "AUDUSD=X", "pip_size": 0.0001},
-    "NZD/USD":    {"ticker": "NZDUSD=X", "pip_size": 0.0001},
-    "USD/JPY":    {"ticker": "USDJPY=X", "pip_size": 0.01},
-    "USD/CHF":    {"ticker": "USDCHF=X", "pip_size": 0.0001},
-    "USD/CAD":    {"ticker": "USDCAD=X", "pip_size": 0.0001},
-    "EUR/GBP":    {"ticker": "EURGBP=X", "pip_size": 0.0001},
-    "EUR/JPY":    {"ticker": "EURJPY=X", "pip_size": 0.01},
-    "GBP/JPY":    {"ticker": "GBPJPY=X", "pip_size": 0.01},
-    "AUD/JPY":    {"ticker": "AUDJPY=X", "pip_size": 0.01},
-    "EUR/AUD":    {"ticker": "EURAUD=X", "pip_size": 0.0001},
-    "GBP/AUD":    {"ticker": "GBPAUD=X", "pip_size": 0.0001},
-    "EUR/CAD":    {"ticker": "EURCAD=X", "pip_size": 0.0001},
-    "GBP/CAD":    {"ticker": "GBPCAD=X", "pip_size": 0.0001},
-    "USD/ZAR":    {"ticker": "USDZAR=X", "pip_size": 0.0001},
-    "EUR/ZAR":    {"ticker": "EURZAR=X", "pip_size": 0.0001},
-    "GBP/ZAR":    {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "XAU/USD":    {"ticker": "GC=F",     "pip_size": 0.10},
-    "XAG/USD":  {"ticker": "SI=F",     "pip_size": 0.01},
-    "XPT/USD":{"ticker": "PL=F",     "pip_size": 0.10},
-}
+# Sourced from the single source of truth: src/instruments/registry.py.
 
 # ── HTML helper ────────────────────────────────────────────────────────────────
 def html_block(html: str) -> str:
@@ -109,16 +89,6 @@ def html_block(html: str) -> str:
     to a single, un-indented string guarantees it is parsed as an HTML block.
     """
     return "".join(line.strip() for line in html.splitlines())
-
-# ── RSI Calculation ────────────────────────────────────────────────────────────
-def calc_rsi(close: pd.Series, period: int = 14) -> pd.Series:
-    delta = close.diff()
-    gain  = delta.clip(lower=0)
-    loss  = (-delta).clip(lower=0)
-    avg_gain = gain.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    return 100 - (100 / (1 + rs))
 
 # ── Zone classifier ────────────────────────────────────────────────────────────
 def classify_rsi(rsi_val: float, ob: float, os: float, direction: str) -> dict:
@@ -160,17 +130,20 @@ def classify_rsi(rsi_val: float, ob: float, os: float, direction: str) -> dict:
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_rsi_data(ticker: str, rsi_period: int, weeks: int):
     try:
-        df = yf.download(ticker, period=f"{weeks * 8}d",
-                         interval="1wk", progress=False, auto_adjust=True)
-        if df.empty or len(df) < rsi_period + 5:
+        df = fetch_data(ticker, "1wk", f"{weeks * 8}d")
+        if df is None or df.empty or len(df) < rsi_period + 5:
             return None
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [c[0] for c in df.columns]
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)   # match prior tz-naive index
 
         df = df[["Open","High","Low","Close","Volume"]].dropna(subset=["Close"])
-        df["rsi"]      = calc_rsi(df["Close"], rsi_period)
+        rsi = TechnicalIndicators.rsi(df["Close"], rsi_period)
+        rsi.iloc[:rsi_period] = np.nan                 # Wilder warm-up (was min_periods=period)
+        df["rsi"]      = rsi
         df["rsi_ma"]   = df["rsi"].rolling(5).mean()   # smoothed RSI
-        df["close_ema21"] = df["Close"].ewm(span=21, adjust=False).mean()
+        df["close_ema21"] = TechnicalIndicators.ema(df["Close"], 21)
 
         df = df.dropna(subset=["rsi"])
         if df.empty:
@@ -241,7 +214,7 @@ prog = st.progress(0, text="📡 Fetching weekly RSI for all pairs…")
 all_data = {}
 for idx, (pair, cfg) in enumerate(INSTRUMENTS.items()):
     prog.progress((idx+1)/len(INSTRUMENTS), text=f"📡 {pair} ({idx+1}/{len(INSTRUMENTS)})…")
-    all_data[pair] = fetch_rsi_data(cfg["ticker"], rsi_period, lookback_w)
+    all_data[pair] = fetch_rsi_data(cfg.ticker, rsi_period, lookback_w)
 prog.empty()
 
 loaded   = {p: d for p, d in all_data.items() if d is not None}
