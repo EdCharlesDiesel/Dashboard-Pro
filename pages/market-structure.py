@@ -19,13 +19,12 @@ BloombergTheme.apply()
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     /* Theme-adaptive layout vars */
     .stApp {
       --border: color-mix(in srgb, var(--text-color) 12%, transparent);
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
     }
-    html,body,[class*="css"]{font-family:'Inter',sans-serif;}
+    html,body,[class*="css"]{font-family:'JetBrains Mono','Fira Code',monospace;}
     .stApp{background:var(--background-color);}
     section[data-testid="stSidebar"]{background:var(--secondary-background-color)!important;border-right:1px solid var(--border,#2a2a2a);}
     .card{background:var(--secondary-background-color);border:1px solid var(--border,#2a2a2a);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
@@ -292,7 +291,7 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
 
     fig.update_layout(
         height=600, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a",
-        font=dict(family="Inter,sans-serif", size=11, color="#9a9a9a"),
+        font=dict(family="JetBrains Mono, monospace", size=11, color="#9a9a9a"),
         xaxis_rangeslider_visible=False,
         legend=dict(bgcolor="rgba(13,17,23,.6)", bordercolor="#2a2a2a", borderwidth=1,
                     font=dict(size=10), orientation="h", y=1.02, x=0),

@@ -58,7 +58,16 @@
       "PowerShell(& 'C:\\\\x\\\\Dashboard-Pro\\\\.venv\\\\Scripts\\\\python.exe' -c \"import ast; ast.parse\\(open\\(r'C:\\\\x\\\\Dashboard-Pro\\\\pages\\\\amd-scanner.py', encoding='utf-8'\\).read\\(\\)\\); print\\('amd-scanner.py: syntax OK'\\)\")",
       "PowerShell(& 'C:\\\\x\\\\Dashboard-Pro\\\\.venv\\\\Scripts\\\\python.exe' -c \"import ast; ast.parse\\(open\\(r'C:\\\\x\\\\Dashboard-Pro\\\\pages\\\\amd-scanner.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8765/)",
-      "Bash(PYTHONIOENCODING=utf-8 python *)"
+      "Bash(PYTHONIOENCODING=utf-8 python *)",
+      "Bash(sed -n 25,36p app.py)",
+      "Bash(sed -n 313,365p app.py)",
+      "Bash(awk '{print $NF, $5\"b\"}')",
+      "Bash(sed -i \"s/font-family:'Inter',sans-serif/font-family:'JetBrains Mono','Fira Code',monospace/g\" pages/*.py)",
+      "Bash(sed -i \"/@import url\\('https:\\\\/\\\\/fonts.googleapis.com\\\\/css2?family=Inter/d\" pages/*.py)",
+      "Bash(sed -i \"s/plot_bgcolor='#0e1117', paper_bgcolor='#0e1117'/plot_bgcolor='#0f0f0f', paper_bgcolor='#000000'/g\" pages/backtest-workflow.py)",
+      "Bash(sed -i 's/family=\"Inter, sans-serif\"/family=\"JetBrains Mono, monospace\"/g; s/family=\"Inter,sans-serif\"/family=\"JetBrains Mono, monospace\"/g' pages/*.py)",
+      "Bash(sed -i \"s/font-family: 'Syne', sans-serif !important;/font-family: 'JetBrains Mono', monospace !important;/g\" pages/*.py)",
+      "Bash(sed -i \"/family=Syne/d; /'Syne'/d\" pages/*.py)"
     ]
   }
 }

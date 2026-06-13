@@ -8,14 +8,14 @@ A modular, professional Forex Macro Dashboard combining technical analysis, macr
 
 ```
 Dashboard-Pro/
-├── app.py                         # Production dashboard entry point
+├── app.py                         # Entry point — runs the Daily Trading checklist (master page)
+├── pages/                         # 22 workflow pages (incl. market-overview.py, the macro dashboard)
 ├── src/
-│   └── core/
-│       ├── analyzer.py            # Technical indicators (via ta library)
-│       ├── data_provider.py       # Data fetching — Yahoo Finance, QuantConnect, FRED
-│       ├── signals.py             # Entry signals and trading idea generation
-│       └── config.py              # Centralised application configuration
-└── archive/                       # Legacy and experimental versions
+│   ├── core/                      # analyzer, data_provider, signals, config (shared engine)
+│   ├── pages_lib/                 # BloombergPage framework + navigation
+│   ├── indicators/ instruments/   # indicator math + instrument registry (single source of truth)
+│   ├── services/ ui/ db/          # forecast/atr/etc · terminal theme & components · Postgres
+└── archive/                       # Legacy and experimental versions — do not touch
 ```
 
 ---
