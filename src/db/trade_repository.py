@@ -195,7 +195,9 @@ class TradeRepository:
                    direction, session, score, verdict, atr14, atr20,
                    sl_pips, tp1_pips, tp2_pips, lot_size, risk_amount,
                    rr_tp1, rr_tp2, account_bal, risk_pct, checks_passed,
-                   checks_total, checks_detail, notes
+                   checks_total, checks_detail, notes,
+                   entry_price, close_price, outcome, pips_gained,
+                   r_multiple, is_open, source
             FROM trade_setups
             ORDER BY logged_at DESC
             LIMIT %s

@@ -96,18 +96,54 @@ def _to_dt(val) -> Optional[datetime]:
     return None
 
 
-def parse_mt4_html(content: bytes) -> List[dict]:
-    """Return one dict per *closed* trade with the raw broker fields."""
-    text = None
+def _decode(content: bytes) -> str:
     for enc in ("utf-8", "utf-16", "cp1252", "latin-1"):
         try:
-            text = content.decode(enc)
-            break
+            return content.decode(enc)
         except (UnicodeDecodeError, LookupError):
             continue
-    if text is None:
-        raise ValueError("Could not decode the uploaded file as text.")
+    raise ValueError("Could not decode the uploaded file as text.")
 
+
+def parse_mt4_balance(content: bytes) -> Optional[float]:
+    """Pull the account 'Balance:' figure from the statement summary (falls back
+    to 'Equity:'). Returns None if neither is present.
+
+    Matches the summary labels by their trailing colon ('Balance:') so it never
+    confuses them with a deposit transaction whose *type* cell reads 'balance'.
+    """
+    try:
+        tables = pd.read_html(StringIO(_decode(content)))
+    except Exception:
+        return None
+
+    balance = equity = None
+    for tbl in tables:
+        for row in tbl.itertuples(index=False, name=None):
+            cells = [c for c in row]
+            for i, c in enumerate(cells):
+                raw = str(c).strip()
+                low = raw.lower()
+                if not (low.startswith("balance:") or low.startswith("equity:")):
+                    continue
+                key = "balance" if low.startswith("balance:") else "equity"
+                val = _to_float(raw.split(":", 1)[1])      # value in the same cell?
+                if val is None:                             # …or in a following cell
+                    for nxt in cells[i + 1:]:
+                        val = _to_float(nxt)
+                        if val is not None:
+                            break
+                if val is not None:
+                    if key == "balance" and balance is None:
+                        balance = val
+                    elif key == "equity" and equity is None:
+                        equity = val
+    return balance if balance is not None else equity
+
+
+def parse_mt4_html(content: bytes) -> List[dict]:
+    """Return one dict per *closed* trade with the raw broker fields."""
+    text = _decode(content)
     try:
         tables = pd.read_html(StringIO(text))
     except Exception as exc:  # noqa: BLE001 — surface a friendly message to the UI
