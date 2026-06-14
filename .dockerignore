@@ -1,0 +1,41 @@
+# Secrets must never be baked into the image — provide at runtime via an env
+# file or a mounted volume (see note below). config.toml (theme) is safe to ship.
+.streamlit/secrets.toml
+.env
+.env.*
+
+# Local virtualenv (Windows-built, useless in a Linux image) and VCS metadata
+.venv/
+venv/
+.git/
+.gitignore
+
+# Caches / build artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Runtime output and dead code
+logs/
+archive/
+
+# Runtime state caches (regenerated at runtime — never bake stale state in)
+*_notify_cache.json
+account_state.json
+
+# Editor / OS cruft
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+docker-compose*.yml
+docker-compose*.yaml
