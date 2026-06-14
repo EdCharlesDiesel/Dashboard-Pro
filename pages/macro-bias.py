@@ -22,6 +22,23 @@ BloombergTheme.apply()
 st.markdown("""
 <style>
     /* Theme-adaptive layout vars */
+    
+      /* Multiselect (Filter Pairs) tags — black text on green */
+    span[data-baseweb="tag"]{
+        background-color:#00ff41 !important;
+    }
+    span[data-baseweb="tag"] span{
+        color:#000000 !important;
+        font-weight:600 !important;
+    }
+    /* The × close icon */
+    span[data-baseweb="tag"] svg{
+        fill:#000000 !important;
+    }
+    span[data-baseweb="tag"] [role="button"]:hover{
+        background-color:#00cc34 !important;
+    }
+    
     .stApp {
       --border: color-mix(in srgb, var(--text-color) 12%, transparent);
       --muted:  color-mix(in srgb, var(--text-color) 55%, transparent);
