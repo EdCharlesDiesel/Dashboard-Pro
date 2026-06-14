@@ -17,6 +17,7 @@ import yfinance as yf
 from src.core.signals import score_setup
 from src.instruments import INSTRUMENTS, TYPICAL_SPREADS
 from src.pages_lib.base import BloombergPage, PageContext
+from src.services import RiskService
 from src.ui.components import (
     CommandBar, MetricCell, Panel, ProgressBar, render_metric_row,
 )
@@ -53,6 +54,30 @@ def trade_levels(entry, sl_pips, pip_size, direction, rr) -> dict:
         "sl_price": sl_price, "tp_price": tp_price,
         "tp_pips": round(sl_pips * rr, 1),
     }
+
+
+def money_breakdown(sl_pips, pip_value, account_balance, risk_pct, rr) -> dict:
+    """Lot size, $ risked (if SL hit) and $ won (if TP hit).
+
+    Uses the project risk model (same as the checklist's RiskService):
+    lot = (balance · risk%) / sl_pips / pip_value. Because TP = R:R × SL,
+    the profit at target is risk_amount × R:R.
+    """
+    try:
+        sl_pips = float(sl_pips)
+        pip_value = float(pip_value)
+        rr = float(rr)
+        account_balance = float(account_balance)
+        risk_pct = float(risk_pct)
+    except (TypeError, ValueError):
+        return {"lot": None, "risk_amt": None, "win": None}
+    if sl_pips <= 0 or pip_value <= 0:
+        return {"lot": None, "risk_amt": None, "win": None}
+    tp_pips = sl_pips * rr
+    rb = RiskService.compute(account_balance, risk_pct, pip_value,
+                             sl_pips, tp_pips, tp_pips)
+    return {"lot": rb.lot_size, "risk_amt": rb.risk_amount,
+            "win": rb.risk_amount * rr}
 
 
 # ── Data fetchers (preserved from original) ───────────────────────────────
@@ -135,6 +160,9 @@ class SetupRankerPage(BloombergPage):
         st.session_state.setdefault("sr_min_score", 5)
         st.session_state.setdefault("sr_rr_ratio", 2.0)
         st.session_state.setdefault("sr_pairs", INSTRUMENTS.keys())
+        # Shared with the checklist so account settings carry across pages.
+        st.session_state.setdefault("account_bal", 10000.0)
+        st.session_state.setdefault("risk_pct", 1.0)
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
 
     def sidebar(self, ctx: PageContext) -> None:
@@ -171,6 +199,14 @@ class SetupRankerPage(BloombergPage):
             "TP R:R", options=[1.0, 1.5, 2.0, 2.5, 3.0],
             value=st.session_state.sr_rr_ratio,
         )
+        st.session_state.account_bal = st.number_input(
+            "Account balance ($)", min_value=0.0, step=500.0,
+            value=float(st.session_state.account_bal),
+        )
+        st.session_state.risk_pct = st.slider(
+            "Risk % / trade", 0.25, 5.0,
+            float(st.session_state.risk_pct), 0.25,
+        )
         st.divider()
         if st.button("◆ RESCAN ALL PAIRS", use_container_width=True, type="primary"):
             st.cache_data.clear()
@@ -181,6 +217,8 @@ class SetupRankerPage(BloombergPage):
         direction = st.session_state.sr_direction
         min_score = st.session_state.sr_min_score
         rr_ratio = st.session_state.sr_rr_ratio
+        account_bal = st.session_state.account_bal
+        risk_pct = st.session_state.risk_pct
         pairs = st.session_state.sr_pairs
         if not pairs:
             st.warning("⚠ Select at least one instrument in the sidebar.")
@@ -191,6 +229,8 @@ class SetupRankerPage(BloombergPage):
             (f"PAIRS {len(pairs)}", ""),
             (f"MIN {min_score}/10", "cyan"),
             (f"TP {rr_ratio:.1f}R", "green"),
+            (f"BAL ${account_bal:,.0f}", ""),
+            (f"RISK {risk_pct:.2f}%", "cyan"),
             (datetime.now().strftime("%a %d %b %H:%M"), "amber"),
         ]).show()
 
@@ -202,11 +242,22 @@ class SetupRankerPage(BloombergPage):
             g: sum(1 for r in results if r["grade"] == g)
             for g in ("A", "B", "C", "D")
         }
+        # Projected profit if every Grade-A setup hit TP (one risk-unit each).
+        grade_a_win = 0.0
+        for r in results:
+            if r["grade"] != "A":
+                continue
+            inst = INSTRUMENTS.get(r["pair"])
+            mb = money_breakdown(r.get("sl_pips"), inst.pip if inst else None,
+                                 account_bal, risk_pct, rr_ratio)
+            if mb["win"] is not None:
+                grade_a_win += mb["win"]
         render_metric_row([
             MetricCell("Grade A (8–10)", str(grade_counts["A"]), "green"),
             MetricCell("Grade B (6–7)",  str(grade_counts["B"]), "cyan"),
             MetricCell("Grade C (4–5)",  str(grade_counts["C"]), "yellow"),
             MetricCell("Grade D (<4)",   str(grade_counts["D"]), "red"),
+            MetricCell("Grade-A Win $",  f"+${grade_a_win:,.0f}", "green"),
         ])
 
         if not results:
@@ -216,13 +267,14 @@ class SetupRankerPage(BloombergPage):
         st.markdown(
             f'<div style="color:#9a9a9a;font-family:\'JetBrains Mono\',monospace;'
             f'font-size:10px;margin:8px 0;">Entry ≈ current close · Stop from scorer\'s '
-            f'structural SL · TP = stop × {rr_ratio:.1f}R. Confirm on 15M before trading.</div>',
+            f'structural SL · TP = stop × {rr_ratio:.1f}R · WIN/RISK $ at '
+            f'{risk_pct:.2f}% of ${account_bal:,.0f}. Confirm on 15M before trading.</div>',
             unsafe_allow_html=True,
         )
 
         tab_cards, tab_table, tab_chart = st.tabs(["◆ RANKED", "▤ TABLE", "▦ CHART"])
-        with tab_cards: self._render_cards(results, rr_ratio)
-        with tab_table: self._render_table(results, rr_ratio)
+        with tab_cards: self._render_cards(results, rr_ratio, account_bal, risk_pct)
+        with tab_table: self._render_table(results, rr_ratio, account_bal, risk_pct)
         with tab_chart: self._render_chart(results)
 
     @staticmethod
@@ -247,7 +299,7 @@ class SetupRankerPage(BloombergPage):
         return results
 
     @staticmethod
-    def _render_cards(results, rr_ratio) -> None:
+    def _render_cards(results, rr_ratio, account_bal, risk_pct) -> None:
         grade_color = {
             "A": ("●", T.GREEN, "GO", "go"),
             "B": ("◆", T.CYAN, "STRONG", "info"),
@@ -262,12 +314,18 @@ class SetupRankerPage(BloombergPage):
                          else f"{r['close']:.3f}")
             inst = INSTRUMENTS.get(r["pair"])
             pip_size = inst.pip_size if inst else None
+            pip_value = inst.pip if inst else None
             lv = trade_levels(r["close"], r.get("sl_pips"),
                               pip_size, r["direction"], rr_ratio)
             sl_pips_txt = (f"{r['sl_pips']}"
                            if r.get("sl_pips") not in (None, "") else "—")
             tp_pips_txt = (f"{lv['tp_pips']:g}"
                            if lv["tp_pips"] is not None else "—")
+            mb = money_breakdown(r.get("sl_pips"), pip_value,
+                                 account_bal, risk_pct, rr_ratio)
+            lot_txt = f"{mb['lot']:.2f}" if mb["lot"] is not None else "—"
+            risk_txt = f"${mb['risk_amt']:,.0f}" if mb["risk_amt"] is not None else "—"
+            win_txt = f"+${mb['win']:,.0f}" if mb["win"] is not None else "—"
             dots = "".join(
                 f'<span style="display:inline-block;width:8px;height:8px;'
                 f'background:{color if i < r["score"] else T.BORDER};'
@@ -316,6 +374,14 @@ class SetupRankerPage(BloombergPage):
                 f'<span>TP <span style="color:{T.GREEN};">{fmt_price(lv["tp_price"])}</span> '
                 f'<span style="color:{T.GREY};">({tp_pips_txt}p · {rr_ratio:.1f}R)</span></span>'
                 f'</div>'
+                f'<div style="font-family:\'JetBrains Mono\',monospace;'
+                f'font-size:11px;display:flex;flex-wrap:wrap;gap:14px;'
+                f'color:{T.GREY};margin-top:4px;">'
+                f'<span>LOT <span style="color:{T.CYAN};">{lot_txt}</span></span>'
+                f'<span>RISK <span style="color:{T.RED};">{risk_txt}</span></span>'
+                f'<span>WIN <span style="color:{T.GREEN};">{win_txt}</span> '
+                f'<span style="color:{T.GREY};">@ {tp_pips_txt}p</span></span>'
+                f'</div>'
                 f'<div style="margin-top:6px;">{pills}</div>'
             )
             Panel(
@@ -325,14 +391,17 @@ class SetupRankerPage(BloombergPage):
             ).show()
 
     @staticmethod
-    def _render_table(results, rr_ratio) -> None:
+    def _render_table(results, rr_ratio, account_bal, risk_pct) -> None:
         rows = []
         criteria_keys = list(results[0]["scores"].keys()) if results else []
         for r in results:
             inst = INSTRUMENTS.get(r["pair"])
             pip_size = inst.pip_size if inst else None
+            pip_value = inst.pip if inst else None
             lv = trade_levels(r["close"], r.get("sl_pips"),
                               pip_size, r["direction"], rr_ratio)
+            mb = money_breakdown(r.get("sl_pips"), pip_value,
+                                 account_bal, risk_pct, rr_ratio)
             row = {
                 "Rank": results.index(r) + 1,
                 "Pair": r["pair"],
@@ -346,6 +415,9 @@ class SetupRankerPage(BloombergPage):
                 "TP Price": fmt_price(lv["tp_price"]),
                 "TP Pips": lv["tp_pips"] if lv["tp_pips"] is not None else "—",
                 "R:R": f"{rr_ratio:.1f}",
+                "Lot": f"{mb['lot']:.2f}" if mb["lot"] is not None else "—",
+                "Risk $": f"${mb['risk_amt']:,.0f}" if mb["risk_amt"] is not None else "—",
+                "Win $": f"+${mb['win']:,.0f}" if mb["win"] is not None else "—",
             }
             for k in criteria_keys:
                 row[k] = "✓" if r["scores"][k] else "✗"
