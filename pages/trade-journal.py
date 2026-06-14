@@ -63,7 +63,7 @@ def get_db_connection(cfg):
 def load_journal_trades(cfg, limit: int = 500):
     try:
         conn = get_db_connection(cfg)
-        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             SELECT id, logged_at, instrument, direction, session,
                    score, verdict, sl_pips, tp1_pips, tp2_pips, rr_tp1,
@@ -91,11 +91,12 @@ with st.sidebar:
 
     st.markdown("**🗄️ PostgreSQL Database**")
     _db = secrets.db_config()  # defaults from .streamlit/secrets.toml [database]
-    _host = st.text_input("Host",     value=st.session_state.get("db_host", _db["host"]),     key="jdb_host")
-    _port = st.number_input("Port",   value=int(st.session_state.get("db_port", _db["port"])), step=1, key="jdb_port")
-    _name = st.text_input("Database", value=st.session_state.get("db_name", _db["dbname"]),   key="jdb_name")
-    _user = st.text_input("User",     value=st.session_state.get("db_user", _db["user"]),     key="jdb_user")
-    _pass = st.text_input("Password", value=st.session_state.get("db_pass", _db["password"]), type="password", key="jdb_pass")
+    _host = st.text_input("Host", value=st.session_state.get("db_host", _db["host"]), key="jdb_host")
+    _port = st.number_input("Port", value=int(st.session_state.get("db_port", _db["port"])), step=1, key="jdb_port")
+    _name = st.text_input("Database", value=st.session_state.get("db_name", _db["dbname"]), key="jdb_name")
+    _user = st.text_input("User", value=st.session_state.get("db_user", _db["user"]), key="jdb_user")
+    _pass = st.text_input("Password", value=st.session_state.get("db_pass", _db["password"]), type="password",
+                          key="jdb_pass")
 
     db_cfg = {"host": _host, "port": int(_port), "dbname": _name, "user": _user, "password": _pass}
 
@@ -103,7 +104,7 @@ with st.sidebar:
         try:
             conn = get_db_connection(db_cfg)
             conn.close()
-            st.session_state.journal_db_ok  = True
+            st.session_state.journal_db_ok = True
             st.session_state.journal_db_cfg = db_cfg
             st.success("✅ Connected")
         except Exception as e:
@@ -114,7 +115,6 @@ with st.sidebar:
     show_n = st.slider("Max trades to load", 50, 500, 200, step=50)
     if st.button("🔄 Refresh Data", use_container_width=True):
         st.rerun()
-
 
     st.divider()
     render_sidebar_nav()
@@ -140,7 +140,7 @@ if not st.session_state.get("journal_db_ok"):
     st.stop()
 
 _cfg = st.session_state.get("journal_db_cfg", db_cfg)
-raw  = load_journal_trades(_cfg, limit=show_n)
+raw = load_journal_trades(_cfg, limit=show_n)
 
 if not raw:
     st.warning("No trades found in the database. Save some setups from the Checklist page first.")
@@ -151,34 +151,37 @@ df_all["logged_at"] = pd.to_datetime(df_all["logged_at"])
 
 # Closed trades only for analytics
 df_closed = df_all[df_all["outcome"].notna() & (df_all["is_open"] == False)].copy()
-df_open   = df_all[df_all["is_open"] != False].copy()
+df_open = df_all[df_all["is_open"] != False].copy()
 
-n_total  = len(df_all)
+n_total = len(df_all)
 n_closed = len(df_closed)
-n_open   = len(df_open)
+n_open = len(df_open)
 
 # ── Compute stats ──────────────────────────────────────────────────
 if n_closed > 0:
-    wins      = df_closed[df_closed["outcome"] == "WIN"]
-    losses    = df_closed[df_closed["outcome"] == "LOSS"]
+    wins = df_closed[df_closed["outcome"] == "WIN"]
+    losses = df_closed[df_closed["outcome"] == "LOSS"]
     be_trades = df_closed[df_closed["outcome"] == "BE"]
-    win_rate  = len(wins) / n_closed * 100
-    avg_win_r = wins["r_multiple"].mean()   if len(wins)   else 0
+    win_rate = len(wins) / n_closed * 100
+    avg_win_r = wins["r_multiple"].mean() if len(wins) else 0
     avg_los_r = losses["r_multiple"].abs().mean() if len(losses) else 1
     loss_rate = len(losses) / n_closed
     expectancy = (win_rate / 100 * avg_win_r) - (loss_rate * abs(avg_los_r))
-    pf         = (len(wins) * avg_win_r) / (len(losses) * abs(avg_los_r)) \
-                 if len(losses) > 0 and avg_los_r != 0 else 0
-    total_r    = df_closed["r_multiple"].sum()
+    pf = (len(wins) * avg_win_r) / (len(losses) * abs(avg_los_r)) \
+        if len(losses) > 0 and avg_los_r != 0 else 0
+    total_r = df_closed["r_multiple"].sum()
 
     # Equity curve + drawdown
     df_closed = df_closed.sort_values("logged_at").reset_index(drop=True)
-    df_closed["cum_r"]     = df_closed["r_multiple"].cumsum()
-    df_closed["run_max"]   = df_closed["cum_r"].cummax()
-    df_closed["drawdown"]  = df_closed["run_max"] - df_closed["cum_r"]
+    df_closed["cum_r"] = df_closed["r_multiple"].cumsum()
+    df_closed["run_max"] = df_closed["cum_r"].cummax()
+    df_closed["drawdown"] = df_closed["run_max"] - df_closed["cum_r"]
     max_dd = df_closed["drawdown"].max()
 else:
     win_rate = avg_win_r = avg_los_r = expectancy = pf = total_r = max_dd = 0
+    wins = pd.DataFrame()
+    losses = pd.DataFrame()
+    be_trades = pd.DataFrame()
 
 target = 66.0
 wr_color = "#00ff66" if win_rate >= target else "#ff3344"
@@ -187,16 +190,16 @@ wr_color = "#00ff66" if win_rate >= target else "#ff3344"
 # KPI STRIP
 # ══════════════════════════════════════════════════════════════════
 
-k1,k2,k3,k4,k5,k6,k7 = st.columns(7)
+k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
 kpis = [
-    (k1, f"{win_rate:.1f}%",      "Win Rate",    wr_color),
+    (k1, f"{win_rate:.1f}%", "Win Rate", wr_color),
     (k2, f"{len(wins) if n_closed else 0}W/{len(losses) if n_closed else 0}L/{len(be_trades) if n_closed else 0}BE",
-                                   "W / L / BE",  "#e6e6e6"),
-    (k3, f"{n_closed}",            "Closed",      "#9a9a9a"),
-    (k4, f"{n_open}",              "Open",        "#00ff41"),
-    (k5, f"{expectancy:+.2f}R",    "Expectancy",  "#00ff66" if expectancy > 0 else "#ff3344"),
-    (k6, f"{pf:.2f}",              "Profit Factor","#00ff66" if pf >= 1.5 else "#ffcc00" if pf >= 1 else "#ff3344"),
-    (k7, f"{total_r:+.1f}R",       "Total R",     "#00ff66" if total_r > 0 else "#ff3344"),
+     "W / L / BE", "#e6e6e6"),
+    (k3, f"{n_closed}", "Closed", "#9a9a9a"),
+    (k4, f"{n_open}", "Open", "#00ff41"),
+    (k5, f"{expectancy:+.2f}R", "Expectancy", "#00ff66" if expectancy > 0 else "#ff3344"),
+    (k6, f"{pf:.2f}", "Profit Factor", "#00ff66" if pf >= 1.5 else "#ffcc00" if pf >= 1 else "#ff3344"),
+    (k7, f"{total_r:+.1f}R", "Total R", "#00ff66" if total_r > 0 else "#ff3344"),
 ]
 for col, val, lbl, color in kpis:
     with col:
@@ -231,7 +234,6 @@ if n_closed == 0:
 tab_equity, tab_session, tab_pair, tab_dir, tab_log = st.tabs([
     "📈 Equity Curve", "🕐 By Session", "💱 By Pair", "↕️ By Direction", "📋 Trade Log"
 ])
-
 
 # ──────────────────────────────────────────────────────────────────
 # TAB 1 — EQUITY CURVE
@@ -281,7 +283,7 @@ with tab_equity:
     # Target line (expectancy projected)
     if n_closed >= 3:
         x_proj = list(range(n_closed))
-        trend  = np.polyfit(x_proj, df_closed["cum_r"], 1)
+        trend = np.polyfit(x_proj, df_closed["cum_r"], 1)
         proj_y = [trend[0] * x + trend[1] for x in x_proj]
         fig.add_trace(go.Scatter(
             x=dates, y=proj_y,
@@ -330,9 +332,11 @@ with tab_equity:
     max_win_streak = max_los_streak = cur_w = cur_l = 0
     for o in outcomes_list:
         if o == "WIN":
-            cur_w += 1; cur_l = 0
+            cur_w += 1;
+            cur_l = 0
         elif o == "LOSS":
-            cur_l += 1; cur_w = 0
+            cur_l += 1;
+            cur_w = 0
         else:
             cur_w = cur_l = 0
         max_win_streak = max(max_win_streak, cur_w)
@@ -340,9 +344,9 @@ with tab_equity:
 
     last5 = outcomes_list[-5:] if len(outcomes_list) >= 5 else outcomes_list
     last5_html = "".join(
-        f'<span style="display:inline-block;background:{"#0d2f1a" if o=="WIN" else "#2f0d0d" if o=="LOSS" else "#1a1a0d"};'
-        f'border:1px solid {"#00a32a" if o=="WIN" else "#8b2d2d" if o=="LOSS" else "#9e6a03"};'
-        f'color:{"#00ff66" if o=="WIN" else "#ff3344" if o=="LOSS" else "#ffcc00"};'
+        f'<span style="display:inline-block;background:{"#0d2f1a" if o == "WIN" else "#2f0d0d" if o == "LOSS" else "#1a1a0d"};'
+        f'border:1px solid {"#00a32a" if o == "WIN" else "#8b2d2d" if o == "LOSS" else "#9e6a03"};'
+        f'color:{"#00ff66" if o == "WIN" else "#ff3344" if o == "LOSS" else "#ffcc00"};'
         f'font-weight:700;font-size:12px;padding:4px 12px;border-radius:5px;margin-right:6px;">{o}</span>'
         for o in last5
     )
@@ -362,7 +366,6 @@ with tab_equity:
             f'<div class="metric-label" style="margin-bottom:6px;">Last 5 Trades</div>'
             f'{last5_html}</div>', unsafe_allow_html=True)
 
-
 # ──────────────────────────────────────────────────────────────────
 # TAB 2 — BY SESSION
 # ──────────────────────────────────────────────────────────────────
@@ -372,13 +375,13 @@ with tab_session:
     sess_group = (
         df_closed.groupby("session")
         .apply(lambda g: pd.Series({
-            "Trades":     len(g),
-            "Wins":       (g["outcome"] == "WIN").sum(),
-            "Losses":     (g["outcome"] == "LOSS").sum(),
-            "BE":         (g["outcome"] == "BE").sum(),
+            "Trades": len(g),
+            "Wins": (g["outcome"] == "WIN").sum(),
+            "Losses": (g["outcome"] == "LOSS").sum(),
+            "BE": (g["outcome"] == "BE").sum(),
             "Win Rate %": (g["outcome"] == "WIN").mean() * 100,
-            "Avg R":      g["r_multiple"].mean(),
-            "Total R":    g["r_multiple"].sum(),
+            "Avg R": g["r_multiple"].mean(),
+            "Total R": g["r_multiple"].sum(),
         }))
         .reset_index()
         .sort_values("Win Rate %", ascending=False)
@@ -421,9 +424,9 @@ with tab_session:
     hour_group = (
         df_closed.groupby("hour")
         .apply(lambda g: pd.Series({
-            "Trades":     len(g),
+            "Trades": len(g),
             "Win Rate %": (g["outcome"] == "WIN").mean() * 100,
-            "Avg R":      g["r_multiple"].mean(),
+            "Avg R": g["r_multiple"].mean(),
         }))
         .reset_index()
     )
@@ -456,7 +459,6 @@ with tab_session:
         )
         st.plotly_chart(fig_h, use_container_width=True, config=dict(displayModeBar=False))
 
-
 # ──────────────────────────────────────────────────────────────────
 # TAB 3 — BY PAIR
 # ──────────────────────────────────────────────────────────────────
@@ -466,14 +468,14 @@ with tab_pair:
     pair_group = (
         df_closed.groupby("instrument")
         .apply(lambda g: pd.Series({
-            "Trades":     len(g),
-            "Wins":       (g["outcome"] == "WIN").sum(),
-            "Losses":     (g["outcome"] == "LOSS").sum(),
+            "Trades": len(g),
+            "Wins": (g["outcome"] == "WIN").sum(),
+            "Losses": (g["outcome"] == "LOSS").sum(),
             "Win Rate %": (g["outcome"] == "WIN").mean() * 100,
-            "Avg R":      g["r_multiple"].mean(),
-            "Total R":    g["r_multiple"].sum(),
-            "Best R":     g["r_multiple"].max(),
-            "Worst R":    g["r_multiple"].min(),
+            "Avg R": g["r_multiple"].mean(),
+            "Total R": g["r_multiple"].sum(),
+            "Best R": g["r_multiple"].max(),
+            "Worst R": g["r_multiple"].min(),
         }))
         .reset_index()
         .sort_values("Win Rate %", ascending=True)
@@ -512,7 +514,6 @@ with tab_pair:
         use_container_width=True, hide_index=True,
     )
 
-
 # ──────────────────────────────────────────────────────────────────
 # TAB 4 — BY DIRECTION
 # ──────────────────────────────────────────────────────────────────
@@ -522,24 +523,31 @@ with tab_dir:
     dir_group = (
         df_closed.groupby("direction")
         .apply(lambda g: pd.Series({
-            "Trades":     len(g),
-            "Wins":       (g["outcome"] == "WIN").sum(),
-            "Losses":     (g["outcome"] == "LOSS").sum(),
-            "BE":         (g["outcome"] == "BE").sum(),
+            "Trades": len(g),
+            "Wins": (g["outcome"] == "WIN").sum(),
+            "Losses": (g["outcome"] == "LOSS").sum(),
+            "BE": (g["outcome"] == "BE").sum(),
             "Win Rate %": (g["outcome"] == "WIN").mean() * 100,
-            "Avg R":      g["r_multiple"].mean(),
-            "Total R":    g["r_multiple"].sum(),
-            "Avg Pips":   g["pips_gained"].mean() if "pips_gained" in g.columns else 0,
+            "Avg R": g["r_multiple"].mean(),
+            "Total R": g["r_multiple"].sum(),
+            "Avg Pips": g["pips_gained"].mean() if "pips_gained" in g.columns else 0,
         }))
         .reset_index()
     )
 
     d1, d2 = st.columns(2)
-    for col_, row_ in zip([d1, d2], dir_group.itertuples()):
-        direction = row_.direction
-        wr = row_._4  # Win Rate %
+    for col_, (_, row_) in zip([d1, d2], dir_group.iterrows()):
+        direction = row_["direction"]
+        wr = row_["Win Rate %"]  # Fixed: use bracket notation instead of ._4
+        trades = row_["Trades"]
+        wins = row_["Wins"]
+        losses = row_["Losses"]
+        be = row_["BE"]
+        avg_r = row_["Avg R"]  # Fixed: use bracket notation instead of ._6
+        total_r = row_["Total R"]  # Fixed: use bracket notation instead of ._7
+
         d_color = "#00ff41" if direction == "LONG" else "#a371f7"
-        d_icon  = "🔼" if direction == "LONG" else "🔽"
+        d_icon = "🔼" if direction == "LONG" else "🔽"
         wr_c = "#00ff66" if wr >= 66 else "#ffcc00" if wr >= 50 else "#ff3344"
         with col_:
             st.markdown(f"""
@@ -553,20 +561,20 @@ with tab_dir:
                   <div class="metric-label">Win Rate</div>
                 </div>
                 <div class="metric-box">
-                  <div class="metric-value">{row_.Trades}</div>
+                  <div class="metric-value">{trades}</div>
                   <div class="metric-label">Trades</div>
                 </div>
                 <div class="metric-box">
-                  <div class="metric-value" style="color:{"#00ff66" if row_._6 > 0 else "#ff3344"};">{row_._6:+.2f}R</div>
+                  <div class="metric-value" style="color:{"#00ff66" if avg_r > 0 else "#ff3344"};">{avg_r:+.2f}R</div>
                   <div class="metric-label">Avg R</div>
                 </div>
                 <div class="metric-box">
-                  <div class="metric-value" style="color:{"#00ff66" if row_._7 > 0 else "#ff3344"};">{row_._7:+.1f}R</div>
+                  <div class="metric-value" style="color:{"#00ff66" if total_r > 0 else "#ff3344"};">{total_r:+.1f}R</div>
                   <div class="metric-label">Total R</div>
                 </div>
               </div>
               <div style="margin-top:10px;font-size:12px;color:#9a9a9a;">
-                {row_.Wins}W / {row_.Losses}L / {row_.BE}BE
+                {wins}W / {losses}L / {be}BE
               </div>
             </div>
             """, unsafe_allow_html=True)
@@ -595,11 +603,27 @@ with tab_dir:
             )
             st.plotly_chart(fig_dir, use_container_width=True, config=dict(displayModeBar=False))
 
-
 # ──────────────────────────────────────────────────────────────────
 # TAB 5 — TRADE LOG
 # ──────────────────────────────────────────────────────────────────
 with tab_log:
+    st.markdown("""
+           <style>
+               span[data-baseweb="tag"]{
+                   background-color:#00ff41 !important;
+               }
+               span[data-baseweb="tag"] span{
+                   color:#000000 !important;
+                   font-weight:600 !important;
+               }
+               span[data-baseweb="tag"] svg{
+                   fill:#000000 !important;
+               }
+               span[data-baseweb="tag"] [role="button"]:hover{
+                   background-color:#00cc34 !important;
+               }
+           </style>
+           """, unsafe_allow_html=True)
     st.markdown('<div class="section-title">📋 Full Trade Log</div>', unsafe_allow_html=True)
 
     # Filter controls
@@ -642,24 +666,24 @@ with tab_log:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "id":             st.column_config.NumberColumn("ID",     width="small"),
-            "logged_at":      st.column_config.TextColumn("Date/Time", width="medium"),
-            "instrument":     st.column_config.TextColumn("Pair"),
-            "direction":      st.column_config.TextColumn("Dir",      width="small"),
-            "session":        st.column_config.TextColumn("Session"),
-            "outcome":        st.column_config.TextColumn("Outcome",  width="small"),
-            "r_multiple":     st.column_config.NumberColumn("R",       format="%+.2f"),
-            "pips_gained":    st.column_config.NumberColumn("Pips",    format="%+.1f"),
-            "entry_price":    st.column_config.NumberColumn("Entry",   format="%.5f"),
-            "close_price":    st.column_config.NumberColumn("Close",   format="%.5f"),
-            "sl_pips":        st.column_config.NumberColumn("SL pips", format="%.1f"),
-            "tp1_pips":       st.column_config.NumberColumn("TP1 pips",format="%.1f"),
-            "rr_tp1":         st.column_config.NumberColumn("R:R",     format="%.2f"),
-            "lot_size":       st.column_config.NumberColumn("Lots",    format="%.2f"),
-            "risk_amount":    st.column_config.NumberColumn("Risk $",  format="%.2f"),
-            "checks_passed":  st.column_config.NumberColumn("✅",      width="small"),
-            "is_open":        st.column_config.CheckboxColumn("Open",  width="small"),
-            "notes":          st.column_config.TextColumn("Notes",     width="large"),
+            "id": st.column_config.NumberColumn("ID", width="small"),
+            "logged_at": st.column_config.TextColumn("Date/Time", width="medium"),
+            "instrument": st.column_config.TextColumn("Pair"),
+            "direction": st.column_config.TextColumn("Dir", width="small"),
+            "session": st.column_config.TextColumn("Session"),
+            "outcome": st.column_config.TextColumn("Outcome", width="small"),
+            "r_multiple": st.column_config.NumberColumn("R", format="%+.2f"),
+            "pips_gained": st.column_config.NumberColumn("Pips", format="%+.1f"),
+            "entry_price": st.column_config.NumberColumn("Entry", format="%.5f"),
+            "close_price": st.column_config.NumberColumn("Close", format="%.5f"),
+            "sl_pips": st.column_config.NumberColumn("SL pips", format="%.1f"),
+            "tp1_pips": st.column_config.NumberColumn("TP1 pips", format="%.1f"),
+            "rr_tp1": st.column_config.NumberColumn("R:R", format="%.2f"),
+            "lot_size": st.column_config.NumberColumn("Lots", format="%.2f"),
+            "risk_amount": st.column_config.NumberColumn("Risk $", format="%.2f"),
+            "checks_passed": st.column_config.NumberColumn("✅", width="small"),
+            "is_open": st.column_config.CheckboxColumn("Open", width="small"),
+            "notes": st.column_config.TextColumn("Notes", width="large"),
         },
     )
 

@@ -109,6 +109,18 @@ section[data-testid="stSidebar"] * {{
     font-family: {cls.FONT_MONO} !important;
     font-size: 11px !important;
 }}
+/* The forced monospace above also clobbers Material Symbols icon ligatures, so
+   the sidebar collapse arrow renders as the literal text
+   "keyboard_double_arrow_left" and a collapsed sidebar can't be reopened.
+   Re-assert the icon font (higher specificity than the `*` rule) on icon
+   elements, including the header expand/collapse controls. */
+section[data-testid="stSidebar"] [data-testid="stIconMaterial"],
+[data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"],
+[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"],
+[data-testid="stSidebarCollapsedControl"] [data-testid="stIconMaterial"] {{
+    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined',
+                 'Material Symbols Sharp' !important;
+}}
 section[data-testid="stSidebar"] h3,
 section[data-testid="stSidebar"] h4 {{
     color: {cls.AMBER} !important;

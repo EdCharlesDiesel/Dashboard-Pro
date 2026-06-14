@@ -241,6 +241,23 @@ def ema_stack(data: dict, direction: str) -> dict:
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
+    st.markdown("""
+           <style>
+               span[data-baseweb="tag"]{
+                   background-color:#00ff41 !important;
+               }
+               span[data-baseweb="tag"] span{
+                   color:#000000 !important;
+                   font-weight:600 !important;
+               }
+               span[data-baseweb="tag"] svg{
+                   fill:#000000 !important;
+               }
+               span[data-baseweb="tag"] [role="button"]:hover{
+                   background-color:#00cc34 !important;
+               }
+           </style>
+           """, unsafe_allow_html=True)
     st.markdown("### 📈 Daily Trend")
 
     direction = st.radio("🎯 Trade Direction", ["LONG", "SHORT"], horizontal=True)
