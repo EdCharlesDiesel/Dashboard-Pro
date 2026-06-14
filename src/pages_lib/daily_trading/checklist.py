@@ -636,6 +636,9 @@ class ChecklistController:
                 TradeRepository(self._db_cfg()).close_trade(
                     chosen_id, ct_entry, ct_close, ct_pips, ct_r, ct_outcome,
                 )
+                # Refresh the cached balance-from-history immediately.
+                from src.pages_lib.daily_trading.sidebar import _cached_realized_pnl
+                _cached_realized_pnl.clear()
                 st.success(
                     f"✅ Trade #{chosen_id} closed — {ct_outcome} · "
                     f"{ct_r:+.2f}R · {ct_pips:+.1f} pips"

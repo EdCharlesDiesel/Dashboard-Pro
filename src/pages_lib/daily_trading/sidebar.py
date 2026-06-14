@@ -9,11 +9,98 @@ import streamlit as st
 from src.db import DBConfig, TradeRepository
 from src.instruments import INSTRUMENTS, TREND_COMMODITIES, TREND_TIMEFRAMES
 from src.pages_lib.daily_trading.state import CHECKS_TOTAL, SessionStateBootstrap
-from src.services import ATRService
+from src.services import ATRService, account_state
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_realized_pnl(host, port, dbname, user, password):
+    """Realised P/L from the journal, cached 60s so it isn't re-queried on every
+    sidebar rerun. Keyed on the connection so changing DB invalidates it."""
+    cfg = DBConfig.from_mapping({
+        "host": host, "port": port, "dbname": dbname,
+        "user": user, "password": password,
+    })
+    return TradeRepository(cfg).realized_pnl()
 
 
 class ChecklistSidebar:
     """Sidebar for CHECKLIST mode — instrument, risk, ATR, DB config."""
+
+    def _realized_pnl(self):
+        """Realised P/L from the journal DB (cached 60s), or None if it can't be
+        read (not connected, or the schema predates the `profit` column)."""
+        try:
+            return _cached_realized_pnl(
+                st.session_state.db_host, st.session_state.db_port,
+                st.session_state.db_name, st.session_state.db_user,
+                st.session_state.db_pass,
+            )
+        except Exception:
+            return None
+
+    def _render_balance(self) -> None:
+        """Account balance with three sources: computed from trade history (the
+        true source of data), the live MT4-statement balance, or manual."""
+        sources = ["Trade history", "Live (MT4 statement)", "Manual"]
+        source = st.radio(
+            "Balance source", sources,
+            index=sources.index(st.session_state.get("dt_bal_source", "Trade history")),
+            help="Trade history = starting balance + realised P/L from the journal. "
+                 "Live = the balance off the latest imported MT4 statement.",
+        )
+        st.session_state.dt_bal_source = source
+
+        acct = account_state.get()
+        live_bal = account_state.get_balance(0.0)
+        has_live = bool(acct) and live_bal > 0
+
+        if source == "Trade history":
+            start_bal = st.number_input(
+                "Starting balance ($)", min_value=0.0, step=500.0,
+                value=float(st.session_state.get("dt_start_bal", live_bal or 10000.0)),
+                help="Account balance before the first trade in the journal.",
+            )
+            st.session_state.dt_start_bal = start_bal
+            info = self._realized_pnl()
+            if info is None:
+                st.session_state.account_bal = start_bal
+                st.caption("⚠ Connect to PostgreSQL below to compute balance from history.")
+            else:
+                bal = start_bal + info["pnl"]
+                st.session_state.account_bal = bal
+                pnl_color = "#00ff41" if info["pnl"] >= 0 else "#ff3344"
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;">'
+                    f'BAL <span style="color:#00ff41;font-weight:700;">${bal:,.2f}</span>'
+                    f'<span style="color:#9a9a9a;"> = ${start_bal:,.0f} </span>'
+                    f'<span style="color:{pnl_color};font-weight:700;">{info["pnl"]:+,.2f}</span>'
+                    f'<span style="color:#9a9a9a;"> P/L · {info["counted"]} trades</span></div>',
+                    unsafe_allow_html=True,
+                )
+                if info["skipped"]:
+                    st.caption(f"{info['skipped']} closed trade(s) skipped "
+                               "(missing P/L / lot size / unmapped instrument).")
+        elif source == "Live (MT4 statement)":
+            if has_live:
+                st.session_state.account_bal = live_bal
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;">'
+                    f'BAL <span style="color:#00ff41;font-weight:700;">${live_bal:,.2f}</span>'
+                    f'<span style="color:#9a9a9a;"> · {acct.get("source", "—")} · '
+                    f'{acct.get("updated_at", "—")}</span></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("No live balance yet — import an MT4 statement in the Trade Journal.")
+                st.session_state.account_bal = st.number_input(
+                    "Account Balance ($)", value=float(st.session_state.account_bal),
+                    step=500.0, format="%.2f",
+                )
+        else:  # Manual
+            st.session_state.account_bal = st.number_input(
+                "Account Balance ($)", value=float(st.session_state.account_bal),
+                step=500.0, format="%.2f",
+            )
 
     def render(self) -> None:
         st.markdown(
@@ -53,10 +140,7 @@ class ChecklistSidebar:
 
         st.markdown("---")
         st.markdown("**◆ POSITION SIZING**")
-        st.session_state.account_bal = st.number_input(
-            "Account Balance ($)", value=float(st.session_state.account_bal),
-            step=500.0, format="%.2f",
-        )
+        self._render_balance()
         st.session_state.risk_pct = st.slider(
             "Risk per Trade (%)", 0.25, 3.0,
             float(st.session_state.risk_pct), 0.25,
