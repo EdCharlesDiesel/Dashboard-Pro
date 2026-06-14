@@ -1,11 +1,13 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.instruments.registry import INSTRUMENTS
+from src.core.data_provider import fetch_data
+from src.indicators.technical import TechnicalIndicators
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import yfinance as yf
 from datetime import datetime
 
 st.set_page_config(
@@ -76,29 +78,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Instruments ────────────────────────────────────────────────────────────────
-INSTRUMENTS = {
-    "EUR/USD": {"ticker": "EURUSD=X", "pip_size": 0.0001},
-    "GBP/USD": {"ticker": "GBPUSD=X", "pip_size": 0.0001},
-    "AUD/USD": {"ticker": "AUDUSD=X", "pip_size": 0.0001},
-    "NZD/USD": {"ticker": "NZDUSD=X", "pip_size": 0.0001},
-    "USD/JPY": {"ticker": "USDJPY=X", "pip_size": 0.01},
-    "USD/CHF": {"ticker": "USDCHF=X", "pip_size": 0.0001},
-    "USD/CAD": {"ticker": "USDCAD=X", "pip_size": 0.0001},
-    "EUR/GBP": {"ticker": "EURGBP=X", "pip_size": 0.0001},
-    "EUR/JPY": {"ticker": "EURJPY=X", "pip_size": 0.01},
-    "GBP/JPY": {"ticker": "GBPJPY=X", "pip_size": 0.01},
-    "AUD/JPY": {"ticker": "AUDJPY=X", "pip_size": 0.01},
-    "EUR/AUD": {"ticker": "EURAUD=X", "pip_size": 0.0001},
-    "GBP/AUD": {"ticker": "GBPAUD=X", "pip_size": 0.0001},
-    "EUR/CAD": {"ticker": "EURCAD=X", "pip_size": 0.0001},
-    "GBP/CAD": {"ticker": "GBPCAD=X", "pip_size": 0.0001},
-    "USD/ZAR": {"ticker": "USDZAR=X", "pip_size": 0.0001},
-    "EUR/ZAR": {"ticker": "EURZAR=X", "pip_size": 0.0001},
-    "GBP/ZAR": {"ticker": "GBPZAR=X", "pip_size": 0.0001},
-    "XAU/USD":  {"ticker": "GC=F",    "pip_size": 0.10},
-    "XAG/USD":  {"ticker": "SI=F",  "pip_size": 0.01},
-    "XPT/USD":{"ticker": "PL=F",  "pip_size": 0.10},
-}
+# Sourced from the single source of truth: src/instruments/registry.py.
 
 EMA_PERIODS = [10, 20, 50]   # Weekly EMAs calculated
 SLOPE_BARS  = 3              # How many bars back to measure slope
@@ -117,9 +97,6 @@ def html_block(html: str) -> str:
     """
     return "".join(line.strip() for line in html.splitlines())
 
-def ema(series: pd.Series, period: int) -> pd.Series:
-    return series.ewm(span=period, adjust=False).mean()
-
 def slope_pct(series: pd.Series, n: int = SLOPE_BARS) -> float:
     """% change of EMA over last n bars — positive = rising."""
     if len(series) < n + 1:
@@ -134,19 +111,20 @@ def slope_label(pct: float):
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_weekly(ticker: str, pip_size: float, lookback: str = "2y"):
     try:
-        df = yf.download(ticker, period=lookback, interval="1wk",
-                         progress=False, auto_adjust=True)
-        if df.empty or len(df) < 55:
+        df = fetch_data(ticker, "1wk", lookback)
+        if df is None or df.empty or len(df) < 55:
             return None
 
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [c[0] for c in df.columns]
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)   # match prior tz-naive index
 
         close = df["Close"]
 
         # Calculate all EMAs
         for p in EMA_PERIODS:
-            df[f"ema{p}"] = ema(close, p)
+            df[f"ema{p}"] = TechnicalIndicators.ema(close, p)
 
         df = df.dropna(subset=[f"ema{p}" for p in EMA_PERIODS])
         if df.empty:
@@ -231,7 +209,7 @@ bar = st.progress(0, text="📡 Loading weekly EMA data…")
 results = {}
 for idx, (pair, cfg) in enumerate(INSTRUMENTS.items()):
     bar.progress((idx + 1) / len(INSTRUMENTS), text=f"📡 Fetching weekly data — {pair}…")
-    results[pair] = fetch_weekly(cfg["ticker"], cfg["pip_size"], lookback)
+    results[pair] = fetch_weekly(cfg.ticker, cfg.pip_size, lookback)
 bar.empty()
 
 loaded  = {p: d for p, d in results.items() if d}
@@ -430,7 +408,6 @@ with right:
         """, unsafe_allow_html=True)
 
         hist = d["history"]
-        cfg  = INSTRUMENTS[focus_pair]
 
         # ── Candlestick + EMA chart ────────────────────────────────
         fig = make_subplots(

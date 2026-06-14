@@ -23,6 +23,8 @@ import warnings
 
 from src.ui.theme import BloombergTheme as T
 from src.pages_lib.navigation import render_sidebar_nav
+from src.instruments.registry import INSTRUMENTS, TREND_COMMODITIES
+from src.pages_lib.setup_ranker import fmt_price
 
 warnings.filterwarnings("ignore")
 
@@ -38,18 +40,15 @@ T.apply()
 # Reference data
 # ---------------------------------------------------------------------------
 
-CURRENCY_PAIRS = {
-    "EUR/USD": "EURUSD=X",
-    "GBP/USD": "GBPUSD=X",
-    "USD/JPY": "USDJPY=X",
-    "AUD/USD": "AUDUSD=X",
-    "NZD/USD": "NZDUSD=X",
-    "USD/CHF": "USDCHF=X",
-    "USD/CAD": "USDCAD=X",
-    "USD/CNY": "USDCNY=X",
-    "USD/MXN": "USDMXN=X",
-    "USD/INR": "USDINR=X",
-}
+# Every tradable instrument comes from the single source of truth
+# (src/instruments/registry.py) — all 18 forex pairs plus the three metals
+# (XAU/USD, XAG/USD, XPT/USD). Maps display name -> Yahoo ticker.
+CURRENCY_PAIRS = {name: INSTRUMENTS[name]["ticker"] for name in INSTRUMENTS}
+
+# Metals carry forex display symbols but are categorised separately so the
+# picker can offer a Forex / Metals filter.
+METALS = sorted(TREND_COMMODITIES)
+FOREX = [n for n in CURRENCY_PAIRS if n not in TREND_COMMODITIES]
 
 # FRED series that give useful macro context for FX (rate differentials, etc.)
 FRED_SERIES = {
@@ -119,9 +118,9 @@ def load_quote_table(pairs: dict) -> pd.DataFrame:
                 pct = chg / prev * 100
                 rows.append(
                     {
-                        "Pair": label,
-                        "Actual": round(last, 4),
-                        "Chg": round(chg, 4),
+                        "Instrument": label,
+                        "Actual": fmt_price(last),
+                        "Chg": f"{chg:+.4f}" if abs(last) < 100 else f"{chg:+.2f}",
                         "% Chg": pct,
                     }
                 )
@@ -163,7 +162,18 @@ def run_forecast(series: pd.Series, periods: int, model_type: str):
 
 st.sidebar.title("Settings")
 
-pair_label = st.sidebar.selectbox("Currency pair", list(CURRENCY_PAIRS.keys()), index=0)
+asset_class = st.sidebar.radio(
+    "Asset class", ["All", "Forex", "Metals"], index=0, horizontal=True,
+    help="Forecast any currency pair or a precious metal (Gold/Silver/Platinum).",
+)
+if asset_class == "Forex":
+    _choices = FOREX
+elif asset_class == "Metals":
+    _choices = METALS
+else:
+    _choices = list(CURRENCY_PAIRS.keys())
+
+pair_label = st.sidebar.selectbox("Instrument", _choices, index=0)
 ticker = CURRENCY_PAIRS[pair_label]
 
 period = st.sidebar.selectbox(
@@ -200,7 +210,8 @@ with st.sidebar:
 # Header & summary
 # ---------------------------------------------------------------------------
 
-st.title(f"{pair_label} Exchange Rate \u2014 Forecast Dashboard")
+_kind = "Metal" if pair_label in TREND_COMMODITIES else "Exchange Rate"
+st.title(f"{pair_label} {_kind} \u2014 One-Week Forecast")
 
 with st.spinner("Loading market data..."):
     df = load_fx_history(ticker, period=period, interval=interval)
@@ -229,8 +240,8 @@ year_pct = pct_change_back(close, 252)
 last_date = close.index[-1].strftime("%B %d, %Y")
 
 summary = (
-    f"The **{pair_label}** exchange rate is at **{last_price:.4f}** as of {last_date}, "
-    f"{'down' if day_chg < 0 else 'up'} {abs(day_chg):.4f} ({day_pct:+.2f}%) from the previous session. "
+    f"The **{pair_label}** rate is at **{fmt_price(last_price)}** as of {last_date}, "
+    f"{'down' if day_chg < 0 else 'up'} {fmt_price(abs(day_chg))} ({day_pct:+.2f}%) from the previous session. "
 )
 if not np.isnan(month_pct):
     summary += (
@@ -291,9 +302,17 @@ if forecast_ok and not forecast.empty:
         )
     )
 
+# Keep the area-fill (fill="tozeroy") from dragging the y-axis down to 0,
+# which would flatten high-priced instruments (Gold ~2600, JPY crosses ~150)
+# into an unreadable sliver. Pin the range to the data with a small pad; the
+# fill still renders and simply clips at the axis floor.
+_yvals = list(close.values) + (list(forecast.values) if forecast_ok and not forecast.empty else [])
+_ymin, _ymax = float(np.nanmin(_yvals)), float(np.nanmax(_yvals))
+_pad = (_ymax - _ymin) * 0.08 or abs(_ymax) * 0.001
+
 fig.update_layout(
     title=f"{pair_label} \u2014 Historical Price & This-Week Forecast ({forecast_horizon}d)",
-    yaxis_title="Exchange Rate",
+    yaxis_title="Price",
     xaxis_title=None,
     height=520,
     hovermode="x unified",
@@ -308,7 +327,7 @@ fig.update_layout(
     margin=dict(l=40, r=40, t=60, b=40),
 )
 fig.update_xaxes(gridcolor=T.BORDER, linecolor=T.BORDER)
-fig.update_yaxes(gridcolor=T.BORDER, linecolor=T.BORDER)
+fig.update_yaxes(gridcolor=T.BORDER, linecolor=T.BORDER, range=[_ymin - _pad, _ymax + _pad])
 
 st.plotly_chart(fig, use_container_width=True)
 
@@ -317,7 +336,8 @@ st.plotly_chart(fig, use_container_width=True)
 # ---------------------------------------------------------------------------
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Current price", f"{last_price:.4f}", f"{day_chg:+.4f} ({day_pct:+.2f}%)")
+_chg_str = f"{day_chg:+.4f}" if abs(last_price) < 100 else f"{day_chg:+.2f}"
+c1.metric("Current price", fmt_price(last_price), f"{_chg_str} ({day_pct:+.2f}%)")
 c2.metric("1-month change", f"{month_pct:+.2f}%" if not np.isnan(month_pct) else "n/a")
 c3.metric("1-year change", f"{year_pct:+.2f}%" if not np.isnan(year_pct) else "n/a")
 if forecast_ok and not forecast.empty:
@@ -325,7 +345,7 @@ if forecast_ok and not forecast.empty:
     end_pct = (end_val - last_price) / last_price * 100
     c4.metric(
         "End-of-week forecast",
-        f"{end_val:.4f}",
+        fmt_price(end_val),
         f"{end_pct:+.2f}% vs current",
     )
 else:
@@ -371,7 +391,7 @@ if not any_fred_data:
 # Other currency pairs quote table
 # ---------------------------------------------------------------------------
 
-st.header("Other Major Pairs")
+st.header("Markets Snapshot — Forex & Metals")
 
 quotes_df = load_quote_table(CURRENCY_PAIRS)
 
