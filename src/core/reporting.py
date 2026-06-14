@@ -122,21 +122,26 @@ def trade_performance_report(db_cfg: Optional[Dict[str, Any]] = None,
                 "verdict": "No closed trades yet — log and close setups to build "
                            "performance history."}
 
-    # Equity curve in R, oldest→newest (only closed trades carry r_multiple).
+    # Equity curve in R, oldest→newest. All closed trades count — imported MT4
+    # fills without a stop loss carry a null R, which we treat as 0R so they
+    # still appear on the curve and in the tallies (consistent with the Journal).
     closed = [s for s in reversed(setups)
-              if s.get("r_multiple") is not None and not s.get("is_open", True)]
+              if not s.get("is_open", True) and s.get("outcome") is not None]
     equity, cum = [], 0.0
     for s in closed:
-        cum += float(s["r_multiple"] or 0.0)
+        cum += float(s.get("r_multiple") or 0.0)
         equity.append({"logged_at": s.get("logged_at"),
                        "instrument": s.get("instrument"),
-                       "r_multiple": float(s["r_multiple"] or 0.0),
+                       "r_multiple": float(s.get("r_multiple") or 0.0),
                        "cum_r": round(cum, 2)})
 
     # Per-instrument R tally.
     by_instrument: Dict[str, float] = defaultdict(float)
     for s in closed:
-        by_instrument[s.get("instrument", "?")] += float(s["r_multiple"] or 0.0)
+        by_instrument[s.get("instrument", "?")] += float(s.get("r_multiple") or 0.0)
+
+    # How the closed trades reached the journal (checklist vs imported fills).
+    by_source = Counter(s.get("source") or "checklist" for s in closed)
 
     wr = stats["win_rate"]
     pf = stats["profit_factor"]
@@ -146,6 +151,11 @@ def trade_performance_report(db_cfg: Optional[Dict[str, Any]] = None,
         f"Profit factor {pf:.2f}; expectancy {stats['expectancy']:+.2f}R/trade.",
         f"Net {cum:+.1f}R across the window.",
     ]
+    if by_source:
+        highlights.append(
+            "Closed trades by source: "
+            + ", ".join(f"{k}×{v}" for k, v in by_source.most_common())
+        )
     if losses.get("blocked"):
         highlights.append(
             f"⛔ Daily loss limit hit ({losses['losses_today']}/{losses['limit']}) "
@@ -168,6 +178,7 @@ def trade_performance_report(db_cfg: Optional[Dict[str, Any]] = None,
         "equity_curve": equity,
         "by_instrument": {k: round(v, 2) for k, v in
                           sorted(by_instrument.items(), key=lambda x: x[1])},
+        "by_source": dict(by_source.most_common()),
         "daily_losses": losses,
         "open_setups": len([s for s in setups if s.get("is_open", True)]),
         "highlights": highlights,

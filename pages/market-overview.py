@@ -4,19 +4,14 @@ from src.pages_lib.navigation import render_sidebar_nav
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import os
 from datetime import datetime
-import json
 import logging
 import traceback
-import smtplib
-import ssl
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from typing import Dict, Tuple, List, Optional
 from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
 from src.core import secrets
+from src.services import alert_service
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
@@ -36,15 +31,9 @@ BloombergTheme.apply()
 logger = logging.getLogger("ForexDashboard")
 
 # ============================================================================
-# EMAIL CONFIGURATION  (read from .streamlit/secrets.toml via src/core/secrets.py)
+# EMAIL ALERTS  — sending + dedupe handled by the shared src/services/alert_service.
+# This page only describes what a signal is and how to render it.
 # ============================================================================
-_EMAIL = secrets.email_config()
-EMAIL_SMTP_HOST = _EMAIL["smtp_host"]
-EMAIL_SMTP_PORT = _EMAIL["smtp_port"]
-EMAIL_USER      = _EMAIL["user"]
-EMAIL_PASSWORD  = _EMAIL["password"]
-EMAIL_SENDER    = _EMAIL["sender"]
-EMAIL_RECIPIENT = _EMAIL["recipient"]
 
 st.markdown("""
 <style>
@@ -85,28 +74,11 @@ def play_alert_sound(bias: str):
     </script>""", height=0)
 
 # ============================================================================
-# NOTIFICATION PERSISTENCE
+# NOTIFICATION PERSISTENCE  — file-backed dedupe via the shared service.
+# Namespace "forex" preserves the existing forex_notify_cache.json file, so
+# previously-alerted signals stay deduped across this change.
 # ============================================================================
-NOTIFY_FILE = os.path.join(os.getcwd(), "forex_notify_cache.json")
-
-
-def load_notified_keys() -> set:
-    try:
-        if os.path.exists(NOTIFY_FILE):
-            with open(NOTIFY_FILE) as fh:
-                data = json.load(fh)
-            return set(data.get("keys", []))
-    except Exception:
-        pass
-    return set()
-
-
-def save_notified_keys(keys: set) -> None:
-    try:
-        with open(NOTIFY_FILE, "w") as fh:
-            json.dump({"keys": sorted(keys)}, fh)
-    except Exception:
-        pass
+_NOTIFY = alert_service.NotifyCache("forex")
 
 
 # ============================================================================
@@ -169,50 +141,37 @@ def _build_email_html(ideas: List[Dict]) -> str:
 
 
 def send_email_alert(new_ideas: List[Dict]) -> None:
-    """Send a formatted HTML email for newly detected high-conviction signals."""
+    """Send a formatted HTML email for newly detected high-conviction signals.
+
+    SMTP delivery and config checks live in alert_service; this only builds the
+    macro-signal subject / plain / HTML bodies.
+    """
     if not new_ideas:
         return
-    if not all([EMAIL_USER, EMAIL_PASSWORD, EMAIL_RECIPIENT]):
-        logger.warning("Email config incomplete — set [gmail] section in .streamlit/secrets.toml")
-        return
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = (
-            f"🚨 {len(new_ideas)} New Signal{'s' if len(new_ideas) != 1 else ''} — "
-            f"{', '.join(i['pair'] for i in new_ideas[:3])}"
-            f"{'…' if len(new_ideas) > 3 else ''}"
+
+    subject = (
+        f"🚨 {len(new_ideas)} New Signal{'s' if len(new_ideas) != 1 else ''} — "
+        f"{', '.join(i['pair'] for i in new_ideas[:3])}"
+        f"{'…' if len(new_ideas) > 3 else ''}"
+    )
+
+    plain_lines = [f"NEW TRADING SIGNALS — {datetime.now().strftime('%Y-%m-%d %H:%M')}", ""]
+    for idea in new_ideas:
+        direction = "LONG" if idea["bias"] == "Long" else "SHORT"
+        plain_lines.append(
+            f"{idea['pair']} {direction}  |  Entry: {idea['entry']:.5f}  |  "
+            f"TP1: {idea['take_profit_1']:.5f}  |  SL: {idea['stop_loss']:.5f}  |  "
+            f"Score: {idea['strength_score']}/10  |  {idea['conviction']}"
         )
-        msg["From"]    = EMAIL_SENDER
-        msg["To"]      = EMAIL_RECIPIENT
+        plain_lines.append(f"  Thesis: {idea.get('thesis','')[:160]}")
+        plain_lines.append("")
 
-        # Plain-text fallback
-        plain_lines = [f"NEW TRADING SIGNALS — {datetime.now().strftime('%Y-%m-%d %H:%M')}",  ""]
-        for idea in new_ideas:
-            direction = "LONG" if idea["bias"] == "Long" else "SHORT"
-            plain_lines.append(
-                f"{idea['pair']} {direction}  |  Entry: {idea['entry']:.5f}  |  "
-                f"TP1: {idea['take_profit_1']:.5f}  |  SL: {idea['stop_loss']:.5f}  |  "
-                f"Score: {idea['strength_score']}/10  |  {idea['conviction']}"
-            )
-            plain_lines.append(f"  Thesis: {idea.get('thesis','')[:160]}")
-            plain_lines.append("")
-
-        msg.attach(MIMEText("\n".join(plain_lines), "plain"))
-        msg.attach(MIMEText(_build_email_html(new_ideas), "html"))
-
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP(EMAIL_SMTP_HOST, EMAIL_SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls(context=ctx)
-            server.login(EMAIL_USER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_SENDER, EMAIL_RECIPIENT, msg.as_string())
-
-        logger.info("Signal email sent to %s (%d ideas)", EMAIL_RECIPIENT, len(new_ideas))
-
-    except smtplib.SMTPAuthenticationError:
-        logger.error("Email auth failed — check smtp_user / smtp_password in secrets.toml")
-    except Exception as exc:
-        logger.error("Email send failed: %s", exc)
+    ok, msg = alert_service.send_email(subject, _build_email_html(new_ideas),
+                                       "\n".join(plain_lines))
+    if ok:
+        logger.info("Signal email sent (%d ideas)", len(new_ideas))
+    else:
+        logger.warning("Signal email not sent: %s", msg)
 
 
 # ============================================================================
@@ -222,7 +181,7 @@ def init_notification_state() -> None:
     if 'data_loaded' not in st.session_state:
         st.session_state.data_loaded = False
     if 'notified_keys' not in st.session_state:
-        st.session_state.notified_keys = load_notified_keys()
+        st.session_state.notified_keys = _NOTIFY.load()
     if 'notification_log' not in st.session_state:
         st.session_state.notification_log = []
     if 'last_refresh' not in st.session_state:
@@ -248,7 +207,7 @@ def check_and_notify(ideas: List[Dict]) -> List[Dict]:
             new_alerts.append(idea)
 
     if new_alerts:
-        save_notified_keys(st.session_state.notified_keys)
+        _NOTIFY.save(st.session_state.notified_keys)
         send_email_alert(new_alerts)   # ← email fired once per unique signal
         play_alert_sound(new_alerts[0]['bias'])
 
@@ -337,11 +296,19 @@ def render_sidebar(fred_api_key: str = "") -> str:
 
         # ── Email alert status ────────────────────────────────────────────────
         st.subheader("📧 Email Alerts")
-        if EMAIL_USER and EMAIL_RECIPIENT:
-            st.success(f"✅ Alerts → {EMAIL_RECIPIENT}")
-            st.caption(f"Sending via {EMAIL_USER}")
+        if alert_service.email_configured():
+            st.success(f"✅ Alerts → {alert_service.email_recipient()}")
+            st.caption(f"Sending via {secrets.email_config().get('user', '')}")
+            if st.button("✉ Send test email", use_container_width=True):
+                ok, msg = alert_service.send_email(
+                    "Market Overview — test alert",
+                    "<p style='font-family:monospace;color:#4af0c4;'>✅ Market Overview email "
+                    "alerts are wired up correctly.</p>",
+                    "Market Overview email alerts are wired up correctly.")
+                (st.success if ok else st.error)(msg)
         else:
-            st.warning("⚠️ Email not configured — add [gmail] to .streamlit/secrets.toml")
+            st.warning("⚠️ Email not configured — add [gmail] to .streamlit/secrets.toml "
+                       "(or set GMAIL_* env vars)")
 
         st.divider()
         log = st.session_state.get('notification_log', [])
@@ -352,7 +319,7 @@ def render_sidebar(fred_api_key: str = "") -> str:
             if st.button("🗑️ Clear Alerts"):
                 st.session_state.notification_log = []
                 st.session_state.notified_keys = set()
-                save_notified_keys(set())
+                _NOTIFY.reset()
                 st.rerun()
         else:
             st.caption("No alerts yet.")

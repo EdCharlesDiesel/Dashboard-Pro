@@ -39,7 +39,14 @@ st.markdown("""
 with st.sidebar:
     st.markdown("### 📑 Reports")
     st.caption("Cross-system intelligence — scans, performance, activity, macro.")
-    window = st.slider("Trade window (closed trades)", 20, 500, 100, step=20)
+    show_all = st.checkbox("Show all trades", value=True,
+                           help="Include every trade in the journal. Uncheck to "
+                                "limit the report to the most recent N closed trades.")
+    if show_all:
+        window = 1_000_000  # effectively unbounded — pull the whole journal
+        st.caption("Window: all trades")
+    else:
+        window = st.slider("Trade window (closed trades)", 20, 2000, 100, step=20)
     if st.button("🔄 Refresh", use_container_width=True, type="primary"):
         st.rerun()
 
@@ -118,7 +125,16 @@ with tab_amd:
 
 # ── Trade performance ──────────────────────────────────────────────────────
 with tab_perf:
-    rep = reporting.trade_performance_report(window=window)
+    # Read the same database the user connected to in the Trade Journal
+    # (shared via session state); fall back to secrets.toml when not connected.
+    _db_cfg = st.session_state.get("journal_db_cfg")
+    if _db_cfg:
+        st.caption(f"Source DB: {_db_cfg['user']}@{_db_cfg['host']}:"
+                   f"{_db_cfg['port']}/{_db_cfg['dbname']} (Trade Journal connection)")
+    else:
+        st.caption("Source DB: secrets.toml [database] — open the Trade Journal "
+                   "and click **Connect & Load** to point Reports at another DB.")
+    rep = reporting.trade_performance_report(db_cfg=_db_cfg, window=window)
     _verdict(rep["verdict"])
     if not rep.get("available"):
         st.warning(rep.get("reason", "Trade journal unavailable."))
@@ -139,6 +155,9 @@ with tab_perf:
         if rep["by_instrument"]:
             st.markdown("**Net R by instrument**")
             st.bar_chart(pd.Series(rep["by_instrument"]), height=240)
+        if rep.get("by_source"):
+            st.markdown("**Closed trades by source**")
+            st.bar_chart(pd.Series(rep["by_source"]), height=200)
     _ai_block("Trade Performance", rep, "perf")
 
 # ── System activity ────────────────────────────────────────────────────────

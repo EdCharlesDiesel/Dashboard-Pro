@@ -1,7 +1,11 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.instruments.registry import INSTRUMENTS
 from src.core import secrets
+from src.db.trade_repository import TradeRepository, DBConfig
+from src.services import mt4_import, account_state
+import os
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -9,6 +13,7 @@ from plotly.subplots import make_subplots
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
     page_title="Trade Journal · Trading System",
@@ -69,9 +74,9 @@ def load_journal_trades(cfg, limit: int = 500):
                    score, verdict, sl_pips, tp1_pips, tp2_pips, rr_tp1,
                    lot_size, risk_amount,
                    entry_price, close_price, outcome, pips_gained, r_multiple,
-                   is_open, checks_passed, checks_total, notes
+                   is_open, checks_passed, checks_total, source, notes
             FROM trade_setups
-            ORDER BY logged_at ASC
+            ORDER BY logged_at DESC
             LIMIT %s
         """, (limit,))
         rows = [dict(r) for r in cur.fetchall()]
@@ -80,6 +85,188 @@ def load_journal_trades(cfg, limit: int = 500):
         return rows
     except Exception:
         return []
+
+
+def _existing_tickets(cfg) -> set:
+    try:
+        return TradeRepository(DBConfig.from_mapping(cfg)).imported_tickets()
+    except Exception:
+        return set()
+
+
+def _ingest_statement(cfg, content: bytes, offset: float) -> dict:
+    """Non-interactive ingest used by the auto-importer: parse, auto-map, import
+    new trades, and apply the statement's account balance. Returns a summary."""
+    bal = mt4_import.parse_mt4_balance(content)
+    if bal is not None:
+        account_state.set_balance(bal, source="MT4 statement")
+
+    trades = mt4_import.parse_mt4_html(content)
+    if not trades:
+        return {"trades": 0, "imported": 0, "balance": bal, "skipped": {}}
+
+    smap = mt4_import.build_symbol_map([t["item"] for t in trades])
+    rows, skipped = mt4_import.to_journal_rows(trades, smap, offset)
+    new_rows = [r for r in rows if r["ticket"] not in _existing_tickets(cfg)]
+    imported = 0
+    if new_rows:
+        repo = TradeRepository(DBConfig.from_mapping(cfg))
+        repo.init_schema()
+        imported = repo.import_mt4_rows(new_rows)
+    return {"trades": len(trades), "imported": imported, "balance": bal, "skipped": skipped}
+
+
+def _do_auto_import(cfg, path: str, offset: float, force: bool) -> None:
+    """Read a watched MT4 file and import it if it changed (or `force`)."""
+    now = datetime.now().strftime("%H:%M:%S")
+    if not os.path.exists(path):
+        st.session_state.mt4_auto_status = f"⚠ {now} · file not found: {path}"
+        return
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError as exc:
+        st.session_state.mt4_auto_status = f"⚠ {now} · cannot read file: {exc}"
+        return
+    if not force and st.session_state.get("mt4_last_mtime") == mtime:
+        st.session_state.mt4_auto_status = f"✓ {now} · file unchanged since last check"
+        return
+    try:
+        with open(path, "rb") as fh:
+            res = _ingest_statement(cfg, fh.read(), offset)
+    except Exception as exc:  # noqa: BLE001
+        st.session_state.mt4_auto_status = f"⚠ {now} · import failed: {exc}"
+        return
+
+    st.session_state.mt4_last_mtime = mtime
+    bal_txt = f" · balance ${res['balance']:,.2f}" if res.get("balance") is not None else ""
+    skip_txt = (" · skipped " + ", ".join(f"{k}×{v}" for k, v in res["skipped"].items())
+                if res.get("skipped") else "")
+    st.session_state.mt4_auto_status = (
+        f"✅ {now} · imported {res['imported']} new ({res['trades']} closed in file)"
+        f"{bal_txt}{skip_txt}")
+    if res["imported"] > 0:
+        st.toast(f"📥 Auto-imported {res['imported']} new trade(s)")
+
+
+def _render_manual_import(cfg, offset: float) -> None:
+    up = st.file_uploader("MT4 statement", type=["htm", "html"], key="mt4_file",
+                          label_visibility="collapsed")
+    if up is None:
+        return
+    content = up.getvalue()
+    try:
+        trades = mt4_import.parse_mt4_html(content)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Couldn't parse this file: {exc}")
+        return
+
+    bal = mt4_import.parse_mt4_balance(content)
+    if bal is not None:
+        account_state.set_balance(bal, source="MT4 statement")
+        st.success(f"💰 Account balance detected: **${bal:,.2f}** — applied to position sizing.")
+
+    if not trades:
+        st.warning("No closed trades found in this statement. "
+                   "Make sure you exported the **Account History** tab.")
+        return
+    st.success(f"Parsed **{len(trades)}** closed trades.")
+
+    # ── Symbol mapping (auto, user-correctable) ───────────────────
+    auto = mt4_import.build_symbol_map([t["item"] for t in trades])
+    st.markdown("**Symbol mapping** — fix any row that didn't auto-map:")
+    map_df = pd.DataFrame([{"MT4 symbol": k, "Maps to": (v or "")} for k, v in auto.items()])
+    edited = st.data_editor(
+        map_df, hide_index=True, use_container_width=True, key="mt4_map",
+        column_config={"MT4 symbol": st.column_config.TextColumn(disabled=True),
+                       "Maps to": st.column_config.SelectboxColumn(
+                           options=[""] + list(INSTRUMENTS.keys()), required=False)})
+    symbol_map = {r["MT4 symbol"]: (r["Maps to"] or None) for _, r in edited.iterrows()}
+
+    rows, skipped = mt4_import.to_journal_rows(trades, symbol_map, offset)
+    new_rows = [r for r in rows if r["ticket"] not in _existing_tickets(cfg)]
+    dup = len(rows) - len(new_rows)
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Mappable", len(rows))
+    c2.metric("New to import", len(new_rows))
+    c3.metric("Already imported", dup)
+    if skipped:
+        st.warning("Skipped (unmapped symbol): "
+                   + ", ".join(f"{k} × {v}" for k, v in skipped.items()))
+
+    if new_rows:
+        prev = pd.DataFrame(new_rows)[
+            ["logged_at", "instrument", "direction", "session", "lot_size",
+             "entry_price", "close_price", "pips_gained", "r_multiple", "outcome"]]
+        st.dataframe(prev.head(50), use_container_width=True, hide_index=True)
+        st.caption("R-multiple is blank where the MT4 row had no Stop Loss (can't infer risk).")
+
+        if st.button(f"✅ Import {len(new_rows)} trades", type="primary", key="mt4_go"):
+            try:
+                repo = TradeRepository(DBConfig.from_mapping(cfg))
+                repo.init_schema()
+                n = repo.import_mt4_rows(new_rows)
+                st.success(f"Imported {n} trades. Reloading…")
+                st.rerun()
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Import failed: {exc}")
+    else:
+        st.info("Nothing new to import — every parsed trade is already in the journal.")
+
+
+def _render_auto_import(cfg, offset: float) -> None:
+    st.caption("Point this at a file MT4 saves its report to (configure MT4 to export on a "
+               "schedule, or re-save over the same path). Every 5 minutes the app re-reads it "
+               "**if it changed** and imports any new closed trades. Uses automatic symbol mapping.")
+    path = st.text_input(
+        "MT4 report file path", value=st.session_state.get("mt4_watch_path", ""),
+        key="mt4_watch_path",
+        placeholder=r"C:\Users\you\AppData\Roaming\MetaQuotes\Terminal\<id>\reports\history.htm")
+    auto_on = st.toggle("🔄 Auto-import every 5 minutes",
+                        value=st.session_state.get("mt4_auto_on", False), key="mt4_auto_on")
+
+    b1, b2 = st.columns(2)
+    if b1.button("Import now", key="mt4_auto_now", disabled=not path, use_container_width=True):
+        _do_auto_import(cfg, path, offset, force=True)
+    if b2.button("↺ Reset watch state", key="mt4_auto_reset", use_container_width=True):
+        st.session_state.pop("mt4_last_mtime", None)
+        st.toast("Watch state reset — next cycle re-reads the file.")
+
+    if auto_on and path:
+        st_autorefresh(interval=5 * 60 * 1000, key="mt4_autorefresh")
+        _do_auto_import(cfg, path, offset, force=False)
+    elif auto_on:
+        st.warning("Enter a file path above to start auto-importing.")
+
+    status = st.session_state.get("mt4_auto_status")
+    if status:
+        st.caption(f"Last check: {status}")
+
+
+def render_mt4_import(cfg):
+    """Upload (or auto-import from a watched file) + parse + map + persist an MT4
+    HTML statement. Imported trades are tagged source='mt4_import'; the
+    statement's account balance is shared to Setup Ranker via account_state."""
+    with st.expander("📥 Import MT4 trade history (HTML statement)", expanded=False):
+        acct = account_state.get()
+        if acct:
+            st.markdown(
+                f"**💰 Live account balance: ${account_state.get_balance():,.2f}** "
+                f"· source: {acct.get('source', '—')} · updated {acct.get('updated_at', '—')}")
+        st.caption("In MT4: **Terminal → Account History → right-click → Save as Report** "
+                   "(or *Save as Detailed Report*).")
+
+        offset = st.number_input(
+            "Broker server UTC offset (hours)", -12.0, 14.0,
+            float(st.session_state.get("mt4_offset", 0.0)), 0.5, key="mt4_offset",
+            help="MT4 times are broker server time (often UTC+2, +3 in summer). "
+                 "Set this so sessions line up — leave 0 if your broker reports UTC.")
+
+        tab_manual, tab_auto = st.tabs(["⬆ Manual upload", "🔄 Auto-import (5 min)"])
+        with tab_manual:
+            _render_manual_import(cfg, offset)
+        with tab_auto:
+            _render_auto_import(cfg, offset)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -140,17 +327,25 @@ if not st.session_state.get("journal_db_ok"):
     st.stop()
 
 _cfg = st.session_state.get("journal_db_cfg", db_cfg)
+
+render_mt4_import(_cfg)
+
 raw = load_journal_trades(_cfg, limit=show_n)
 
 if not raw:
-    st.warning("No trades found in the database. Save some setups from the Checklist page first.")
+    st.warning("No trades found yet. Import an MT4 statement above, or save setups from the Checklist page.")
     st.stop()
 
 df_all = pd.DataFrame(raw)
 df_all["logged_at"] = pd.to_datetime(df_all["logged_at"])
+if "source" not in df_all.columns:
+    df_all["source"] = "checklist"
+df_all["source"] = df_all["source"].fillna("checklist")
 
-# Closed trades only for analytics
+# Closed trades only for analytics. Imported broker fills without a Stop Loss
+# carry a null R — treat as 0R for cumulative math; they still count by outcome.
 df_closed = df_all[df_all["outcome"].notna() & (df_all["is_open"] == False)].copy()
+df_closed["r_multiple"] = df_closed["r_multiple"].fillna(0)
 df_open = df_all[df_all["is_open"] != False].copy()
 
 n_total = len(df_all)
@@ -627,7 +822,7 @@ with tab_log:
     st.markdown('<div class="section-title">📋 Full Trade Log</div>', unsafe_allow_html=True)
 
     # Filter controls
-    fc1, fc2, fc3, fc4 = st.columns(4)
+    fc1, fc2, fc3, fc4, fc5 = st.columns(5)
     with fc1:
         f_outcome = st.multiselect("Outcome", ["WIN", "LOSS", "BE", "OPEN"],
                                    default=["WIN", "LOSS", "BE", "OPEN"])
@@ -639,6 +834,10 @@ with tab_log:
     with fc4:
         all_sessions = sorted(df_all["session"].dropna().unique().tolist())
         f_sessions = st.multiselect("Session", all_sessions, default=all_sessions)
+    with fc5:
+        all_sources = sorted(df_all["source"].dropna().unique().tolist())
+        f_sources = st.multiselect("Source", all_sources, default=all_sources,
+                                   help="checklist = logged in-app · mt4_import = imported broker fills")
 
     # Apply filters
     df_view = df_all.copy()
@@ -655,6 +854,8 @@ with tab_log:
         df_view = df_view[df_view["instrument"].isin(f_pairs)]
     if f_sessions:
         df_view = df_view[df_view["session"].isin(f_sessions)]
+    if f_sources:
+        df_view = df_view[df_view["source"].isin(f_sources)]
 
     df_view = df_view.sort_values("logged_at", ascending=False).copy()
     df_view["logged_at"] = df_view["logged_at"].dt.strftime("%Y-%m-%d %H:%M")
@@ -683,6 +884,7 @@ with tab_log:
             "risk_amount": st.column_config.NumberColumn("Risk $", format="%.2f"),
             "checks_passed": st.column_config.NumberColumn("✅", width="small"),
             "is_open": st.column_config.CheckboxColumn("Open", width="small"),
+            "source": st.column_config.TextColumn("Source", width="small"),
             "notes": st.column_config.TextColumn("Notes", width="large"),
         },
     )

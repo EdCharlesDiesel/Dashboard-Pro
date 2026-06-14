@@ -80,7 +80,10 @@
       "Bash(grep -iE 'forex_notify_cache|\\\\.err$|\\\\.log$|logs/')",
       "Bash(git rm *)",
       "Bash(grep -iE '\\\\.err$|streamlit_run')",
-      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)"
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)",
+      "Bash(docker compose *)",
+      "Bash(git check-ignore *)",
+      "Bash(docker run *)"
     ]
   }
 }
