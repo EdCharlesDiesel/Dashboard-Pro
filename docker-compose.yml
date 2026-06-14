@@ -19,14 +19,16 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-trading}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # postgres:18+ stores data under /var/lib/postgresql (version subdir),
+      # not /var/lib/postgresql/data as in 16 and earlier.
+      - pgdata:/var/lib/postgresql
     ports:
       # Exposed on the host for inspection (psql/GUI). Remove to keep DB internal.
       - "5432:5432"
