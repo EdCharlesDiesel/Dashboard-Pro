@@ -83,7 +83,15 @@
       "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)",
       "Bash(docker compose *)",
       "Bash(git check-ignore *)",
-      "Bash(docker run *)"
+      "Bash(docker run *)",
+      "Bash(mkdir -p backups)",
+      "Bash(printf '\\\\n# DB dumps — contain real data, never commit\\\\nbackups/\\\\n')",
+      "Bash(export MSYS_NO_PATHCONV=1)",
+      "Bash(docker rm *)",
+      "Bash(docker exec *)",
+      "Bash(docker volume *)",
+      "Bash(docker cp *)",
+      "Bash(docker stop *)"
     ]
   }
 }
