@@ -66,6 +66,10 @@ section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!i
 }
 
 hr{ border-color:#2a2a2a; }
+
+/* Multiselect / tag readability (black text on accent) */
+span[data-baseweb="tag"] span{ color:#000000 !important; font-weight:600 !important; }
+span[data-baseweb="tag"] svg{ fill:#000000 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -482,8 +486,8 @@ with tab_scan:
                 "Zones":       r.get("num_zones", 0) if r.get("ok") else "—",
                 "Strong":      r.get("strong", 0)    if r.get("ok") else "—",
                 "Status":      "Strong" if r.get("strong", 0) > 0
-                               else "Moderate" if r.get("num_zones", 0) > 0
-                               else "None" if r.get("ok") else "Error",
+                else "Moderate" if r.get("num_zones", 0) > 0
+                else "None" if r.get("ok") else "Error",
             })
         st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
 
@@ -578,29 +582,23 @@ with tab_detail:
                     '📌 PDH/PDL</span>'
                 ) if zone.get("key_level") else ""
 
+                # NOTE: built as concatenated single-line string literals (no leading
+                # indentation / no blank lines) so Streamlit's Markdown parser never
+                # treats the HTML as an indented code block — even when an interpolated
+                # value such as key_zone_badge is empty.
                 st.markdown(
-                    f"""
-                    <div class="metric-card">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <span style="font-size:1.2em; font-weight:700; color:#e2e8f0;">
-                                    {zone["value"]:,.4f}
-                                </span>
-                                &nbsp;&nbsp;
-                                <span style="color:#6b7a99; font-size:0.85em;">
-                                    {direction} {abs(zone["distance_pct"]):.2f}% from price
-                                </span>
-                                {key_zone_badge}
-                            </div>
-                            <span class="confluence-badge {extra_badge}">
-                                {strength_label} · {len(zone["sources"])} sources
-                            </span>
-                        </div>
-                        <div style="margin-top:8px; font-size:0.78em; color:#4a6080;">
-                            {labels_text}
-                        </div>
-                    </div>
-                    """,
+                    f'<div class="metric-card">'
+                    f'<div style="display:flex; justify-content:space-between; align-items:center;">'
+                    f'<div>'
+                    f'<span style="font-size:1.2em; font-weight:700; color:#e2e8f0;">{zone["value"]:,.4f}</span>'
+                    f'&nbsp;&nbsp;'
+                    f'<span style="color:#6b7a99; font-size:0.85em;">{direction} {abs(zone["distance_pct"]):.2f}% from price</span>'
+                    f'{key_zone_badge}'
+                    f'</div>'
+                    f'<span class="confluence-badge {extra_badge}">{strength_label} · {len(zone["sources"])} sources</span>'
+                    f'</div>'
+                    f'<div style="margin-top:8px; font-size:0.78em; color:#4a6080;">{labels_text}</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
         else:
@@ -817,16 +815,16 @@ with tab_detail:
             rows = []
             for label, value in fib_levels.items():
                 rows.append({"Type": "Fibonacci", "Label": label,
-                              "Level": round(float(value), 6),
-                              "Δ% from Price": round((float(value) - current_price) / current_price * 100, 3)})
+                             "Level": round(float(value), 6),
+                             "Δ% from Price": round((float(value) - current_price) / current_price * 100, 3)})
             for label, value in pivots.items():
                 rows.append({"Type": "Pivot", "Label": label,
-                              "Level": round(float(value), 6),
-                              "Δ% from Price": round((float(value) - current_price) / current_price * 100, 3)})
+                             "Level": round(float(value), 6),
+                             "Δ% from Price": round((float(value) - current_price) / current_price * 100, 3)})
             for label, value in ema_values.items():
                 rows.append({"Type": "EMA", "Label": label,
-                              "Level": round(float(value), 6),
-                              "Δ% from Price": round((float(value) - current_price) / current_price * 100, 3)})
+                             "Level": round(float(value), 6),
+                             "Δ% from Price": round((float(value) - current_price) / current_price * 100, 3)})
 
             ref_df = pd.DataFrame(rows).sort_values("Level", ascending=False)
             st.dataframe(ref_df, use_container_width=True, hide_index=True)
