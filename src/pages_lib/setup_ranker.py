@@ -17,7 +17,7 @@ import yfinance as yf
 from src.core.signals import score_setup
 from src.instruments import INSTRUMENTS, TYPICAL_SPREADS
 from src.pages_lib.base import BloombergPage, PageContext
-from src.services import RiskService
+from src.services import RiskService, alert_service
 from src.ui.components import (
     CommandBar, MetricCell, Panel, ProgressBar, render_metric_row,
 )
@@ -163,6 +163,9 @@ class SetupRankerPage(BloombergPage):
         # Shared with the checklist so account settings carry across pages.
         st.session_state.setdefault("account_bal", 10000.0)
         st.session_state.setdefault("risk_pct", 1.0)
+        # Email alerts (opt-in).
+        st.session_state.setdefault("sr_email_on", False)
+        st.session_state.setdefault("sr_email_min", 8)
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
 
     def sidebar(self, ctx: PageContext) -> None:
@@ -231,6 +234,42 @@ class SetupRankerPage(BloombergPage):
             st.rerun()
         st.caption(f"◷ {datetime.now().strftime('%H:%M')} · TTL 5min")
 
+        # ── Email alerts ──────────────────────────────────────────────
+        st.divider()
+        st.markdown(
+            '<div style="color:#00ff41;font-weight:700;letter-spacing:0.15em;'
+            'text-transform:uppercase;font-size:11px;">EMAIL ALERTS</div>',
+            unsafe_allow_html=True,
+        )
+        st.session_state.sr_email_on = st.toggle(
+            "📧 Email new high-score setups",
+            value=st.session_state.sr_email_on,
+            help="On each scan, email any newly-appearing setup scoring at or above "
+                 "the threshold. Each unique pair/direction/price fires once.",
+        )
+        st.session_state.sr_email_min = st.slider(
+            "Alert when score ≥", 6, 10, int(st.session_state.sr_email_min),
+        )
+        if alert_service.email_configured():
+            st.caption(f"✅ Alerts → {alert_service.email_recipient()}")
+        else:
+            st.caption("⚠ Set [gmail] in secrets.toml (or GMAIL_* env vars) to enable.")
+        c_test, c_reset = st.columns(2)
+        with c_test:
+            if st.button("✉ Test", use_container_width=True):
+                ok, msg = alert_service.send_email(
+                    "Setup Ranker — test alert",
+                    "<p style='font-family:monospace;color:#0a0;'>✅ Setup Ranker email alerts "
+                    "are wired up correctly.</p>",
+                    "Setup Ranker email alerts are wired up correctly.",
+                )
+                (st.success if ok else st.error)(msg)
+        with c_reset:
+            if st.button("↺ Reset", use_container_width=True,
+                         help="Clear the 'already-alerted' memory so current setups can re-fire."):
+                alert_service.NotifyCache("setup_ranker").reset()
+                st.toast("Alert memory cleared.")
+
     def body(self, ctx: PageContext) -> None:
         direction = st.session_state.sr_direction
         min_score = st.session_state.sr_min_score
@@ -254,6 +293,10 @@ class SetupRankerPage(BloombergPage):
 
         directions = ["LONG", "SHORT"] if direction == "Both" else [direction]
         results = self._scan(pairs, directions, min_score)
+
+        # Fire email alerts for newly-appearing high-score setups (opt-in).
+        if st.session_state.get("sr_email_on"):
+            self._maybe_email_alerts(results, rr_ratio, account_bal, risk_pct)
 
         # KPI strip
         grade_counts = {
@@ -315,6 +358,98 @@ class SetupRankerPage(BloombergPage):
         prog.empty()
         results.sort(key=lambda x: -x["score"])
         return results
+
+    # ── Email alerts ──────────────────────────────────────────────────────
+    @classmethod
+    def _maybe_email_alerts(cls, results, rr_ratio, account_bal, risk_pct) -> None:
+        """Email setups scoring ≥ threshold that we haven't alerted on yet. The
+        'seen' memory is only updated after a successful send, so a transient
+        SMTP failure retries on the next scan instead of silently dropping."""
+        threshold = int(st.session_state.get("sr_email_min", 8))
+        qualifying = [r for r in results if r.get("score", 0) >= threshold]
+        if not qualifying:
+            return
+
+        keys = [f"{r['pair']}|{r['direction']}|{float(r['close']):.4f}" for r in qualifying]
+        cache = alert_service.NotifyCache("setup_ranker")
+        seen = cache.load()
+        fresh = [(r, k) for r, k in zip(qualifying, keys) if k not in seen]
+        if not fresh:
+            return
+
+        setups = [r for r, _ in fresh]
+        html, plain = cls._build_alert_email(setups, rr_ratio, account_bal, risk_pct, threshold)
+        subject = (
+            f"🎰 {len(setups)} new setup{'s' if len(setups) != 1 else ''} ≥{threshold}/10 — "
+            f"{', '.join(r['pair'] for r in setups[:3])}{'…' if len(setups) > 3 else ''}"
+        )
+        ok, msg = alert_service.send_email(subject, html, plain)
+        if ok:
+            cache.filter_new([k for _, k in fresh])  # mark as alerted only now
+            st.toast(f"📧 Emailed {len(setups)} new setup(s) to {alert_service.email_recipient()}",
+                     icon="📧")
+        else:
+            st.toast(f"⚠ Alert email failed: {msg}", icon="⚠️")
+
+    @staticmethod
+    def _build_alert_email(setups, rr_ratio, account_bal, risk_pct, threshold):
+        """Render (html, plain) bodies for a batch of new setups."""
+        rows_html, plain_lines = "", []
+        for r in setups:
+            inst = INSTRUMENTS.get(r["pair"])
+            pip_size = inst.pip_size if inst else None
+            pip_value = inst.pip if inst else None
+            lv = trade_levels(r["close"], r.get("sl_pips"), pip_size, r["direction"], rr_ratio)
+            mb = money_breakdown(r.get("sl_pips"), pip_value, account_bal, risk_pct, rr_ratio)
+            d_color = "#26a69a" if r["direction"] == "LONG" else "#ef5350"
+            arrow = "📈 LONG" if r["direction"] == "LONG" else "📉 SHORT"
+            win_txt = f"+${mb['win']:,.0f}" if mb["win"] is not None else "—"
+            risk_txt = f"${mb['risk_amt']:,.0f}" if mb["risk_amt"] is not None else "—"
+            lot_txt = f"{mb['lot']:.2f}" if mb["lot"] is not None else "—"
+            rows_html += f"""
+            <tr style="border-bottom:1px solid #2d3148;">
+              <td style="padding:9px 12px;font-weight:700;color:#e0e0e0;">{r['pair']}</td>
+              <td style="padding:9px 12px;color:{d_color};font-weight:700;">{arrow}</td>
+              <td style="padding:9px 12px;color:#ffa726;font-weight:700;">{r['score']}/10
+                  <span style="color:#8b8fa8;font-size:11px;">({r['grade']})</span></td>
+              <td style="padding:9px 12px;color:#e0e0e0;">{fmt_price(r['close'])}</td>
+              <td style="padding:9px 12px;color:#ef5350;">{fmt_price(lv['sl_price'])}
+                  <span style="color:#8b8fa8;font-size:11px;">{r.get('sl_pips','—')}p</span></td>
+              <td style="padding:9px 12px;color:#26a69a;">{fmt_price(lv['tp_price'])}
+                  <span style="color:#8b8fa8;font-size:11px;">{rr_ratio:.1f}R</span></td>
+              <td style="padding:9px 12px;color:#8b8fa8;">{lot_txt} lot · {risk_txt} risk · {win_txt}</td>
+            </tr>"""
+            plain_lines.append(
+                f"{r['pair']} {r['direction']}  |  Score {r['score']}/10 ({r['grade']})  |  "
+                f"Entry {fmt_price(r['close'])}  SL {fmt_price(lv['sl_price'])}  "
+                f"TP {fmt_price(lv['tp_price'])} ({rr_ratio:.1f}R)  |  "
+                f"{lot_txt} lot · risk {risk_txt} · win {win_txt}"
+            )
+
+        html = f"""<!DOCTYPE html><html><body style="background:#0e1117;
+          font-family:'Courier New',monospace;color:#c0c0c0;margin:0;padding:20px;">
+          <div style="max-width:820px;margin:0 auto;">
+            <h2 style="color:#00ff41;border-bottom:1px solid #2d3148;padding-bottom:10px;">
+              🎰 Setup Ranker — {len(setups)} New Setup{'s' if len(setups) != 1 else ''} ≥ {threshold}/10
+            </h2>
+            <p style="color:#8b8fa8;font-size:13px;">
+              Detected {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ·
+              sizing at {risk_pct:.2f}% of ${account_bal:,.0f}
+            </p>
+            <table style="width:100%;border-collapse:collapse;background:#1a1d27;border-radius:8px;overflow:hidden;">
+              <thead><tr style="background:#000000;">
+                {''.join(f'<th style="padding:9px 12px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">{h}</th>' for h in ('PAIR','DIR','SCORE','ENTRY','STOP','TARGET','SIZING'))}
+              </tr></thead>
+              <tbody>{rows_html}</tbody>
+            </table>
+            <p style="color:#8b8fa8;font-size:11px;margin-top:22px;border-top:1px solid #2d3148;padding-top:12px;">
+              Entry ≈ current close · confirm on the 15M trigger before executing ·
+              each unique pair/direction/price alerts once.
+            </p>
+          </div></body></html>"""
+        plain = (f"SETUP RANKER — {len(setups)} new setup(s) ≥ {threshold}/10 "
+                 f"({datetime.now().strftime('%Y-%m-%d %H:%M')})\n\n" + "\n".join(plain_lines))
+        return html, plain
 
     @staticmethod
     def _render_cards(results, rr_ratio, account_bal, risk_pct) -> None:

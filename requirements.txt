@@ -14,6 +14,7 @@ pytz==2026.2
 psycopg2-binary==2.9.12
 pandas_datareader==0.10.0
 statsmodels==0.14.6
+lxml==6.1.1  # HTML parsing backend for pandas.read_html (MT4 statement import)
 # anthropic: optional — powers AI report summaries (src/core/ai_reports.py),
 # which self-disable when it's absent. Not installed in the working venv, so
 # left unpinned; pin once installed.
