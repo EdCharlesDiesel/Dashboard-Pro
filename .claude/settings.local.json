@@ -81,7 +81,9 @@
       "Bash(git rm *)",
       "Bash(grep -iE '\\\\.err$|streamlit_run')",
       "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)",
-      "Bash(docker compose *)"
+      "Bash(docker compose *)",
+      "Bash(git check-ignore *)",
+      "Bash(docker run *)"
     ]
   }
 }

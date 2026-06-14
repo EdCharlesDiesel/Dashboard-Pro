@@ -17,7 +17,7 @@ import yfinance as yf
 from src.core.signals import score_setup
 from src.instruments import INSTRUMENTS, TYPICAL_SPREADS
 from src.pages_lib.base import BloombergPage, PageContext
-from src.services import RiskService, alert_service
+from src.services import RiskService, alert_service, account_state
 from src.ui.components import (
     CommandBar, MetricCell, Panel, ProgressBar, render_metric_row,
 )
@@ -161,8 +161,12 @@ class SetupRankerPage(BloombergPage):
         st.session_state.setdefault("sr_rr_ratio", 2.0)
         st.session_state.setdefault("sr_pairs", INSTRUMENTS.keys())
         # Shared with the checklist so account settings carry across pages.
-        st.session_state.setdefault("account_bal", 10000.0)
+        # Default to the live balance from the Trade Journal (MT4 statement) when
+        # one has been recorded, otherwise the historical $10k default.
+        st.session_state.setdefault("account_bal", account_state.get_balance(10000.0))
         st.session_state.setdefault("risk_pct", 1.0)
+        # Use the Trade Journal's live balance by default when it's available.
+        st.session_state.setdefault("sr_use_live_bal", bool(account_state.get()))
         # Email alerts (opt-in).
         st.session_state.setdefault("sr_email_on", False)
         st.session_state.setdefault("sr_email_min", 8)
@@ -220,10 +224,34 @@ class SetupRankerPage(BloombergPage):
             "TP R:R", options=[1.0, 1.5, 2.0, 2.5, 3.0],
             value=st.session_state.sr_rr_ratio,
         )
-        st.session_state.account_bal = st.number_input(
-            "Account balance ($)", min_value=0.0, step=500.0,
-            value=float(st.session_state.account_bal),
+        # ── Account balance: live from Trade Journal, or manual ───────
+        acct = account_state.get()
+        live_bal = account_state.get_balance(0.0)
+        has_live = bool(acct) and live_bal > 0
+        use_live = st.checkbox(
+            "🔗 Use live balance from Trade Journal",
+            value=bool(st.session_state.get("sr_use_live_bal", has_live)) and has_live,
+            disabled=not has_live,
+            help="Reads the balance imported from your MT4 statement so sizing reflects "
+                 "your real account. Uncheck to enter a balance manually.",
         )
+        st.session_state.sr_use_live_bal = use_live
+        if use_live and has_live:
+            st.session_state.account_bal = live_bal
+            st.markdown(
+                f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;">'
+                f'BAL <span style="color:#00ff41;font-weight:700;">${live_bal:,.2f}</span> '
+                f'<span style="color:#9a9a9a;font-size:10px;">live · '
+                f'{acct.get("source", "")} · {acct.get("updated_at", "")[-8:]}</span></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            if not has_live:
+                st.caption("No live balance yet — import an MT4 statement in the Trade Journal.")
+            st.session_state.account_bal = st.number_input(
+                "Account balance ($)", min_value=0.0, step=500.0,
+                value=float(st.session_state.account_bal),
+            )
         st.session_state.risk_pct = st.slider(
             "Risk % / trade", 0.25, 5.0,
             float(st.session_state.risk_pct), 0.25,

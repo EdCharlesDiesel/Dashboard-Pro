@@ -14,4 +14,6 @@ logs/
 *.jpeg
 *.webm
 forex_notify_cache.json
+*_notify_cache.json
+account_state.json
 .streamlit/secrets.toml
