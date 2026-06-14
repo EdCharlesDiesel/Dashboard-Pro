@@ -170,6 +170,8 @@ class SetupRankerPage(BloombergPage):
         # Email alerts (opt-in).
         st.session_state.setdefault("sr_email_on", False)
         st.session_state.setdefault("sr_email_min", 8)
+        # User's house rule: every signal is taken as 2 trades.
+        st.session_state.setdefault("sr_trades_per_signal", 2)
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
 
     def sidebar(self, ctx: PageContext) -> None:
@@ -277,6 +279,12 @@ class SetupRankerPage(BloombergPage):
         )
         st.session_state.sr_email_min = st.slider(
             "Alert when score ≥", 6, 10, int(st.session_state.sr_email_min),
+        )
+        st.session_state.sr_trades_per_signal = st.number_input(
+            "Trades per signal", min_value=1, max_value=10,
+            value=int(st.session_state.sr_trades_per_signal), step=1,
+            help="Position sizing and projected account growth in the alert are "
+                 "multiplied by this. Defaults to 2 (your house rule).",
         )
         if alert_service.email_configured():
             st.caption(f"✅ Alerts → {alert_service.email_recipient()}")
@@ -406,7 +414,9 @@ class SetupRankerPage(BloombergPage):
             return
 
         setups = [r for r, _ in fresh]
-        html, plain = cls._build_alert_email(setups, rr_ratio, account_bal, risk_pct, threshold)
+        n_trades = int(st.session_state.get("sr_trades_per_signal", 2))
+        html, plain = cls._build_alert_email(
+            setups, rr_ratio, account_bal, risk_pct, threshold, n_trades)
         subject = (
             f"🎰 {len(setups)} new setup{'s' if len(setups) != 1 else ''} ≥{threshold}/10 — "
             f"{', '.join(r['pair'] for r in setups[:3])}{'…' if len(setups) > 3 else ''}"
@@ -420,20 +430,43 @@ class SetupRankerPage(BloombergPage):
             st.toast(f"⚠ Alert email failed: {msg}", icon="⚠️")
 
     @staticmethod
-    def _build_alert_email(setups, rr_ratio, account_bal, risk_pct, threshold):
-        """Render (html, plain) bodies for a batch of new setups."""
+    def _build_alert_email(setups, rr_ratio, account_bal, risk_pct, threshold,
+                           trades_per_signal=2):
+        """Render (html, plain) bodies for a batch of new setups.
+
+        Sizing and projected account growth assume ``trades_per_signal`` trades
+        per signal (the user takes 2 per signal). 'Growth' is the account gain if
+        a signal's trades all hit TP; the footer totals it across all setups.
+        """
+        n = max(1, int(trades_per_signal))
         rows_html, plain_lines = "", []
+        total_win = 0.0   # if every alerted signal hits TP (n trades each)
+        total_risk = 0.0  # if every alerted signal hits SL (n trades each)
         for r in setups:
             inst = INSTRUMENTS.get(r["pair"])
             pip_size = inst.pip_size if inst else None
             pip_value = inst.pip if inst else None
             lv = trade_levels(r["close"], r.get("sl_pips"), pip_size, r["direction"], rr_ratio)
             mb = money_breakdown(r.get("sl_pips"), pip_value, account_bal, risk_pct, rr_ratio)
+
+            # Combined figures for n trades taken on this one signal.
+            win_c = mb["win"] * n if mb["win"] is not None else None
+            risk_c = mb["risk_amt"] * n if mb["risk_amt"] is not None else None
+            lot_c = mb["lot"] * n if mb["lot"] is not None else None
+            if win_c is not None:
+                total_win += win_c
+            if risk_c is not None:
+                total_risk += risk_c
+            grow_pct = (win_c / account_bal * 100) if (win_c is not None and account_bal) else None
+
             d_color = "#26a69a" if r["direction"] == "LONG" else "#ef5350"
             arrow = "📈 LONG" if r["direction"] == "LONG" else "📉 SHORT"
-            win_txt = f"+${mb['win']:,.0f}" if mb["win"] is not None else "—"
-            risk_txt = f"${mb['risk_amt']:,.0f}" if mb["risk_amt"] is not None else "—"
-            lot_txt = f"{mb['lot']:.2f}" if mb["lot"] is not None else "—"
+            win_txt = f"+${win_c:,.0f}" if win_c is not None else "—"
+            risk_txt = f"${risk_c:,.0f}" if risk_c is not None else "—"
+            lot_txt = f"{lot_c:.2f}" if lot_c is not None else "—"
+            grow_txt = (f"+${win_c:,.0f} <span style='color:#8b8fa8;'>(+{grow_pct:.2f}%)</span>"
+                        if grow_pct is not None else "—")
+            grow_plain = f"+${win_c:,.0f} (+{grow_pct:.2f}%)" if grow_pct is not None else "—"
             rows_html += f"""
             <tr style="border-bottom:1px solid #2d3148;">
               <td style="padding:9px 12px;font-weight:700;color:#e0e0e0;">{r['pair']}</td>
@@ -445,14 +478,33 @@ class SetupRankerPage(BloombergPage):
                   <span style="color:#8b8fa8;font-size:11px;">{r.get('sl_pips','—')}p</span></td>
               <td style="padding:9px 12px;color:#26a69a;">{fmt_price(lv['tp_price'])}
                   <span style="color:#8b8fa8;font-size:11px;">{rr_ratio:.1f}R</span></td>
-              <td style="padding:9px 12px;color:#8b8fa8;">{lot_txt} lot · {risk_txt} risk · {win_txt}</td>
+              <td style="padding:9px 12px;color:#8b8fa8;">{n}× {lot_txt} lot · {risk_txt} risk</td>
+              <td style="padding:9px 12px;color:#26a69a;font-weight:700;">{grow_txt}</td>
             </tr>"""
             plain_lines.append(
                 f"{r['pair']} {r['direction']}  |  Score {r['score']}/10 ({r['grade']})  |  "
                 f"Entry {fmt_price(r['close'])}  SL {fmt_price(lv['sl_price'])}  "
                 f"TP {fmt_price(lv['tp_price'])} ({rr_ratio:.1f}R)  |  "
-                f"{lot_txt} lot · risk {risk_txt} · win {win_txt}"
+                f"{n}× {lot_txt} lot · risk {risk_txt} · GROWTH {grow_plain}"
             )
+
+        new_bal = account_bal + total_win
+        total_grow_pct = (total_win / account_bal * 100) if account_bal else 0.0
+        summary_html = (
+            f"<div style='margin-top:18px;padding:14px 16px;background:#0d2f1a;"
+            f"border:1px solid #00a32a;border-radius:8px;color:#e0e0e0;'>"
+            f"💰 <b>If all {len(setups)} signal{'s' if len(setups) != 1 else ''} hit TP "
+            f"({n} trade{'s' if n != 1 else ''} each):</b> "
+            f"account grows <b style='color:#00ff41;'>+${total_win:,.0f} (+{total_grow_pct:.2f}%)</b> "
+            f"→ <b style='color:#00ff41;'>${new_bal:,.0f}</b>"
+            f"<br><span style='color:#8b8fa8;font-size:12px;'>Worst case if all hit SL: "
+            f"−${total_risk:,.0f} → ${account_bal - total_risk:,.0f}</span></div>"
+        )
+        summary_plain = (
+            f"\nIF ALL HIT TP ({n} trades/signal): +${total_win:,.0f} "
+            f"(+{total_grow_pct:.2f}%) -> ${new_bal:,.0f}\n"
+            f"Worst case all SL: -${total_risk:,.0f} -> ${account_bal - total_risk:,.0f}"
+        )
 
         html = f"""<!DOCTYPE html><html><body style="background:#0e1117;
           font-family:'Courier New',monospace;color:#c0c0c0;margin:0;padding:20px;">
@@ -462,21 +514,24 @@ class SetupRankerPage(BloombergPage):
             </h2>
             <p style="color:#8b8fa8;font-size:13px;">
               Detected {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ·
-              sizing at {risk_pct:.2f}% of ${account_bal:,.0f}
+              sizing at {risk_pct:.2f}% of ${account_bal:,.0f} · {n} trades per signal
             </p>
             <table style="width:100%;border-collapse:collapse;background:#1a1d27;border-radius:8px;overflow:hidden;">
               <thead><tr style="background:#000000;">
-                {''.join(f'<th style="padding:9px 12px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">{h}</th>' for h in ('PAIR','DIR','SCORE','ENTRY','STOP','TARGET','SIZING'))}
+                {''.join(f'<th style="padding:9px 12px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">{h}</th>' for h in ('PAIR','DIR','SCORE','ENTRY','STOP','TARGET','SIZING','GROWTH'))}
               </tr></thead>
               <tbody>{rows_html}</tbody>
             </table>
+            {summary_html}
             <p style="color:#8b8fa8;font-size:11px;margin-top:22px;border-top:1px solid #2d3148;padding-top:12px;">
               Entry ≈ current close · confirm on the 15M trigger before executing ·
               each unique pair/direction/price alerts once.
             </p>
           </div></body></html>"""
         plain = (f"SETUP RANKER — {len(setups)} new setup(s) ≥ {threshold}/10 "
-                 f"({datetime.now().strftime('%Y-%m-%d %H:%M')})\n\n" + "\n".join(plain_lines))
+                 f"({datetime.now().strftime('%Y-%m-%d %H:%M')})\n"
+                 f"Sizing {risk_pct:.2f}% · {n} trades/signal\n\n"
+                 + "\n".join(plain_lines) + "\n" + summary_plain)
         return html, plain
 
     @staticmethod

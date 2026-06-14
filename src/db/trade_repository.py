@@ -50,6 +50,7 @@ class TradeRepository:
         "r_multiple  FLOAT",
         "is_open     BOOLEAN DEFAULT TRUE",
         "source      VARCHAR(20) DEFAULT 'checklist'",
+        "profit      FLOAT",
     )
 
     CREATE_SQL = """
@@ -145,17 +146,17 @@ class TradeRepository:
             INSERT INTO trade_setups (
                 logged_at, instrument, ticker, direction, session, lot_size,
                 entry_price, close_price, outcome, pips_gained, r_multiple,
-                sl_pips, is_open, source, notes
+                sl_pips, is_open, source, notes, profit
             ) VALUES (
                 %(logged_at)s, %(instrument)s, %(ticker)s, %(direction)s, %(session)s, %(lot_size)s,
                 %(entry_price)s, %(close_price)s, %(outcome)s, %(pips_gained)s, %(r_multiple)s,
-                %(sl_pips)s, FALSE, 'mt4_import', %(notes)s
+                %(sl_pips)s, FALSE, 'mt4_import', %(notes)s, %(profit)s
             )
         """
         payload = [{k: r.get(k) for k in (
             "logged_at", "instrument", "ticker", "direction", "session", "lot_size",
             "entry_price", "close_price", "outcome", "pips_gained", "r_multiple",
-            "sl_pips", "notes")} for r in rows]
+            "sl_pips", "notes", "profit")} for r in rows]
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
             psycopg2.extras.execute_batch(cur, sql, payload)
             conn.commit()
@@ -197,7 +198,7 @@ class TradeRepository:
                    rr_tp1, rr_tp2, account_bal, risk_pct, checks_passed,
                    checks_total, checks_detail, notes,
                    entry_price, close_price, outcome, pips_gained,
-                   r_multiple, is_open, source
+                   r_multiple, is_open, source, profit
             FROM trade_setups
             ORDER BY logged_at DESC
             LIMIT %s
@@ -279,3 +280,38 @@ class TradeRepository:
             "avg_win_r": avg_win_r, "avg_loss_r": avg_loss_r,
             "expectancy": expectancy, "profit_factor": pf,
         }
+
+    def realized_pnl(self, limit: int = 100_000) -> Dict[str, Any]:
+        """Realised account-currency P/L summed across all closed trades.
+
+        Per-trade P/L uses the broker's stored ``profit`` when available (most
+        exact — it includes swap/commission); otherwise it derives the figure
+        from ``pips_gained × pip_value × lot_size``, which matches the app's risk
+        model (``risk_amount = lot × sl_pips × pip_value``). Trades missing the
+        data needed for either path are skipped and counted separately.
+
+        Returns ``{pnl, trades, counted, skipped}``.
+        """
+        from src.instruments.registry import INSTRUMENTS
+
+        rows = self.load_setups(limit=limit)
+        pnl = 0.0
+        counted = skipped = 0
+        for r in rows:
+            if r.get("is_open", True) is True or r.get("outcome") is None:
+                continue  # only realised, closed trades
+            profit = r.get("profit")
+            if profit is not None:
+                pnl += float(profit)
+                counted += 1
+                continue
+            pips = r.get("pips_gained")
+            lot = r.get("lot_size")
+            inst = INSTRUMENTS.get(r.get("instrument") or "")
+            if pips is None or lot is None or inst is None:
+                skipped += 1
+                continue
+            pnl += float(pips) * float(inst.pip) * float(lot)
+            counted += 1
+        return {"pnl": round(pnl, 2), "trades": counted + skipped,
+                "counted": counted, "skipped": skipped}

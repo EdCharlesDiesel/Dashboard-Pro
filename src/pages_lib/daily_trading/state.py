@@ -7,6 +7,7 @@ from typing import Dict
 import streamlit as st
 
 from src.core import secrets
+from src.services import account_state
 
 
 CHECKS_TOTAL = 18
@@ -24,7 +25,9 @@ class StateDefaults:
     trade_direction: str = "LONG"
     session: str = "London"
     notes: str = ""
-    account_bal: float = 10000.0
+    # Default to the Trade Journal's live balance (written from the latest MT4
+    # statement) when one has been recorded; otherwise the historical $10k.
+    account_bal: float = field(default_factory=lambda: account_state.get_balance(10000.0))
     risk_pct: float = 1.0
     db_host: str = field(default_factory=lambda: _db_default("host"))
     db_port: int = field(default_factory=lambda: _db_default("port"))
