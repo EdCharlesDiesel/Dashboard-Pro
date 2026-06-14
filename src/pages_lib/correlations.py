@@ -94,6 +94,23 @@ class CorrelationsPage(BloombergPage):
         return PageContext(code="CORR", title="Correlations", icon="🔗")
 
     def sidebar(self, ctx: PageContext) -> None:
+        st.markdown("""
+               <style>
+                   span[data-baseweb="tag"]{
+                       background-color:#00ff41 !important;
+                   }
+                   span[data-baseweb="tag"] span{
+                       color:#000000 !important;
+                       font-weight:600 !important;
+                   }
+                   span[data-baseweb="tag"] svg{
+                       fill:#000000 !important;
+                   }
+                   span[data-baseweb="tag"] [role="button"]:hover{
+                       background-color:#00cc34 !important;
+                   }
+               </style>
+               """, unsafe_allow_html=True)
         st.markdown(
             '<div style="color:#00ff41;font-weight:700;letter-spacing:0.15em;'
             'text-transform:uppercase;font-size:11px;">CORR SETTINGS</div>',
