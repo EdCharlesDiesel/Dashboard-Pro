@@ -1,7 +1,10 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.instruments.registry import INSTRUMENTS
 from src.core import secrets
+from src.db.trade_repository import TradeRepository, DBConfig
+from src.services import mt4_import
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -69,7 +72,7 @@ def load_journal_trades(cfg, limit: int = 500):
                    score, verdict, sl_pips, tp1_pips, tp2_pips, rr_tp1,
                    lot_size, risk_amount,
                    entry_price, close_price, outcome, pips_gained, r_multiple,
-                   is_open, checks_passed, checks_total, notes
+                   is_open, checks_passed, checks_total, source, notes
             FROM trade_setups
             ORDER BY logged_at ASC
             LIMIT %s
@@ -80,6 +83,84 @@ def load_journal_trades(cfg, limit: int = 500):
         return rows
     except Exception:
         return []
+
+
+def render_mt4_import(cfg):
+    """Upload + parse + map + persist an MT4 HTML statement. Imported trades are
+    tagged source='mt4_import' so they're filterable and never counted in the
+    pre-trade workflow-quality stats."""
+    with st.expander("📥 Import MT4 trade history (HTML statement)", expanded=False):
+        st.caption("In MT4: **Terminal → Account History → right-click → Save as Report** "
+                   "(or *Save as Detailed Report*). Upload the resulting `.htm` file here.")
+
+        up = st.file_uploader("MT4 statement", type=["htm", "html"], key="mt4_file",
+                              label_visibility="collapsed")
+        offset = st.number_input(
+            "Broker server UTC offset (hours)", -12.0, 14.0, 0.0, 0.5,
+            help="MT4 times are in broker server time. Most brokers are UTC+2 (or +3 in summer). "
+                 "Set this so sessions line up — leave 0 if your broker reports UTC.")
+        if up is None:
+            return
+
+        try:
+            trades = mt4_import.parse_mt4_html(up.getvalue())
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Couldn't parse this file: {exc}")
+            return
+        if not trades:
+            st.warning("No closed trades found in this statement. "
+                       "Make sure you exported the **Account History** tab.")
+            return
+
+        st.success(f"Parsed **{len(trades)}** closed trades.")
+
+        # ── Symbol mapping (auto, user-correctable) ───────────────────
+        auto = mt4_import.build_symbol_map([t["item"] for t in trades])
+        st.markdown("**Symbol mapping** — fix any row that didn't auto-map:")
+        map_df = pd.DataFrame([{"MT4 symbol": k, "Maps to": (v or "")} for k, v in auto.items()])
+        edited = st.data_editor(
+            map_df, hide_index=True, use_container_width=True, key="mt4_map",
+            column_config={"MT4 symbol": st.column_config.TextColumn(disabled=True),
+                           "Maps to": st.column_config.SelectboxColumn(
+                               options=[""] + list(INSTRUMENTS.keys()), required=False)})
+        symbol_map = {r["MT4 symbol"]: (r["Maps to"] or None) for _, r in edited.iterrows()}
+
+        rows, skipped = mt4_import.to_journal_rows(trades, symbol_map, offset)
+
+        # ── Dedupe against what's already imported ────────────────────
+        try:
+            existing = TradeRepository(DBConfig.from_mapping(cfg)).imported_tickets()
+        except Exception:
+            existing = set()
+        new_rows = [r for r in rows if r["ticket"] not in existing]
+        dup = len(rows) - len(new_rows)
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Mappable", len(rows))
+        c2.metric("New to import", len(new_rows))
+        c3.metric("Already imported", dup)
+        if skipped:
+            st.warning("Skipped (unmapped symbol): "
+                       + ", ".join(f"{k} × {v}" for k, v in skipped.items()))
+
+        if new_rows:
+            prev = pd.DataFrame(new_rows)[
+                ["logged_at", "instrument", "direction", "session", "lot_size",
+                 "entry_price", "close_price", "pips_gained", "r_multiple", "outcome"]]
+            st.dataframe(prev.head(50), use_container_width=True, hide_index=True)
+            st.caption("R-multiple is blank where the MT4 row had no Stop Loss (can't infer risk).")
+
+            if st.button(f"✅ Import {len(new_rows)} trades", type="primary", key="mt4_go"):
+                try:
+                    repo = TradeRepository(DBConfig.from_mapping(cfg))
+                    repo.init_schema()          # ensure table + source column exist
+                    n = repo.import_mt4_rows(new_rows)
+                    st.success(f"Imported {n} trades. Reloading…")
+                    st.rerun()
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Import failed: {exc}")
+        else:
+            st.info("Nothing new to import — every parsed trade is already in the journal.")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -140,17 +221,25 @@ if not st.session_state.get("journal_db_ok"):
     st.stop()
 
 _cfg = st.session_state.get("journal_db_cfg", db_cfg)
+
+render_mt4_import(_cfg)
+
 raw = load_journal_trades(_cfg, limit=show_n)
 
 if not raw:
-    st.warning("No trades found in the database. Save some setups from the Checklist page first.")
+    st.warning("No trades found yet. Import an MT4 statement above, or save setups from the Checklist page.")
     st.stop()
 
 df_all = pd.DataFrame(raw)
 df_all["logged_at"] = pd.to_datetime(df_all["logged_at"])
+if "source" not in df_all.columns:
+    df_all["source"] = "checklist"
+df_all["source"] = df_all["source"].fillna("checklist")
 
-# Closed trades only for analytics
+# Closed trades only for analytics. Imported broker fills without a Stop Loss
+# carry a null R — treat as 0R for cumulative math; they still count by outcome.
 df_closed = df_all[df_all["outcome"].notna() & (df_all["is_open"] == False)].copy()
+df_closed["r_multiple"] = df_closed["r_multiple"].fillna(0)
 df_open = df_all[df_all["is_open"] != False].copy()
 
 n_total = len(df_all)
@@ -627,7 +716,7 @@ with tab_log:
     st.markdown('<div class="section-title">📋 Full Trade Log</div>', unsafe_allow_html=True)
 
     # Filter controls
-    fc1, fc2, fc3, fc4 = st.columns(4)
+    fc1, fc2, fc3, fc4, fc5 = st.columns(5)
     with fc1:
         f_outcome = st.multiselect("Outcome", ["WIN", "LOSS", "BE", "OPEN"],
                                    default=["WIN", "LOSS", "BE", "OPEN"])
@@ -639,6 +728,10 @@ with tab_log:
     with fc4:
         all_sessions = sorted(df_all["session"].dropna().unique().tolist())
         f_sessions = st.multiselect("Session", all_sessions, default=all_sessions)
+    with fc5:
+        all_sources = sorted(df_all["source"].dropna().unique().tolist())
+        f_sources = st.multiselect("Source", all_sources, default=all_sources,
+                                   help="checklist = logged in-app · mt4_import = imported broker fills")
 
     # Apply filters
     df_view = df_all.copy()
@@ -655,6 +748,8 @@ with tab_log:
         df_view = df_view[df_view["instrument"].isin(f_pairs)]
     if f_sessions:
         df_view = df_view[df_view["session"].isin(f_sessions)]
+    if f_sources:
+        df_view = df_view[df_view["source"].isin(f_sources)]
 
     df_view = df_view.sort_values("logged_at", ascending=False).copy()
     df_view["logged_at"] = df_view["logged_at"].dt.strftime("%Y-%m-%d %H:%M")
@@ -683,6 +778,7 @@ with tab_log:
             "risk_amount": st.column_config.NumberColumn("Risk $", format="%.2f"),
             "checks_passed": st.column_config.NumberColumn("✅", width="small"),
             "is_open": st.column_config.CheckboxColumn("Open", width="small"),
+            "source": st.column_config.TextColumn("Source", width="small"),
             "notes": st.column_config.TextColumn("Notes", width="large"),
         },
     )

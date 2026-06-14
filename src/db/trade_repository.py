@@ -5,6 +5,7 @@ dicts. SQL strings are byte-equivalent to the procedural code they replace.
 """
 from __future__ import annotations
 
+import re
 from contextlib import closing
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
@@ -48,6 +49,7 @@ class TradeRepository:
         "pips_gained FLOAT",
         "r_multiple  FLOAT",
         "is_open     BOOLEAN DEFAULT TRUE",
+        "source      VARCHAR(20) DEFAULT 'checklist'",
     )
 
     CREATE_SQL = """
@@ -118,6 +120,46 @@ class TradeRepository:
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
             cur.execute(sql, row)
             conn.commit()
+
+    def imported_tickets(self) -> set:
+        """MT4 tickets already imported (parsed from the notes tag), for dedupe."""
+        sql = "SELECT notes FROM trade_setups WHERE source = 'mt4_import' AND notes IS NOT NULL"
+        out = set()
+        try:
+            with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+                cur.execute(sql)
+                for (notes,) in cur.fetchall():
+                    m = re.search(r"MT4 #(\d+)", notes or "")
+                    if m:
+                        out.add(int(m.group(1)))
+        except Exception:
+            pass
+        return out
+
+    def import_mt4_rows(self, rows: List[Dict[str, Any]]) -> int:
+        """Bulk-insert mapped MT4 rows as closed, source='mt4_import'. Returns
+        the number inserted. Caller is responsible for dedupe."""
+        if not rows:
+            return 0
+        sql = """
+            INSERT INTO trade_setups (
+                logged_at, instrument, ticker, direction, session, lot_size,
+                entry_price, close_price, outcome, pips_gained, r_multiple,
+                sl_pips, is_open, source, notes
+            ) VALUES (
+                %(logged_at)s, %(instrument)s, %(ticker)s, %(direction)s, %(session)s, %(lot_size)s,
+                %(entry_price)s, %(close_price)s, %(outcome)s, %(pips_gained)s, %(r_multiple)s,
+                %(sl_pips)s, FALSE, 'mt4_import', %(notes)s
+            )
+        """
+        payload = [{k: r.get(k) for k in (
+            "logged_at", "instrument", "ticker", "direction", "session", "lot_size",
+            "entry_price", "close_price", "outcome", "pips_gained", "r_multiple",
+            "sl_pips", "notes")} for r in rows]
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            psycopg2.extras.execute_batch(cur, sql, payload)
+            conn.commit()
+        return len(payload)
 
     def delete_setup(self, trade_id: int) -> None:
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:

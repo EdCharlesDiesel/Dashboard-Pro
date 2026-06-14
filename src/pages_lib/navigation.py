@@ -29,7 +29,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("OVRV", "01. Market Overview",      "📊", "pages/market-overview.py"),
         NavEntry("RANK", "02. Setup Ranker",         "🎰", "pages/setup-ranker.py"),
         NavEntry("AMD",  "03. AMD Scanner",          "📊", "pages/amd-scanner.py"),
-        NavEntry("FCST", "04. Forecast Dashboard",   "📈", "pages/forecast-dashboard.py"),
+        NavEntry("FCST", "04. Forecast Lab",         "📈", "pages/forecast-dashboard.py"),
     ]),
     ("2 · FILTER THE DAY", [
         NavEntry("DXAU", "05. DXY vs Gold",          "💵", "pages/dxy-gold.py"),
@@ -62,7 +62,7 @@ NAV_SECTIONS: List[tuple] = [
     ]),
     ("8 · REVIEW", [
         NavEntry("JRNL", "22. Trade Journal",        "📓", "pages/trade-journal.py"),
-        NavEntry("BTST", "23. Forecast & Backtest",  "🧪", "pages/backtest-workflow.py"),
+        NavEntry("BTST", "23. Backtest Lab",         "🧪", "pages/backtest-workflow.py"),
     ]),
     ("9 · SYSTEM", [
         NavEntry("RPRT", "24. Reports",              "📑", "pages/reports.py"),

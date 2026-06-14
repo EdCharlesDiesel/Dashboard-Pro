@@ -1,56 +1,65 @@
-"""
-FX Forecast Dashboard
-----------------------
-A Streamlit app that:
-  - Pulls live & historical FX rates from Yahoo Finance (yfinance)
-  - Pulls macro context series from FRED (pandas_datareader)
-  - Produces a short-term forecast (Exponential Smoothing or ARIMA)
-  - Displays a Trading-Economics-style chart: historical area + dashed forecast line
+"""Forecast Lab — the single home for everything forecasting.
 
-Run with:
-    streamlit run app.py
-"""
+Backtesting moved to its own page (Backtest Lab). This page consolidates the
+three forecasting surfaces that used to be scattered across two pages:
 
-import streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
+  • PROBABILITY — 8,000-path Monte Carlo cone, terminal distribution, and the
+                  house-risk-model touch probabilities / best-bet verdict.
+  • STATISTICAL — ARIMA / Exponential-Smoothing point trajectory with a
+                  prediction interval, plus FRED macro context.
+  • ACCURACY    — rolling out-of-sample backtest of the forecast itself
+                  (MAPE / RMSE, skill vs random walk, directional hit-rate,
+                  Monte-Carlo cone calibration).
+
+All math lives in src/services/forecast_service.py.
+"""
+import warnings
 from datetime import datetime, timedelta
 from io import StringIO
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
 import requests
-import warnings
+import streamlit as st
+import yfinance as yf
 
 from src.ui.theme import BloombergTheme as T
 from src.pages_lib.navigation import render_sidebar_nav
 from src.instruments.registry import INSTRUMENTS, TREND_COMMODITIES
 from src.pages_lib.setup_ranker import fmt_price
+from src.services import backtest_service as bt
+from src.services.forecast_service import (
+    run_forecast, run_statistical_forecast, backtest_forecast_accuracy)
 
 warnings.filterwarnings("ignore")
 
 st.set_page_config(
-    page_title="Forecast Dashboard · Trading System",
-    page_icon="\U0001F4C8",
+    page_title="Forecast Lab · Trading System",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 T.apply()
 
-# ---------------------------------------------------------------------------
-# Reference data
-# ---------------------------------------------------------------------------
+st.markdown("""
+<style>
+    .stApp { --border: color-mix(in srgb, var(--text-color) 12%, transparent); }
+    html,body,[class*="css"]{font-family:'JetBrains Mono','Fira Code',monospace;}
+    .metric-box{background:var(--background-color);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:12px;text-align:center;}
+    .metric-value{font-size:21px;font-weight:700;color:#e6e6e6;}
+    .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
+    [data-testid="stSidebarNav"]{display:none;}
+    .block-container{padding-top:1.5rem;max-width:1500px;}
+</style>
+""", unsafe_allow_html=True)
 
-# Every tradable instrument comes from the single source of truth
-# (src/instruments/registry.py) — all 18 forex pairs plus the three metals
-# (XAU/USD, XAG/USD, XPT/USD). Maps display name -> Yahoo ticker.
+GREEN, RED, AMBER, GREY = "#00ff66", "#ff3344", "#ffcc00", "#9a9a9a"
+
 CURRENCY_PAIRS = {name: INSTRUMENTS[name]["ticker"] for name in INSTRUMENTS}
-
-# Metals carry forex display symbols but are categorised separately so the
-# picker can offer a Forex / Metals filter.
 METALS = sorted(TREND_COMMODITIES)
 FOREX = [n for n in CURRENCY_PAIRS if n not in TREND_COMMODITIES]
 
-# FRED series that give useful macro context for FX (rate differentials, etc.)
 FRED_SERIES = {
     "US 10Y Treasury Yield (%)": "DGS10",
     "US Effective Fed Funds Rate (%)": "DFF",
@@ -58,32 +67,38 @@ FRED_SERIES = {
     "US Dollar Index (Broad, DXY proxy)": "DTWEXBGS",
 }
 
-# ---------------------------------------------------------------------------
-# Data loading (cached)
-# ---------------------------------------------------------------------------
+
+def metric(col, value, label, color="#e6e6e6"):
+    col.markdown(
+        f'<div class="metric-box"><div class="metric-value" style="color:{color}">{value}</div>'
+        f'<div class="metric-label">{label}</div></div>', unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_fx_history(ticker: str, period: str = "5y", interval: str = "1d") -> pd.DataFrame:
-    """Download historical FX data from Yahoo Finance."""
+def _dark(fig, height=360, **kw):
+    fig.update_layout(paper_bgcolor="#000000", plot_bgcolor="#0f0f0f",
+                      font=dict(color="#e6e6e6", size=10), height=height,
+                      margin=dict(l=30, r=20, t=20, b=30), **kw)
+    fig.update_xaxes(gridcolor="#2a2a2a")
+    fig.update_yaxes(gridcolor="#2a2a2a")
+    return fig
+
+
+# ══════════════════════════════════════════════════════════════════
+# DATA
+# ══════════════════════════════════════════════════════════════════
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_history(ticker: str, period: str, interval: str) -> pd.DataFrame:
     df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
     if df.empty:
         return df
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    df = df.dropna(subset=["Close"])
-    return df
+    return df.dropna(subset=["Close"])
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_fred_series(series_id: str, start: datetime, end: datetime) -> pd.DataFrame:
-    """Download a single series from FRED. Returns empty DataFrame on failure.
-
-    Uses FRED's public keyless CSV endpoint (fredgraph.csv) instead of
-    pandas_datareader, which is unmaintained and broken on Python 3.12+.
-    Output is unchanged: a DataFrame indexed by date with one numeric column,
-    filtered to [start, end].
-    """
     try:
         url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
         r = requests.get(url, timeout=8)
@@ -95,322 +110,264 @@ def load_fred_series(series_id: str, start: datetime, end: datetime) -> pd.DataF
         df.columns = [series_id]
         df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
         df = df.dropna()
-        df = df[(df.index >= pd.Timestamp(start)) & (df.index <= pd.Timestamp(end))]
-        return df
+        return df[(df.index >= pd.Timestamp(start)) & (df.index <= pd.Timestamp(end))]
     except Exception:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=600, show_spinner=False)
-def load_quote_table(pairs: dict) -> pd.DataFrame:
-    """Build a quick quote table (price / chg / %chg) for a dict of pairs."""
-    rows = []
-    for label, tk in pairs.items():
-        try:
-            d = yf.download(tk, period="5d", interval="1d", progress=False, auto_adjust=False)
-            if isinstance(d.columns, pd.MultiIndex):
-                d.columns = d.columns.get_level_values(0)
-            d = d.dropna(subset=["Close"])
-            if len(d) >= 2:
-                last = float(d["Close"].iloc[-1])
-                prev = float(d["Close"].iloc[-2])
-                chg = last - prev
-                pct = chg / prev * 100
-                rows.append(
-                    {
-                        "Instrument": label,
-                        "Actual": fmt_price(last),
-                        "Chg": f"{chg:+.4f}" if abs(last) < 100 else f"{chg:+.2f}",
-                        "% Chg": pct,
-                    }
-                )
-        except Exception:
-            continue
-    return pd.DataFrame(rows)
-
-
-# ---------------------------------------------------------------------------
-# Forecasting
-# ---------------------------------------------------------------------------
-
-
-def run_forecast(series: pd.Series, periods: int, model_type: str):
-    """Return a forecast Series of length `periods` (business-day index)."""
-    series = series.dropna().astype(float)
-
-    if model_type == "Exponential Smoothing":
-        from statsmodels.tsa.holtwinters import ExponentialSmoothing
-
-        model = ExponentialSmoothing(series, trend="add", damped_trend=True, seasonal=None)
-        fit = model.fit()
-        fc_values = fit.forecast(periods)
-    else:  # ARIMA
-        from statsmodels.tsa.arima.model import ARIMA
-
-        model = ARIMA(series, order=(1, 1, 1))
-        fit = model.fit()
-        fc_values = fit.forecast(periods)
-
-    future_dates = pd.bdate_range(series.index[-1] + pd.Timedelta(days=1), periods=periods)
-    fc_values = pd.Series(np.asarray(fc_values), index=future_dates, name="Forecast")
-    return fc_values
-
-
-# ---------------------------------------------------------------------------
-# Sidebar controls
-# ---------------------------------------------------------------------------
-
-st.sidebar.title("Settings")
-
-asset_class = st.sidebar.radio(
-    "Asset class", ["All", "Forex", "Metals"], index=0, horizontal=True,
-    help="Forecast any currency pair or a precious metal (Gold/Silver/Platinum).",
-)
-if asset_class == "Forex":
-    _choices = FOREX
-elif asset_class == "Metals":
-    _choices = METALS
-else:
-    _choices = list(CURRENCY_PAIRS.keys())
-
-pair_label = st.sidebar.selectbox("Instrument", _choices, index=0)
-ticker = CURRENCY_PAIRS[pair_label]
-
-period = st.sidebar.selectbox(
-    "History window", ["6mo", "1y", "2y", "5y", "10y"], index=3
-)
-
-interval = st.sidebar.selectbox("Data interval", ["1d", "1wk"], index=0)
-
-
-# Always project a full trading week ahead (5 business days).
-forecast_horizon = 5
-st.sidebar.caption(
-    f"📅 Forecast horizon: **one week ahead** ({forecast_horizon} business days)"
-)
-
-model_choice = st.sidebar.radio(
-    "Forecast model",
-    ["Exponential Smoothing", "ARIMA"],
-    help="Both are simple statistical models for illustration -- not financial advice.",
-)
-
-st.sidebar.markdown("---")
-st.sidebar.caption(
-    "Data sources: **Yahoo Finance** (FX prices) and **FRED** (macro indicators). "
-    "Forecasts are statistical extrapolations of historical data, not predictions "
-    "of real market behaviour."
-)
+# ══════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ══════════════════════════════════════════════════════════════════
 
 with st.sidebar:
+    st.markdown("### 📈 Forecast Lab")
+    st.markdown("---")
+
+    asset_class = st.radio("Asset class", ["All", "Forex", "Metals"], index=0, horizontal=True)
+    choices = FOREX if asset_class == "Forex" else METALS if asset_class == "Metals" else list(CURRENCY_PAIRS)
+    pair = st.selectbox("Instrument", choices, index=0)
+    ticker = CURRENCY_PAIRS[pair]
+    pip_sz = INSTRUMENTS[pair]["pip_size"]
+
+    period = st.selectbox("History window", ["6mo", "1y", "2y", "5y", "10y"], index=3)
+
+    st.markdown("---")
+    st.caption("RISK MODEL (for touch probabilities)")
+    sl_mult = st.slider("SL × ATR", 1.0, 3.0, 1.5, 0.1)
+    rr = st.slider("TP R:R", 1.5, 4.0, 2.0, 0.5)
+
     st.divider()
     render_sidebar_nav()
 
-# ---------------------------------------------------------------------------
-# Header & summary
-# ---------------------------------------------------------------------------
+with st.spinner("Loading market data…"):
+    df = load_history(ticker, period, "1d")
 
-_kind = "Metal" if pair_label in TREND_COMMODITIES else "Exchange Rate"
-st.title(f"{pair_label} {_kind} \u2014 One-Week Forecast")
-
-with st.spinner("Loading market data..."):
-    df = load_fx_history(ticker, period=period, interval=interval)
-
-if df.empty:
-    st.error("Could not retrieve data from Yahoo Finance for this pair. Try again later.")
+if df.empty or len(df) < 60:
+    st.error("Could not retrieve enough data for this instrument. Try again later.")
     st.stop()
 
 close = df["Close"]
-
 last_price = float(close.iloc[-1])
-prev_price = float(close.iloc[-2]) if len(close) > 1 else last_price
-day_chg = last_price - prev_price
-day_pct = (day_chg / prev_price * 100) if prev_price else 0.0
+atr14 = float(bt.calc_atr(df, 14).iloc[-1])
 
-# Approximate 1M / 1Y comparisons (trading days)
-def pct_change_back(series: pd.Series, days: int) -> float:
-    if len(series) > days:
-        ref = float(series.iloc[-days - 1])
-        return (float(series.iloc[-1]) - ref) / ref * 100
-    return float("nan")
+_kind = "Metal" if pair in TREND_COMMODITIES else "FX"
+st.markdown(f"## 📈 {pair} {_kind} — Forecast Lab")
 
-month_pct = pct_change_back(close, 21)
-year_pct = pct_change_back(close, 252)
+tab_prob, tab_stat, tab_acc = st.tabs(
+    ["🔮 PROBABILITY", "📊 STATISTICAL + MACRO", "🎯 ACCURACY"])
 
-last_date = close.index[-1].strftime("%B %d, %Y")
 
-summary = (
-    f"The **{pair_label}** rate is at **{fmt_price(last_price)}** as of {last_date}, "
-    f"{'down' if day_chg < 0 else 'up'} {fmt_price(abs(day_chg))} ({day_pct:+.2f}%) from the previous session. "
-)
-if not np.isnan(month_pct):
-    summary += (
-        f"Over the past month it has {'weakened' if month_pct < 0 else 'strengthened'} "
-        f"{abs(month_pct):.2f}%"
-    )
-if not np.isnan(year_pct):
-    summary += (
-        f", and it is {'down' if year_pct < 0 else 'up'} {abs(year_pct):.2f}% over the last 12 months."
-    )
-else:
-    summary += "."
+# ══════════════════════════════════════════════════════════════════
+# TAB 1 — PROBABILITY (Monte Carlo)
+# ══════════════════════════════════════════════════════════════════
 
-st.markdown(summary)
+with tab_prob:
+    horizon = st.radio("Forecast horizon", [5, 10, 21], index=1, horizontal=True,
+                       format_func=lambda d: f"{d} trading days", key="fc_horizon")
+    with st.spinner("Running 8,000 Monte Carlo paths…"):
+        fc = run_forecast(close, atr14, int(horizon), float(sl_mult), float(rr))
 
-# ---------------------------------------------------------------------------
-# Forecast computation
-# ---------------------------------------------------------------------------
+    rng_pips = (fc.q95 - fc.q05) / pip_sz
+    vol_tag = ("ELEVATED" if fc.vol_ratio > 1.15 else
+               "SUPPRESSED" if fc.vol_ratio < 0.85 else "NORMAL")
+    k = st.columns(5)
+    metric(k[0], f"{fc.p_up*100:.0f}%", f"P(higher in {horizon}d)",
+           GREEN if fc.p_up >= 0.5 else RED)
+    metric(k[1], f"{fc.exp_move_pct:+.2f}%", "Median move")
+    metric(k[2], f"{fc.median_price:,.5f}", "Median price")
+    metric(k[3], f"{rng_pips:,.0f}p", "90% range")
+    metric(k[4], vol_tag, f"Vol regime ({fc.vol_ratio:.2f}×)")
 
-with st.spinner("Fitting forecast model..."):
-    try:
-        forecast = run_forecast(close, forecast_horizon, model_choice)
-        forecast_ok = True
-    except Exception as e:
-        forecast_ok = False
-        st.warning(f"Forecast model failed to fit: {e}")
-        forecast = pd.Series(dtype=float)
+    # ── Best bet under the house risk model ───────────────────────────
+    be = 1.0 / (1.0 + rr)
+    edge_long = fc.p_tp_first_long - be
+    edge_short = fc.p_tp_first_short - be
+    best_side = "LONG" if edge_long >= edge_short else "SHORT"
+    best_edge = max(edge_long, edge_short)
+    edge_col = GREEN if best_edge > 0.03 else AMBER if best_edge > -0.03 else RED
+    verdict = ("EDGE" if best_edge > 0.03 else "MARGINAL" if best_edge > -0.03 else "NO EDGE — STAY FLAT")
+    st.markdown(f"""
+<div style="border:1px solid {edge_col};background:#0f0f0f;padding:12px 16px;margin:12px 0;">
+  <span style="color:{edge_col};font-weight:700;font-size:15px;letter-spacing:.1em;">
+    BEST BET · {pair} {best_side} — {verdict}</span><br>
+  <span style="color:#e6e6e6;font-size:12px;">
+    P(TP before SL): LONG <b style="color:{GREEN if edge_long > 0 else RED}">{fc.p_tp_first_long*100:.0f}%</b>
+    · SHORT <b style="color:{GREEN if edge_short > 0 else RED}">{fc.p_tp_first_short*100:.0f}%</b>
+    · breakeven at {rr}:1 = {be*100:.0f}%
+    · SL {fc.sl_dist/pip_sz:.0f}p / TP {fc.tp_dist/pip_sz:.0f}p</span><br>
+  <span style="color:#9a9a9a;font-size:11px;">Close-touch estimates from 8,000 simulated paths; intraday wicks hit both levels slightly more often.</span>
+</div>""", unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# Chart (Trading-Economics style: blue area + dashed gray forecast)
-# ---------------------------------------------------------------------------
+    cc1, cc2 = st.columns([3, 2])
+    hist_tail = close.iloc[-60:]
+    future_x = list(range(1, int(horizon) + 1))
+    with cc1:
+        st.markdown("**Probability cone**")
+        fig_c = go.Figure()
+        fig_c.add_trace(go.Scatter(x=list(range(-len(hist_tail) + 1, 1)), y=hist_tail.values,
+                                   name="History", line=dict(color="#e6e6e6", width=1.4)))
+        for hi, lo, alpha in (("q95", "q05", 0.10), ("q75", "q25", 0.18)):
+            fig_c.add_trace(go.Scatter(x=future_x + future_x[::-1],
+                                       y=list(fc.cone[hi]) + list(fc.cone[lo])[::-1],
+                                       fill="toself", fillcolor=f"rgba(0,255,65,{alpha})",
+                                       line=dict(width=0), hoverinfo="skip", showlegend=False))
+        fig_c.add_trace(go.Scatter(x=future_x, y=fc.cone["q50"], name="Median path",
+                                   line=dict(color="#00ff41", width=2)))
+        fig_c.add_hline(y=fc.last + fc.tp_dist, line_dash="dash", line_color=GREEN, line_width=1)
+        fig_c.add_hline(y=fc.last - fc.sl_dist, line_dash="dash", line_color=RED, line_width=1)
+        st.plotly_chart(_dark(fig_c, 380, legend=dict(orientation="h", y=1.05, bgcolor="rgba(0,0,0,0)"),
+                              xaxis=dict(title="Trading days (0 = today)")),
+                        use_container_width=True, config=dict(displayModeBar=False))
+    with cc2:
+        st.markdown(f"**Where price lands in {horizon} days**")
+        term = fc.terminal_sample
+        fig_h = go.Figure(go.Histogram(x=term, nbinsx=60,
+                                       marker=dict(color=[GREEN if t > fc.last else RED for t in term])))
+        fig_h.add_vline(x=fc.last, line_color="#e6e6e6", line_width=1.5)
+        st.plotly_chart(_dark(fig_h, 380, showlegend=False),
+                        use_container_width=True, config=dict(displayModeBar=False))
 
-fig = go.Figure()
+    with st.expander("◇ The math under the hood"):
+        st.markdown(f"""
+- **8,000 Monte Carlo paths**: half parametric (EWMA volatility λ=0.94, Student-t(5) fat tails, drift shrunk 75% to zero), half stationary block bootstrap of the real return history (mean block 5 days).
+- **Volatility regime**: {fc.ewma_vol_ann:.1f}% current vs {fc.longrun_vol_ann:.1f}% long-run annualised → {fc.vol_ratio:.2f}×.
+- **Touch probabilities** use your risk model (SL = {sl_mult}×ATR14 = {fc.sl_dist/pip_sz:.0f}p, TP = {rr}R = {fc.tp_dist/pip_sz:.0f}p): per path, which level does the close cross first?
+- Deterministic seed — numbers only change when the data, horizon or risk settings change.
+""")
 
-fig.add_trace(
-    go.Scatter(
-        x=close.index,
-        y=close.values,
-        name="Historical",
-        mode="lines",
-        line=dict(color=T.CYAN, width=1.5),
-        fill="tozeroy",
-        fillcolor="rgba(0, 224, 255, 0.12)",
-    )
-)
 
-if forecast_ok and not forecast.empty:
-    # Connect last historical point to forecast for a continuous line
-    bridge_x = [close.index[-1]] + list(forecast.index)
-    bridge_y = [last_price] + list(forecast.values)
-    fig.add_trace(
-        go.Scatter(
-            x=bridge_x,
-            y=bridge_y,
-            name=f"Forecast ({model_choice})",
-            mode="lines",
-            line=dict(color=T.YELLOW, width=2, dash="dash"),
+# ══════════════════════════════════════════════════════════════════
+# TAB 2 — STATISTICAL + MACRO
+# ══════════════════════════════════════════════════════════════════
+
+with tab_stat:
+    cset = st.columns([1, 1, 2])
+    model_choice = cset[0].radio("Model", ["Exponential Smoothing", "ARIMA"], key="stat_model")
+    stat_h = cset[1].slider("Horizon (business days)", 5, 20, 5, key="stat_h")
+
+    with st.spinner("Fitting model…"):
+        try:
+            sf = run_statistical_forecast(close, stat_h, model_choice, ci=0.90)
+            stat_ok = True
+        except Exception as e:
+            stat_ok = False
+            st.warning(f"Model failed to fit: {e}")
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=close.index, y=close.values, name="Historical", mode="lines",
+                             line=dict(color=T.CYAN, width=1.5), fill="tozeroy",
+                             fillcolor="rgba(0,224,255,0.10)"))
+    if stat_ok:
+        bx = [close.index[-1]] + list(sf.forecast.index)
+        fig.add_trace(go.Scatter(x=bx, y=[last_price] + list(sf.forecast.values),
+                                 name=f"Forecast ({model_choice})", mode="lines",
+                                 line=dict(color=T.YELLOW, width=2, dash="dash")))
+        fig.add_trace(go.Scatter(x=list(sf.upper.index) + list(sf.lower.index)[::-1],
+                                 y=list(sf.upper.values) + list(sf.lower.values)[::-1],
+                                 fill="toself", fillcolor="rgba(255,204,0,0.12)",
+                                 line=dict(width=0), name="90% interval", hoverinfo="skip"))
+        yvals = list(close.values) + list(sf.lower.values) + list(sf.upper.values)
+    else:
+        yvals = list(close.values)
+    ymin, ymax = float(np.nanmin(yvals)), float(np.nanmax(yvals))
+    pad = (ymax - ymin) * 0.08 or abs(ymax) * 0.001
+    st.plotly_chart(_dark(fig, 460,
+                          legend=dict(orientation="h", y=1.02, x=1, xanchor="right", bgcolor="rgba(0,0,0,0)"),
+                          yaxis=dict(title="Price", range=[ymin - pad, ymax + pad]),
+                          hovermode="x unified"),
+                    use_container_width=True)
+
+    if stat_ok:
+        end_val = float(sf.forecast.iloc[-1])
+        end_pct = (end_val - last_price) / last_price * 100
+        mc = st.columns(4)
+        metric(mc[0], fmt_price(last_price), "Current price")
+        metric(mc[1], fmt_price(end_val), f"{stat_h}d forecast",
+               GREEN if end_pct >= 0 else RED)
+        metric(mc[2], f"{end_pct:+.2f}%", "Projected move", GREEN if end_pct >= 0 else RED)
+        metric(mc[3], f"{fmt_price(float(sf.lower.iloc[-1]))} – {fmt_price(float(sf.upper.iloc[-1]))}", "90% interval")
+    st.caption("Classical time-series extrapolation of historical prices — not investment advice.")
+
+    # ── Macro context ─────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### Macro Context (FRED)")
+    fred_start = datetime.today() - timedelta(days=365 * 5)
+    fred_cols = st.columns(2)
+    any_fred = False
+    for i, (name, sid) in enumerate(FRED_SERIES.items()):
+        fred_df = load_fred_series(sid, fred_start, datetime.today())
+        with fred_cols[i % 2]:
+            if not fred_df.empty:
+                any_fred = True
+                st.markdown(f"**{name}**  \nLatest: {fred_df.iloc[-1, 0]:.2f} ({fred_df.index[-1]:%b %Y})")
+                st.line_chart(fred_df, height=170, use_container_width=True)
+            else:
+                st.markdown(f"**{name}**")
+                st.caption("Data unavailable from FRED right now.")
+    if not any_fred:
+        st.info("FRED data could not be loaded (no API key required — check your connection).")
+
+
+# ══════════════════════════════════════════════════════════════════
+# TAB 3 — ACCURACY
+# ══════════════════════════════════════════════════════════════════
+
+with tab_acc:
+    st.markdown("#### Does this forecast actually work? — rolling out-of-sample backtest")
+    st.caption("Steps back through history, forecasts ahead from each origin using only prior data, "
+               "and scores every forecast against what really happened.")
+
+    cset = st.columns([1, 1])
+    acc_model = cset[0].selectbox("Model to evaluate",
+                                  ["Monte Carlo median", "Exponential Smoothing", "ARIMA"])
+    acc_h = cset[1].slider("Forecast horizon (days)", 5, 21, 10, key="acc_h")
+
+    if st.button("▶ Run accuracy backtest", type="primary"):
+        with st.spinner("Backtesting forecasts across history…"):
+            acc = backtest_forecast_accuracy(close, int(acc_h), acc_model, n_windows=40)
+        st.session_state["acc_result"] = acc
+
+    if st.session_state.get("acc_result") is None and "acc_result" in st.session_state:
+        st.warning("Not enough history for this horizon. Use a longer history window in the sidebar.")
+    elif "acc_result" in st.session_state:
+        acc = st.session_state["acc_result"]
+        k = st.columns(5)
+        metric(k[0], f"{acc.mape:.2f}%", "MAPE (point error)")
+        metric(k[1], f"{acc.rmse_pct:.2f}%", "RMSE %")
+        metric(k[2], f"{acc.skill*100:+.0f}%", "Skill vs random walk",
+               GREEN if acc.skill > 0 else RED)
+        metric(k[3], f"{acc.directional_hit:.0f}%", "Directional hit rate",
+               GREEN if acc.directional_hit > 50 else RED)
+        metric(k[4], f"{acc.cone_coverage:.0f}%", "90% cone coverage",
+               GREEN if 80 <= acc.cone_coverage <= 98 else AMBER)
+
+        st.markdown(
+            f"Evaluated **{acc.n_windows}** out-of-sample windows. "
+            + ("The model **beats** a naive random-walk baseline. " if acc.skill > 0
+               else "The model does **not** beat a naive random-walk baseline — point forecasts add little. ")
+            + (f"Cone calibration is healthy ({acc.cone_coverage:.0f}% vs 90% target)."
+               if 80 <= acc.cone_coverage <= 98 else
+               f"Cone is { 'too wide' if acc.cone_coverage > 98 else 'too narrow' } "
+               f"({acc.cone_coverage:.0f}% vs 90% target).")
         )
-    )
 
-# Keep the area-fill (fill="tozeroy") from dragging the y-axis down to 0,
-# which would flatten high-priced instruments (Gold ~2600, JPY crosses ~150)
-# into an unreadable sliver. Pin the range to the data with a small pad; the
-# fill still renders and simply clips at the axis floor.
-_yvals = list(close.values) + (list(forecast.values) if forecast_ok and not forecast.empty else [])
-_ymin, _ymax = float(np.nanmin(_yvals)), float(np.nanmax(_yvals))
-_pad = (_ymax - _ymin) * 0.08 or abs(_ymax) * 0.001
-
-fig.update_layout(
-    title=f"{pair_label} \u2014 Historical Price & This-Week Forecast ({forecast_horizon}d)",
-    yaxis_title="Price",
-    xaxis_title=None,
-    height=520,
-    hovermode="x unified",
-    template="plotly_dark",
-    paper_bgcolor=T.BG, plot_bgcolor=T.BG_PANEL,
-    font=dict(color=T.WHITE, family=T.FONT_MONO, size=11),
-    legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1,
-                bgcolor=T.BG, bordercolor=T.AMBER, borderwidth=1,
-                font=dict(color=T.AMBER, family=T.FONT_MONO)),
-    hoverlabel=dict(bgcolor=T.BG, bordercolor=T.AMBER,
-                    font=dict(color=T.AMBER, family=T.FONT_MONO)),
-    margin=dict(l=40, r=40, t=60, b=40),
-)
-fig.update_xaxes(gridcolor=T.BORDER, linecolor=T.BORDER)
-fig.update_yaxes(gridcolor=T.BORDER, linecolor=T.BORDER, range=[_ymin - _pad, _ymax + _pad])
-
-st.plotly_chart(fig, use_container_width=True)
-
-# ---------------------------------------------------------------------------
-# Key metrics row
-# ---------------------------------------------------------------------------
-
-c1, c2, c3, c4 = st.columns(4)
-_chg_str = f"{day_chg:+.4f}" if abs(last_price) < 100 else f"{day_chg:+.2f}"
-c1.metric("Current price", fmt_price(last_price), f"{_chg_str} ({day_pct:+.2f}%)")
-c2.metric("1-month change", f"{month_pct:+.2f}%" if not np.isnan(month_pct) else "n/a")
-c3.metric("1-year change", f"{year_pct:+.2f}%" if not np.isnan(year_pct) else "n/a")
-if forecast_ok and not forecast.empty:
-    end_val = float(forecast.iloc[-1])
-    end_pct = (end_val - last_price) / last_price * 100
-    c4.metric(
-        "End-of-week forecast",
-        fmt_price(end_val),
-        f"{end_pct:+.2f}% vs current",
-    )
-else:
-    c4.metric("End-of-week forecast", "n/a")
-
-st.caption(
-    "Forecasts are produced with a simple statistical time-series model fitted on "
-    "historical Yahoo Finance data and **do not** constitute investment advice."
-)
-
-# ---------------------------------------------------------------------------
-# Macro context from FRED
-# ---------------------------------------------------------------------------
-
-st.header("Macro Context (FRED)")
-
-fred_start = datetime.today() - timedelta(days=365 * 5)
-fred_end = datetime.today()
-
-fred_cols = st.columns(2)
-any_fred_data = False
-
-for i, (name, series_id) in enumerate(FRED_SERIES.items()):
-    fred_df = load_fred_series(series_id, fred_start, fred_end)
-    with fred_cols[i % 2]:
-        if not fred_df.empty:
-            any_fred_data = True
-            latest_val = fred_df.iloc[-1, 0]
-            latest_date = fred_df.index[-1].strftime("%b %Y")
-            st.markdown(f"**{name}**  \nLatest: {latest_val:.2f} ({latest_date})")
-            st.line_chart(fred_df, height=180, use_container_width=True)
-        else:
-            st.markdown(f"**{name}**")
-            st.caption("Data unavailable from FRED right now.")
-
-if not any_fred_data:
-    st.info(
-        "FRED data could not be loaded. If running locally, ensure you have an "
-        "internet connection (no API key is required for these public series)."
-    )
-
-# ---------------------------------------------------------------------------
-# Other currency pairs quote table
-# ---------------------------------------------------------------------------
-
-st.header("Markets Snapshot — Forex & Metals")
-
-quotes_df = load_quote_table(CURRENCY_PAIRS)
-
-if not quotes_df.empty:
-    def fmt_pct(x):
-        color = f"color: {T.RED}" if x < 0 else f"color: {T.GREEN}"
-        return f"<span style='{color}'>{x:+.2f}%</span>"
-
-    display_df = quotes_df.copy()
-    display_df["% Chg"] = display_df["% Chg"].apply(fmt_pct)
-    st.markdown(
-        display_df.to_html(escape=False, index=False),
-        unsafe_allow_html=True,
-    )
-else:
-    st.info("Quote table unavailable right now.")
-
-st.markdown("---")
-st.caption(
-    "Built with Streamlit, yfinance and FRED (via pandas-datareader). "
-    "Data may be delayed and is provided for informational purposes only."
-)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Forecast vs actual (terminal price)**")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=acc.actual, y=acc.pred, mode="markers",
+                                     marker=dict(color=GREEN, size=6, opacity=0.6),
+                                     hovertemplate="actual %{x:.5f}<br>pred %{y:.5f}<extra></extra>"))
+            lo, hi = float(min(acc.actual.min(), acc.pred.min())), float(max(acc.actual.max(), acc.pred.max()))
+            fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines",
+                                     line=dict(color=GREY, dash="dash"), hoverinfo="skip"))
+            st.plotly_chart(_dark(fig, 320, showlegend=False,
+                                  xaxis=dict(title="Actual"), yaxis=dict(title="Forecast")),
+                            use_container_width=True, config=dict(displayModeBar=False))
+        with c2:
+            st.markdown("**Forecast error distribution (%)**")
+            fig_h = go.Figure(go.Histogram(x=acc.errors, nbinsx=40,
+                                           marker=dict(color=AMBER)))
+            fig_h.add_vline(x=0, line_color="#e6e6e6", line_width=1.5)
+            st.plotly_chart(_dark(fig_h, 320, showlegend=False, xaxis=dict(title="Error %")),
+                            use_container_width=True, config=dict(displayModeBar=False))
