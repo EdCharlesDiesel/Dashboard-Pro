@@ -265,9 +265,9 @@ class ChecklistController:
             ]),
             ("6 · 15M TRIGGER", [
                 (13, "15M rejection",
-                 "Rejection candle on 15M" + link("15m-rejection")),
+                 "Rejection into the 15M fib golden zone" + link("15m-fib-entry")),
                 (14, "15M entry fired",
-                 "Stoch crossover + RSI reset" + link("15m-entry-signal")),
+                 "Confirmed fib golden-zone entry" + link("15m-fib-entry")),
             ]),
             ("7 · RISK & EXECUTE", [
                 (15, "Stop below/above structure",
