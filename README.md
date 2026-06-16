@@ -267,8 +267,7 @@ This is the execution window. Open the checklist on your target pair.
 
 | Page | What fires the entry |
 |------|----------------------|
-| 13. 15M Rejection | A pin bar, engulf, or tweezer at the 4H zone + PDH/PDL sweep marker 🔄 |
-| 14. 15M Entry Signal | Stochastic crossover + RSI reset — ideally LONG CONFIRMED / SHORT CONFIRMED (vol spike too) |
+| 20. 15M Fib Entry | Price retraces into the 0.382–0.618 Fibonacci golden zone of the 15M impulse leg and a confirming candle closes in the bias direction — only on Setup Ranker signals, with optional email alerts |
 
 > **Rule:** Only take the trade when the checklist hits 16/18+ AND all checks 11–16 are ticked. The signal chip must show 🟢 GO.
 
