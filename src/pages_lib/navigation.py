@@ -55,21 +55,20 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("CONF", "19. 2/3 Confluence Check", "🔀", "pages/confluence-checker.py"),
     ]),
     ("6 · 15M TRIGGER", [
-        NavEntry("15RJ", "20. 15M Rejection",        "🕯️", "pages/15m-rejection.py"),
-        NavEntry("15EN", "21. 15M Entry Signal",     "⚡", "pages/15m-entry-signal.py"),
+        NavEntry("15FB", "20. 15M Fib Entry",        "⚡", "pages/15m-fib-entry.py"),
     ]),
     ("7 · RISK & EXECUTE", [
-        NavEntry("STOP", "22. Stop Structure",       "🛡️", "pages/stop-structure.py"),
-        NavEntry("RRC",  "23. R:R Calculator",       "⚖️", "pages/rr-calculator.py"),
-        NavEntry("ACCT", "24. Account Risk",         "💵", "pages/account-risk.py"),
+        NavEntry("STOP", "21. Stop Structure",       "🛡️", "pages/stop-structure.py"),
+        NavEntry("RRC",  "22. R:R Calculator",       "⚖️", "pages/rr-calculator.py"),
+        NavEntry("ACCT", "23. Account Risk",         "💵", "pages/account-risk.py"),
     ]),
     ("8 · REVIEW", [
-        NavEntry("JRNL", "25. Trade Journal",        "📓", "pages/trade-journal.py"),
-        NavEntry("BTST", "26. Backtest Lab",         "🧪", "pages/backtest-workflow.py"),
+        NavEntry("JRNL", "24. Trade Journal",        "📓", "pages/trade-journal.py"),
+        NavEntry("BTST", "25. Backtest Lab",         "🧪", "pages/backtest-workflow.py"),
     ]),
     ("9 · SYSTEM", [
-        NavEntry("RPRT", "27. Reports",              "📑", "pages/reports.py"),
-        NavEntry("LOGS", "28. System Logs",          "🧾", "pages/system-logs.py"),
+        NavEntry("RPRT", "26. Reports",              "📑", "pages/reports.py"),
+        NavEntry("LOGS", "27. System Logs",          "🧾", "pages/system-logs.py"),
     ]),
 ]
 

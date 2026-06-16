@@ -91,7 +91,9 @@
       "Bash(docker exec *)",
       "Bash(docker volume *)",
       "Bash(docker cp *)",
-      "Bash(docker stop *)"
+      "Bash(docker stop *)",
+      "PowerShell(docker compose ps *)",
+      "Bash(echo \"exit:$?\")"
     ]
   }
 }
