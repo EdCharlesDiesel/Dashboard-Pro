@@ -350,3 +350,211 @@ One focused trade in the London window, reviewed that evening — done consisten
 - The `archive/` folder contains earlier iterations and is not imported by the production dashboard.
 - Macro fallback data in `data_provider.py` is static as of 2024-Q1. Add a FRED API key to get live values.
 - The Trading Ideas tab auto-refreshes every 5 minutes using Streamlit's `@st.fragment` — no manual refresh needed.
+# Forex Fundamentals — Methodology
+
+This documents two of the trickier tabs: the **Priced-In Analyzer** and the
+**Risk Sentiment** gauge.
+
+---
+
+# Part 1 · Priced-In Analyzer
+
+## The idea in one line
+A currency reacts to the **surprise**, not the event. To trade fundamentals you
+must know what the market *already expects* — what's "priced in" — so you can
+judge whether that expectation is too high or too low. This tool reads the
+expectation straight from the interest-rate market.
+
+Two engines, because there's no single free source that does both well:
+
+| Engine | Covers | Source | Output |
+|---|---|---|---|
+| Curve-implied | All majors | FRED (no key) | Direction + rough size of priced policy change |
+| Fed funds futures | US only | yfinance `ZQ=F` | Probability of a move at the next meeting |
+
+---
+
+## Engine 1 — Curve-implied expectations
+
+A short market rate (~3-month) reflects the **current** policy stance. A longer
+market rate reflects the **average expected** policy rate over its horizon. The
+spread between them is, roughly, the net policy change the market has priced.
+
+```
+priced_bps   = (long_rate − short_rate) × 100
+moves_priced = priced_bps / 25          # in 25bp units
+```
+
+Read it as direction and magnitude:
+
+- **Positive spread** → hikes priced in (curve upward-sloping)
+- **Negative spread** → cuts priced in (curve inverted)
+- **Flat** → market expects policy on hold
+
+### The one caveat that matters
+The long rate also contains a **term premium** (compensation for holding
+duration), so this *overstates* the pure rate-expectation component. It is
+reliable for **direction and rough magnitude**, not for a clean probability.
+Two ways to tighten it if you want: swap the 10y for a 2y (less term premium),
+or use OIS/swap rates (cleanest, but not free). For a precise single-meeting
+number, use Engine 2.
+
+---
+
+## Engine 2 — Fed funds futures probability (US)
+
+A 30-day Fed funds future settles on the **average daily effective rate** over
+its contract month. If a meeting falls mid-month, that month's average is a
+blend of the rate *before* the meeting and the rate *after*:
+
+```
+avg_implied = 100 − futures_price
+avg_implied = (current_rate × days_before + rate_after × days_after) / N
+```
+
+Solve for the post-meeting rate, then express how much of a full move is priced:
+
+```
+rate_after = (avg_implied × N − current_rate × days_before) / days_after
+bp_priced  = rate_after − current_rate
+prob       = bp_priced / hike_size      # fraction of a full move, e.g. 0.25
+```
+
+This is the simplified **CME FedWatch** methodology.
+
+### Assumptions (they're baked in — know them)
+1. Exactly **one meeting** in the contract month.
+2. The effective rate equals the policy target **before** the meeting.
+3. Settlement = simple average of daily rates (ignores intra-month weighting
+   subtleties).
+
+Near the 0% / 100% edges, treat the number as approximate. For cuts, the tool
+flips `hike_size` negative and reports the fraction of a cut priced.
+
+### Worked example
+Current rate 5.00%, meeting on day 15 of a 30-day month, future at 94.8667:
+
+```
+avg_implied = 100 − 94.8667 = 5.1333
+rate_after  = (5.1333×30 − 5.00×14) / 16 = 5.25
+prob        = (5.25 − 5.00) / 0.25 = 1.00  → 100% priced
+```
+
+A 25bp hike is fully priced. If the Fed delivers exactly that, the decision is a
+non-event — the reaction will come from the **guidance**, which is why this tool
+pairs with the Statement Diff section.
+
+---
+
+## How to actually use it
+
+The workflow that turns this into an edge:
+
+1. **Before a meeting, read what's priced in** (this tool). Fully priced hike?
+   Then the hike itself won't move the currency much.
+2. **Form your own view** on whether that's right — cross-check the **Economic
+   Surprise** tab. If data is running hot but the market only prices a partial
+   hike, the market may be *under-pricing* → upside surprise risk.
+3. **On the day, the signal is the gap.** Outcome vs priced-in = the move. And
+   once the decision is priced, the **Statement Diff** wording shift is where
+   the remaining information lives.
+
+### Reading the output
+- **~100% priced** → decision is a non-event; trade the guidance, and beware a
+  no-change (large surprise).
+- **~0% priced** → if it happens, it's a genuine shock; expect a sharp move.
+- **Partial** → the outcome itself still carries information; the market is
+  undecided.
+
+### What this is *not*
+It's not a forecast of what the central bank will do, and not a fair-value
+model. It tells you what the market currently believes. Your edge is judging
+whether that belief is mispriced — the tool just makes the belief explicit and
+quantified instead of a vibe.
+
+---
+
+# Part 2 · Risk Sentiment & Capital Flows
+
+## The idea in one line
+Beyond rates and data, the market has a **mood**: risk-on or risk-off. In
+risk-off, money stampedes into safe havens (USD, JPY, CHF) *regardless of the
+fundamentals*. Knowing the regime often matters more than the micro data,
+because it can override everything in the other tabs.
+
+## Why it overrides fundamentals
+Capital flows dominate. When fear spikes, large pools of money de-risk at once —
+selling equities, EM, and commodity currencies, and buying havens and
+government bonds. That flow swamps a good CPI print or a favourable rate
+differential. A currency with great fundamentals can still fall hard in a
+risk-off wave simply because it's a "risk" currency (AUD, NZD, ZAR). So you read
+the regime *first*, then the fundamentals.
+
+## The two sides
+
+| | Risk-ON (greed) | Risk-OFF (fear) |
+|---|---|---|
+| Mood | Confident, chasing return | Scared, protecting capital |
+| Equities | Up | Down |
+| Volatility (VIX) | Low | Spiking |
+| Credit spreads | Tight | Widening |
+| Bought | AUD, NZD, CAD, EM, copper | USD, JPY, CHF, gold, Treasuries |
+| Sold | JPY, CHF (funders) | AUD, NZD, EM |
+
+**Why JPY and CHF are havens:** low domestic rates make them *funding
+currencies* — borrowed cheaply to buy higher-yielding assets (the carry trade).
+When risk-off hits, those trades unwind: traders buy back JPY/CHF to repay, so
+the havens surge. **AUD/JPY** captures both sides at once (high-yield commodity
+currency vs haven funder), which is why it's the classic risk barometer.
+
+## How the gauge is built
+Five market signals, each turned into a **z-score** (how unusual today is vs the
+last ~year) and **oriented so positive always means risk-on**:
+
+| Signal | Source | kind | orient | Reads |
+|---|---|---|---|---|
+| S&P 500 | yfinance `^GSPC` | ~1m momentum | +1 | equity appetite |
+| VIX | yfinance `^VIX` | level | −1 | fear (high = off) |
+| AUD/JPY | yfinance `AUDJPY=X` | ~1m momentum | +1 | direct risk barometer |
+| Copper/Gold | `HG=F` / `GC=F` | ~1m momentum | +1 | growth vs safety |
+| HY credit spread | FRED `BAMLH0A0HYM2` | level | −1 | stress (wide = off) |
+
+```
+component_z = rolling_zscore( momentum_or_level ) × orient   # + = risk-on
+composite   = mean( available component_z's )
+```
+
+Classification:
+
+```
+composite > +0.4  → Risk-On
+composite < −0.4  → Risk-Off
+otherwise         → Neutral / Mixed
+```
+
+The gauge also plots the composite over ~2 years (so you can see regimes swing)
+and a bar of each component's latest contribution (so you can see *what's*
+driving it — e.g. "VIX and credit spreads are pulling it risk-off while equities
+lag").
+
+## How to read and use it
+1. **Check the regime before anything else.** It's the weather; the other tabs
+   are the terrain.
+2. **Risk-off** → lean with havens. Cleanest expressions: **short AUD/JPY,
+   short NZD/JPY**; USD/JPY is muddy because both are havens.
+3. **Risk-on** → lean with growth/yield. Cleanest expression: **long AUD/JPY**.
+4. **Neutral** → risk flows aren't driving; *now* the rate-differential,
+   economic-surprise and priced-in tabs carry the signal.
+
+The big trap this helps you avoid: being long a fundamentally strong but
+risk-sensitive currency right as a risk-off wave hits. The fundamentals were
+right and you still lose, because the regime overrode them.
+
+## Limitations
+- Momentum z-scores are ~1-month lookbacks — good for the prevailing regime, but
+  they lag sudden intraday risk shocks. For fast moves watch VIX live.
+- The composite is an **equal-weight** average. You can weight signals (e.g.
+  lean on credit spreads and VIX) by editing `RISK_SIGNALS` and the averaging in
+  `composite_from_components`.
+- It describes the regime; it does not predict the *turn*. Regimes can persist or
+  flip fast on a headline.
