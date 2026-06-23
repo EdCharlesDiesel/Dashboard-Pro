@@ -770,32 +770,29 @@ def evaluate_trend_following_signal(df: pd.DataFrame, min_conditions: int = 4) -
     df = analyzer.add_indicators(df)
     r = df.iloc[-1]
     close = float(r["Close"])
-    e50 = float(r["EMA_50"])
-    e200 = float(ref_e200) if (ref_e200 := r.get("EMA_200")) else close # Note: add_indicators doesn't have EMA_200 by default, using SMA_50 as proxy if not available or adding it here
 
-    # Correction: add_indicators only provides EMA_20 and EMA_50.
-    # For trend following, we often use 200. Let's use SMA_50 and EMA_50 as fallback or improve analyzer.
-    # For now, let's stick to indicators available in TechnicalAnalyzer.
-
-    e20 = float(r["EMA_20"])
+    # add_indicators supplies EMA_20/EMA_50 but not the 200 EMA this signal is
+    # built around, so compute it here from the close. The 200-bar guard above
+    # guarantees a meaningful (fully-seeded) value.
     e50 = float(r["EMA_50"])
+    e200 = float(ema(df["Close"], 200).iloc[-1])
     rsi_val = float(r["RSI"])
     macd_v = float(r["MACD"])
     macd_s = float(r["MACD_Signal"])
     adx_v = float(r["ADX"])
 
     buy_conds = {
-        "Price above 50 EMA": close > e50,
-        "20 EMA above 50 EMA": e20 > e50,
-        "Price at/above 20 EMA": close >= e20 * 0.9985,
+        "Price above 200 EMA": close > e200,
+        "50 EMA above 200 EMA (golden)": e50 > e200,
+        "Price at/above 50 EMA": close >= e50 * 0.9985,
         "RSI 45–70 (bullish momentum)": 45 <= rsi_val <= 70,
         "MACD above Signal line": macd_v > macd_s,
         "Strong trend (ADX > 25)": adx_v > 25,
     }
     sell_conds = {
-        "Price below 50 EMA": close < e50,
-        "20 EMA below 50 EMA": e20 < e50,
-        "Price at/below 20 EMA": close <= e20 * 1.0015,
+        "Price below 200 EMA": close < e200,
+        "50 EMA below 200 EMA (death)": e50 < e200,
+        "Price at/below 50 EMA": close <= e50 * 1.0015,
         "RSI 30–55 (bearish momentum)": 30 <= rsi_val <= 55,
         "MACD below Signal line": macd_v < macd_s,
         "Strong trend (ADX > 25)": adx_v > 25,

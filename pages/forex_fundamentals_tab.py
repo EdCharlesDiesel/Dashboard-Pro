@@ -127,18 +127,37 @@ CB_STATEMENTS = {
         "https://www.bankofengland.co.uk/monetary-policy-summary-and-minutes/2026",
 }
 
-# Deterministic hawkish / dovish lexicon (lowercased, substring match).
+# Deterministic hawkish / dovish lexicon. Entries are STEMS: matching uses a
+# leading word boundary + trailing \w*, so "raise" also catches raised/raising,
+# while a leading \b stops "increase"/"please" from registering the term "ease".
+# Stems are de-duplicated (no entry is a prefix of another in the same list) so
+# a single word is never counted twice.
 HAWKISH_TERMS = [
-    "raise", "raising", "increase", "tighten", "tightening", "restrictive",
-    "elevated inflation", "inflationary pressure", "upside risk", "robust",
-    "strong labor", "strong labour", "overheating", "vigilant", "further increases",
-    "higher for longer", "firm", "resilient", "persistent inflation", "above target",
+    "rais", "increas", "tighten", "restrictive", "elevated inflation",
+    "inflationary pressure", "upside risk", "robust", "strong labor",
+    "strong labour", "overheating", "vigilant", "higher for longer",
+    "resilient", "persistent inflation", "above target", "firm", "hawkish",
 ]
 DOVISH_TERMS = [
-    "cut", "cutting", "lower", "ease", "easing", "accommodative", "downside risk",
-    "slowing", "slowdown", "weaken", "weakening", "softening", "soft", "moderating",
-    "cooling", "patient", "support employment", "below target", "subdued",
-    "disinflation", "loosen", "loosening",
+    "cut", "lower", "ease", "easing", "accommodative", "downside risk",
+    "slow", "weaken", "soft", "moderat", "cool", "patient",
+    "support employment", "below target", "subdued", "disinflation",
+    "loosen", "dovish",
+]
+
+# Forward-guidance detection. GUIDANCE_PHRASES are the forward-looking,
+# commitment-style constructions central banks use when they ARE guiding.
+GUIDANCE_PHRASES = [
+    "we anticipate", "committee anticipates", "anticipate that", "we expect",
+    "expects to", "likely to be appropriate", "will be appropriate",
+    "in coming months", "in the coming months", "over coming meetings",
+    "additional policy firming", "further tightening", "future adjustments",
+    "ongoing increases", "path of policy", "will likely", "appropriate to",
+    "in determining the extent",
+]
+GUIDANCE_REMOVAL_WORDS = [
+    "drop", "dropped", "no ", "without", "absent", "removed", "remove",
+    "dispens", "refrain", "abandon", "eliminat", "no longer",
 ]
 
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
@@ -215,11 +234,23 @@ def compute_surprise(series: pd.Series, mode: str, lookback: int = 12) -> dict |
     }
 
 
+def _term_hits(low_text: str, terms) -> int:
+    """Count term occurrences with a leading word boundary + suffix wildcard."""
+    return sum(len(re.findall(r"\b" + re.escape(t) + r"\w*", low_text))
+               for t in terms)
+
+
 def lexicon_score(text: str) -> dict:
-    """Deterministic hawkish/dovish tone from a statement's text."""
+    """
+    Deterministic hawkish/dovish tone from a statement's text.
+
+    Word-boundary matching (\\b<stem>\\w*) so that 'increase' and 'please' no
+    longer falsely fire the dovish term 'ease', while inflections like
+    raised / raising / tightening are still caught from their stems.
+    """
     low = (text or "").lower()
-    hawk = sum(low.count(t) for t in HAWKISH_TERMS)
-    dove = sum(low.count(t) for t in DOVISH_TERMS)
+    hawk = _term_hits(low, HAWKISH_TERMS)
+    dove = _term_hits(low, DOVISH_TERMS)
     total = hawk + dove
     net = (hawk - dove) / total if total else 0.0  # -1 dovish .. +1 hawkish
     if net > 0.15:
@@ -229,6 +260,39 @@ def lexicon_score(text: str) -> dict:
     else:
         label = "Neutral / Mixed"
     return {"hawkish": hawk, "dovish": dove, "net": net, "label": label}
+
+
+def detect_forward_guidance(text: str) -> dict:
+    """
+    Detect whether a statement contains forward guidance — and, importantly,
+    whether it explicitly REMOVES it. Stripping forward guidance is itself a
+    major signal: the central bank is choosing to be less predictable, which
+    pushes the market's attention onto incoming data rather than its words.
+
+    status: 'Stripped / absent' | 'Present' | 'Minimal' | 'Absent'
+    """
+    low = (text or "").lower()
+    phrase_hits = _term_hits(low, GUIDANCE_PHRASES)
+    mentions_fg = bool(re.search(r"forward[- ]guidance", low))
+
+    removed = False
+    if mentions_fg:
+        for m in re.finditer(r"forward[- ]guidance", low):
+            window = low[max(0, m.start() - 60): m.end() + 25]
+            if any(w in window for w in GUIDANCE_REMOVAL_WORDS):
+                removed = True
+                break
+
+    if removed:
+        status = "Stripped / absent"
+    elif phrase_hits >= 2:
+        status = "Present"
+    elif phrase_hits == 1:
+        status = "Minimal"
+    else:
+        status = "Absent"
+    return {"status": status, "phrase_hits": phrase_hits,
+            "mentions_fg": mentions_fg, "removed_flag": removed}
 
 
 def _sentences(text: str) -> list[str]:
@@ -326,6 +390,34 @@ def risk_fx_implications(label: str) -> str:
     return ("**No dominant regime.** Risk flows aren't in the driver's seat — "
             "defer to the rate-differential, economic-surprise and priced-in "
             "tabs, which carry more signal when sentiment is neutral.")
+
+
+def rate_verdict(base: str, quote: str, pair_name: str,
+                 d_now: float, trend: float, eps: float = 0.02) -> str:
+    """
+    Sign-aware fundamental read of a rate differential.
+      d_now > 0  -> differential favours the BASE currency
+      d_now < 0  -> differential favours the QUOTE currency
+      trend       -> change in the differential vs ~6m ago (toward base if +)
+    """
+    if d_now > 0:
+        if trend > eps:
+            return (f"Differential favours **{base}** and widening → "
+                    f"fundamentally supportive of {pair_name}.")
+        if trend < -eps:
+            return (f"Differential favours **{base}** but narrowing → "
+                    f"fundamental tailwind for {pair_name} fading.")
+        return (f"Differential favours **{base}**, broadly stable → "
+                f"mild fundamental support for {pair_name}.")
+    else:
+        if trend > eps:
+            return (f"Differential favours **{quote}** but narrowing → "
+                    f"fundamental pressure on {pair_name} easing.")
+        if trend < -eps:
+            return (f"Differential favours **{quote}** and widening → "
+                    f"fundamental pressure on {pair_name}.")
+        return (f"Differential favours **{quote}**, broadly stable → "
+                f"fundamental headwind for {pair_name}.")
 
 
 def curve_implied_priced_in(short_rate: float, long_rate: float,
@@ -542,28 +634,46 @@ def _section_rate_differentials():
     m3.metric(f"{base}-{quote} differential", f"{d_now:+.2f}%",
               delta=f"{trend:+.2f} vs ~6m ago")
 
-    bias = (f"Differential favouring **{base}** and widening → fundamentally "
-            f"supportive of {pair_name}." if trend > 0.02 else
-            f"Differential favouring **{base}** but narrowing → fundamental "
-            f"tailwind fading." if d_now > 0 else
-            f"Differential favours **{quote}** → fundamental pressure on {pair_name}.")
-    st.markdown(bias)
+    st.markdown(rate_verdict(base, quote, pair_name, d_now, trend))
 
-    # Overlay differential vs price (normalised to compare shapes).
+    # --- Chart: align the MONTHLY differential to the DAILY price ---
+    # FRED rate series are monthly; price is daily. Forward-fill the
+    # differential onto the daily index (a step series) so the price keeps its
+    # daily detail instead of both collapsing to monthly via an inner join.
     price = load_pair_price(ticker)
-    if not price.empty:
-        merged = pd.concat(
-            [df["Differential"].rename("Rate differential"),
-             price.rename("Price")], axis=1
-        ).dropna()
-        if not merged.empty:
-            norm = (merged - merged.mean()) / merged.std()
-            st.line_chart(norm, height=300)
-            st.caption("Z-normalised so the *shape* of the differential and the "
-                       "price can be compared. Divergences are where fundamentals "
-                       "and price disagree — often the interesting trades.")
-    else:
+    if price.empty:
         st.line_chart(df[[base, quote, "Differential"]], height=300)
+        return
+
+    diff_series = df["Differential"]
+    diff_daily = (diff_series
+                  .reindex(diff_series.index.union(price.index))
+                  .ffill()
+                  .reindex(price.index)
+                  .rename("Rate differential"))
+    aligned = pd.concat([diff_daily, price.rename("Price")], axis=1).dropna()
+    if aligned.empty:
+        st.warning("No overlapping price / rate data to chart.")
+        return
+
+    view = st.radio("Chart view", ["Overlay (z-normalised)", "Separate panels"],
+                    horizontal=True, key="rd_view")
+
+    if view.startswith("Overlay"):
+        norm = (aligned - aligned.mean()) / aligned.std()
+        st.line_chart(norm, height=320)
+        st.caption("Daily price with the monthly differential forward-filled to "
+                   "daily (a step line), both z-normalised so their *shapes* are "
+                   "comparable. Divergences are where fundamentals and price "
+                   "disagree — often the interesting trades.")
+    else:
+        st.markdown(f"**{pair_name} price** (daily)")
+        st.line_chart(aligned["Price"], height=220)
+        st.markdown(f"**{base}-{quote} rate differential** (%, monthly stepped)")
+        st.line_chart(aligned["Rate differential"], height=220)
+        st.caption("Separate panels keep each series on its native scale and "
+                   "shared daily timeline — no normalisation, so you read the "
+                   "actual price and the actual differential in percent.")
 
 
 def _section_economic_surprise():
@@ -663,6 +773,34 @@ def _section_statement_diff():
     c3.metric("Tone shift", arrow, f"{shift:+.2f}")
     st.caption(f"Statement similarity: {d['similarity']*100:.0f}% "
                f"(hawkish/dovish keyword counts — latest: {nt['hawkish']}/{nt['dovish']}).")
+
+    # --- Forward-guidance detector ---
+    fg_new = detect_forward_guidance(new_text)
+    fg_old = detect_forward_guidance(old_text)
+    st.markdown("**🧭 Forward guidance**")
+    g1, g2 = st.columns(2)
+    g1.metric("Previous statement", fg_old["status"],
+              f"{fg_old['phrase_hits']} guidance cues")
+    g2.metric("Latest statement", fg_new["status"],
+              f"{fg_new['phrase_hits']} guidance cues")
+
+    was_present = fg_old["status"] in ("Present", "Minimal")
+    now_gone = fg_new["status"] in ("Stripped / absent", "Absent")
+    if fg_new["removed_flag"] or (was_present and now_gone):
+        st.warning(
+            "⚠️ **Forward guidance appears to have been stripped this meeting.** "
+            "That is itself a major signal: the central bank is choosing to be "
+            "*less* predictable. Expect the currency to react more to incoming "
+            "**data surprises** and the **market-implied** path (Economic "
+            "Surprise + Priced-In tabs) and less to the bank's words. Two-way "
+            "volatility around data releases typically rises.")
+    elif fg_new["status"] == "Present":
+        st.caption("Forward guidance is present — the bank is steering "
+                   "expectations, so its words carry direct signal and the "
+                   "priced-in path leans on this guidance.")
+    else:
+        st.caption("Little explicit forward guidance detected — lean on the "
+                   "Priced-In and Economic Surprise tabs for the rate path.")
 
     cc1, cc2 = st.columns(2)
     with cc1:
@@ -866,21 +1004,5 @@ def render():
 if __name__ == "__main__":
     if st is None:
         raise SystemExit("Run with: streamlit run forex_fundamentals_tab.py")
-    st.set_page_config(
-        page_title="Forex Fundamentals · Trading System",
-        page_icon="🌍",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-    # Harmonize with the rest of the multipage app (terminal theme + shared nav).
-    try:
-        from src.ui.theme import BloombergTheme
-        from src.pages_lib.navigation import render_sidebar_nav
-
-        BloombergTheme.apply()
-        with st.sidebar:
-            render_sidebar_nav()
-    except Exception:
-        # Standalone `streamlit run` outside the package — degrade gracefully.
-        pass
+    st.set_page_config(page_title="Forex Fundamentals", layout="wide")
     render()
