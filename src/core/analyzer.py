@@ -418,11 +418,19 @@ class TechnicalAnalyzer:
         if df.empty:
             return df
         ha = pd.DataFrame(index=df.index)
-        ha['Open'] = 0.0
         ha['Close'] = (df['Open'] + df['High'] + df['Low'] + df['Close']) / 4
-        ha['Open'].iloc[0] = (df['Open'].iloc[0] + df['Close'].iloc[0]) / 2
+
+        # HA Open is recursive (each value depends on the previous HA Open and
+        # Close), so it can't be vectorised. Build it in a NumPy array and assign
+        # the whole column once — element-wise `ha['Open'].iloc[i] = ...` is a
+        # silent no-op under pandas 3.0 Copy-on-Write (chained assignment).
+        ha_open = np.empty(len(df))
+        ha_open[0] = (df['Open'].iloc[0] + df['Close'].iloc[0]) / 2
+        ha_close = ha['Close'].to_numpy()
         for i in range(1, len(df)):
-            ha['Open'].iloc[i] = (ha['Open'].iloc[i - 1] + ha['Close'].iloc[i - 1]) / 2
+            ha_open[i] = (ha_open[i - 1] + ha_close[i - 1]) / 2
+        ha['Open'] = ha_open
+
         ha['High'] = df[['High', 'Open', 'Close']].max(axis=1)
         ha['Low'] = df[['Low', 'Open', 'Close']].min(axis=1)
         return ha
