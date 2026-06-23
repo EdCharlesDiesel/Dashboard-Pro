@@ -122,7 +122,7 @@ with st.sidebar:
     lookback = st.selectbox("History window",
                             ["5y", "10y", "15y", "max"], index=1)
 
-    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -232,7 +232,7 @@ with tab_month:
         yaxis=dict(showgrid=True, gridcolor="#2a2a2a", ticksuffix="%"),
         showlegend=False,
     )
-    st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
+    st.plotly_chart(fig, width="stretch", config=dict(displayModeBar=False))
 
     # Win-rate companion table
     st.markdown('<div class="section-title">✅ Win Rate by Month (% of years green)</div>',
@@ -246,7 +246,7 @@ with tab_month:
             "Years": int(pivot[m].notna().sum()),
         })
     st.dataframe(
-        pd.DataFrame(wr_rows), use_container_width=True, hide_index=True,
+        pd.DataFrame(wr_rows), width="stretch", hide_index=True,
         column_config={
             "Avg Return %": st.column_config.NumberColumn(format="%.2f"),
             "Win Rate %":   st.column_config.ProgressColumn(
@@ -276,7 +276,7 @@ with tab_heat:
         xaxis=dict(side="top", showgrid=False),
         yaxis=dict(autorange="reversed", showgrid=False),
     )
-    st.plotly_chart(fig2, use_container_width=True, config=dict(displayModeBar=False))
+    st.plotly_chart(fig2, width="stretch", config=dict(displayModeBar=False))
     st.caption("Green = month closed up vs prior month · red = down. "
                "Each cell is the month-over-month percentage change of the close.")
 
@@ -311,13 +311,13 @@ with tab_dow:
         yaxis=dict(showgrid=True, gridcolor="#2a2a2a", ticksuffix="%"),
         showlegend=False,
     )
-    st.plotly_chart(fig3, use_container_width=True, config=dict(displayModeBar=False))
+    st.plotly_chart(fig3, width="stretch", config=dict(displayModeBar=False))
 
     dow_disp = dow.reset_index().rename(columns={
         "index": "Weekday", "avg": "Avg Return %",
         "winrate": "Win Rate %", "n": "Sample Days"})
     st.dataframe(
-        dow_disp, use_container_width=True, hide_index=True,
+        dow_disp, width="stretch", hide_index=True,
         column_config={
             "Avg Return %": st.column_config.NumberColumn(format="%.3f"),
             "Win Rate %":   st.column_config.ProgressColumn(

@@ -47,7 +47,7 @@ with st.sidebar:
         st.caption("Window: all trades")
     else:
         window = st.slider("Trade window (closed trades)", 20, 2000, 100, step=20)
-    if st.button("🔄 Refresh", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh", width="stretch", type="primary"):
         st.rerun()
 
     ai_on = ai_reports.is_available()
@@ -87,7 +87,7 @@ def _ai_block(title: str, data: dict, key: str) -> None:
     if not ai_reports.is_available():
         return
     if st.button(f"✨ AI summary — {title}", key=f"ai_{key}",
-                 use_container_width=True):
+                 width="stretch"):
         with st.spinner("Asking Claude to read the report…"):
             try:
                 st.session_state[f"ai_out_{key}"] = ai_reports.summarize_report(title, data)
@@ -117,7 +117,7 @@ with tab_amd:
         df = pd.DataFrame(list(rep["latest_by_instrument"].values()))
         st.dataframe(df[[c for c in ("instrument", "phase", "bias",
                                      "last_close", "ts") if c in df]],
-                     use_container_width=True, height=320)
+                     width="stretch", height=320)
     else:
         st.info("No AMD scans recorded yet. Open the **AMD Scanner** page and run "
                 "a few instruments — each scan is recorded here automatically.")
@@ -177,7 +177,7 @@ with tab_sys:
     if rep["recent_errors"]:
         st.markdown("**Recent errors**")
         st.dataframe(pd.DataFrame(rep["recent_errors"]),
-                     use_container_width=True, height=240)
+                     width="stretch", height=240)
     _ai_block("System Activity", rep, "sys")
 
 # ── Market & macro snapshot ────────────────────────────────────────────────
@@ -197,7 +197,7 @@ with tab_macro:
                  for k in ("GDP", "Inflation", "Rates", "Unemployment")}}
              for c, b in rep["macro_bias"].items()]
         )
-        st.dataframe(bias_df, use_container_width=True, height=320)
+        st.dataframe(bias_df, width="stretch", height=320)
     if rep["amd_phase_counts"]:
         st.markdown("**Current AMD phase distribution**")
         st.bar_chart(pd.Series(rep["amd_phase_counts"]), height=220)

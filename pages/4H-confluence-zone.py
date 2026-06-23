@@ -33,7 +33,7 @@ st.markdown("""
 html,body,[class*="css"]{ font-family:'JetBrains Mono','Fira Code',monospace; }
 .stApp{ background:var(--background-color); }
 section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
-#MainMenu,footer,header{ visibility:hidden; }
+#MainMenu,footer{ visibility:hidden; }
 [data-testid="stSidebarCollapsedControl"]{ visibility:visible!important; }
 [data-testid="stSidebarNav"]{ display:none; }
 .block-container{ padding-top:1.5rem; max-width:1380px; }
@@ -309,7 +309,7 @@ with st.sidebar:
         step=0.1,
     ) / 100
 
-    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -489,7 +489,7 @@ with tab_scan:
                 else "Moderate" if r.get("num_zones", 0) > 0
                 else "None" if r.get("ok") else "Error",
             })
-        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(table_rows), width="stretch", hide_index=True)
 
 # ══════════════════════════════════════════════
 #  TAB 2 — Pair Detail
@@ -808,7 +808,7 @@ with tab_detail:
             yaxis2=dict(showgrid=False, side="right"),
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # ── Raw level table ───────────────────────
         with st.expander("📋 All Levels Reference Table"):
@@ -827,7 +827,7 @@ with tab_detail:
                              "Δ% from Price": round((float(value) - current_price) / current_price * 100, 3)})
 
             ref_df = pd.DataFrame(rows).sort_values("Level", ascending=False)
-            st.dataframe(ref_df, use_container_width=True, hide_index=True)
+            st.dataframe(ref_df, width="stretch", hide_index=True)
 
         st.caption(
             f"Data: yfinance · 4H candles · Last refreshed "

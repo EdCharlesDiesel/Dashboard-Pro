@@ -27,7 +27,7 @@ st.markdown("""
     html,body,[class*="css"]{ font-family:'JetBrains Mono','Fira Code',monospace; }
     .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
-    #MainMenu,footer,header{ visibility:hidden; }
+    #MainMenu,footer{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
@@ -362,7 +362,7 @@ with st.sidebar:
     st.divider()
 
     # Auto-fetch live price
-    if st.button("⚡ Fetch Live Price", use_container_width=True, type="primary"):
+    if st.button("⚡ Fetch Live Price", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -577,7 +577,7 @@ with tab_scan:
                     "Lot Size":   round(_r["lot"], 2),
                     "Risk $":     f"${_r['risk_usd']:.2f}",
                 })
-        st.dataframe(pd.DataFrame(_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(_rows), width="stretch", hide_index=True)
 
 with tab_detail:
     # ── Verdict banner ─────────────────────────────────────────────────
@@ -742,9 +742,9 @@ with tab_detail:
 
     chart_l, chart_r = st.columns([3, 2])
     with chart_l:
-        st.plotly_chart(build_rr_chart(c, selected_pair), use_container_width=True)
+        st.plotly_chart(build_rr_chart(c, selected_pair), width="stretch")
     with chart_r:
-        st.plotly_chart(build_winrate_chart(c), use_container_width=True)
+        st.plotly_chart(build_winrate_chart(c), width="stretch")
 
     st.markdown("---")
 
@@ -771,7 +771,7 @@ with tab_detail:
         })
 
     sc_df = pd.DataFrame(scenario_rows)
-    st.dataframe(sc_df, use_container_width=True, hide_index=True,
+    st.dataframe(sc_df, width="stretch", hide_index=True,
                  column_config={
                      "Gross P&L ($)":      st.column_config.NumberColumn(format="$%.2f"),
                      "Edge per trade ($)": st.column_config.NumberColumn(format="$%.2f"),

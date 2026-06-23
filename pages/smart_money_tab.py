@@ -265,7 +265,7 @@ def render():
 
     zones = detect_zones(df, impulse_atr=sens)
     st.plotly_chart(_build_chart(df, zones, mf_name, mf_series),
-                    use_container_width=True)
+                    width="stretch")
     st.caption("Solid zones are **fresh** (untested); faded zones are **mitigated** "
                "— price already traded back through them, so they're used up. That "
                "fresh/used distinction is the real 'fake zone' filter.")
@@ -303,7 +303,7 @@ def render():
             "Impulse (ATR)": round(z["strength"], 1),
             "Vol z": round(z["vol_z"], 1), "Status": z["status"],
         } for z in zones])
-        st.dataframe(zdf, use_container_width=True, hide_index=True)
+        st.dataframe(zdf, width="stretch", hide_index=True)
     st.caption("A high-quality zone = strong impulse **and** elevated volume at the "
                "base **and** still fresh. A zone on weak volume or already mitigated "
                "is exactly the 'fake' one to skip — now you can see which is which "

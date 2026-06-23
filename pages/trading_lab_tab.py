@@ -24,7 +24,11 @@ import os
 import numpy as np
 import pandas as pd
 
-from regime import (efficiency_ratio, adx, regime_mask, apply_regime_filter)
+# regime.py lives in pages/ alongside this file; import it package-qualified so
+# it resolves under Streamlit (where `pages/` is not itself on sys.path). The
+# page UI in regime.py is guarded behind `__main__`, so this only pulls in the
+# pure detector functions — it does not execute that page.
+from pages.regime import (efficiency_ratio, adx, regime_mask, apply_regime_filter)
 
 try:
     import streamlit as st
@@ -363,7 +367,7 @@ def render_journal():
                 st.error("Could not write the CSV — check the path is writable.")
 
     st.markdown("**Your trades** (edit inline, then Save)")
-    edited = st.data_editor(df, use_container_width=True, num_rows="dynamic",
+    edited = st.data_editor(df, width="stretch", num_rows="dynamic",
                             hide_index=True, key="journal_editor")
     if st.button("💾 Save edits"):
         st.success("Saved.") if save_journal(edited, path) else st.error("Save failed.")
@@ -401,11 +405,11 @@ def render_journal():
     if stats["by_setup"] is not None and not stats["by_setup"].empty:
         with cc1:
             st.markdown("**By setup** (mean R, count)")
-            st.dataframe(stats["by_setup"].round(2), use_container_width=True)
+            st.dataframe(stats["by_setup"].round(2), width="stretch")
     if stats["by_pair"] is not None and not stats["by_pair"].empty:
         with cc2:
             st.markdown("**By pair** (mean R, count)")
-            st.dataframe(stats["by_pair"].round(2), use_container_width=True)
+            st.dataframe(stats["by_pair"].round(2), width="stretch")
     st.caption("The 'by setup' table is where edges hide: one tag with strong "
                "positive mean R and enough trades is your real strategy — do more "
                "of it, cut the rest.")
@@ -560,7 +564,7 @@ def render_backtest():
             _row("Filtered", res, position),
         ])
         st.markdown("### 🚦 Does the regime filter earn its keep?")
-        st.dataframe(cmp_df, use_container_width=True, hide_index=True)
+        st.dataframe(cmp_df, width="stretch", hide_index=True)
         st.caption("The filter should trade **less** (lower time in market) but "
                    "**better** (higher Sharpe and profit factor, shallower "
                    "drawdown). If filtering doesn't lift risk-adjusted return, the "
@@ -589,5 +593,25 @@ def render():
 if __name__ == "__main__":
     if st is None:
         raise SystemExit("Run with: streamlit run trading_lab_tab.py")
-    st.set_page_config(page_title="Trading Lab", layout="wide")
+
+    # Page bootstrap — kept lazy so the pure helpers above can still be imported
+    # headlessly. Mirrors the legacy-page contract used across the app:
+    # set_page_config → BloombergTheme.apply() → sidebar (header → divider → nav).
+    from src.ui.theme import BloombergTheme
+    from src.pages_lib.navigation import render_sidebar_nav
+
+    st.set_page_config(
+        page_title="Trading Lab · Trading System",
+        page_icon="🔬",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    BloombergTheme.apply()
+
+    with st.sidebar:
+        st.markdown("### 🔬 Trading Lab")
+        st.caption("Trade journal + backtest engine")
+        st.divider()
+        render_sidebar_nav()
+
     render()

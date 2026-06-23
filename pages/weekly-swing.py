@@ -42,7 +42,7 @@ st.markdown("""
                     margin:24px 0 12px 0; padding-left:4px; border-left:3px solid #00ff41; }
     .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:10px;
                  margin:6px 0 2px 0; overflow:hidden; }
-    #MainMenu,footer,header{ visibility:hidden; }
+    #MainMenu,footer{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
@@ -559,7 +559,7 @@ with st.sidebar:
     daily_n = st.slider("Daily candles shown", 30, 180, 90, step=15)
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
@@ -744,7 +744,7 @@ with tab_scan:
                     "LH":        "✅" if r["sw"].get("lh") else "❌",
                     "Alignment": r["aln"]["verdict"],
                 })
-        st.dataframe(pd.DataFrame(tbl_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(tbl_rows), width="stretch", hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -905,12 +905,12 @@ with tab_detail:
         tab_w, tab_d = st.tabs(["📅 Weekly Swing Chart", "📆 Daily Trend Chart"])
         with tab_w:
             fig_w = build_weekly_chart(sw, selected_pair, show_n=weekly_n)
-            st.plotly_chart(fig_w, use_container_width=True)
+            st.plotly_chart(fig_w, width="stretch")
         with tab_d:
             fig_d = build_daily_chart(dt, selected_pair,
                                       fast=int(daily_fast), slow=int(daily_slow),
                                       show_n=daily_n)
-            st.plotly_chart(fig_d, use_container_width=True)
+            st.plotly_chart(fig_d, width="stretch")
 
         st.markdown("---")
 
@@ -931,7 +931,7 @@ with tab_detail:
                              "Price": round(val, 5), "Structure": tag})
             if rows:
                 piv_df = pd.DataFrame(rows).sort_values("Date", ascending=False)
-                st.dataframe(piv_df, use_container_width=True, hide_index=True)
+                st.dataframe(piv_df, width="stretch", hide_index=True)
             else:
                 st.info("No pivot data available.")
 

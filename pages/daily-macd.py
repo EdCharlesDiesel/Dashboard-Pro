@@ -28,7 +28,7 @@ st.markdown("""
     html,body,[class*="css"]{ font-family:'JetBrains Mono','Fira Code',monospace; }
     .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
-    #MainMenu,footer,header{ visibility:hidden; }
+    #MainMenu,footer{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
@@ -443,7 +443,7 @@ with st.sidebar:
                      help="How many recent histogram bars to assess direction over")
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
@@ -633,7 +633,7 @@ with tab_scan:
                     "Falling": r["falling_count"],
                     "Accel":   "▲" if r["accelerating"] else ("▼" if r["decelerating"] else "—"),
                 })
-        st.dataframe(pd.DataFrame(tbl_rows), use_container_width=True, hide_index=True,
+        st.dataframe(pd.DataFrame(tbl_rows), width="stretch", hide_index=True,
                      column_config={
                          "H Now":   st.column_config.NumberColumn("H Now",   format="%+.5f"),
                          "MACD":    st.column_config.NumberColumn("MACD",    format="%.5f"),
@@ -752,7 +752,7 @@ with tab_detail:
         fig = build_chart(m, selected_pair,
                           fast=int(fast), slow=int(slow), sig=int(sig),
                           show_n=show_candles)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.markdown("---")
 
@@ -777,7 +777,7 @@ with tab_detail:
                 directions.append("→ Flat")
         recent["Direction"] = directions
         recent.columns      = ["Close", "MACD", "Signal", "Histogram", "Direction"]
-        st.dataframe(recent.round(5), use_container_width=True,
+        st.dataframe(recent.round(5), width="stretch",
                      column_config={
                          "Histogram": st.column_config.NumberColumn("Histogram", format="%.5f"),
                          "MACD":      st.column_config.NumberColumn("MACD",      format="%.5f"),

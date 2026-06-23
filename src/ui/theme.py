@@ -67,20 +67,30 @@ html, body, [class*="css"] {{
     max-width: 100% !important;
 }}
 
-/* hide streamlit chrome — but NEVER the header itself: in current Streamlit
-   the sidebar expand/collapse arrow lives inside the header, so hiding the
-   whole header makes a collapsed sidebar impossible to reopen. Hide only the
-   menu, footer, toolbar (Deploy cluster) and the auto page-nav. */
+/* hide streamlit chrome — but NEVER the header OR toolbar wholesale. In
+   Streamlit 1.57 the collapsed-sidebar EXPAND arrow (stExpandSidebarButton) is
+   rendered INSIDE stToolbar, as a sibling of the Deploy/menu cluster. A
+   `display:none` on stToolbar removes that whole subtree — the arrow included —
+   so a collapsed sidebar can never be reopened. Hide only the individual chrome
+   items and leave the toolbar + expand arrow intact. */
 #MainMenu, footer {{ visibility: hidden; }}
-[data-testid="stToolbar"] {{ display: none !important; }}
+[data-testid="stMainMenu"],
+[data-testid="stToolbarActions"],
+[data-testid="stAppDeployButton"],
+[data-testid="stStatusWidget"] {{ display: none !important; }}
 [data-testid="stDecoration"] {{ display: none !important; }}
 [data-testid="stSidebarNav"] {{ display: none; }}
-/* Keep the header visible — the sidebar collapse/expand arrow lives inside it.
-   Legacy pages hide it with `header{{visibility:hidden}}`; override that so a
-   collapsed sidebar can always be reopened. */
+/* Keep the header AND toolbar visible — the sidebar expand arrow lives inside
+   the toolbar. Legacy pages hide the header with `header{{visibility:hidden}}`;
+   override that so a collapsed sidebar can always be reopened. */
 header[data-testid="stHeader"] {{
     background: transparent !important;
     visibility: visible !important;
+}}
+[data-testid="stToolbar"] {{
+    background: transparent !important;
+    visibility: visible !important;
+    display: flex !important;
 }}
 
 /* Sidebar APPEARANCE ONLY — never pin it open. The previous build forced
@@ -94,32 +104,61 @@ section[data-testid="stSidebar"] {{
 }}
 /* Always-tappable toggle controls so the sidebar can be hidden AND reopened,
    even on touch (the arrow is normally hover-only) and on legacy pages that
-   hide the header. */
+   hide the header. Force terminal-green so the COLLAPSED-state expand control —
+   which renders OUTSIDE the sidebar, where the sidebar `*` colour rule never
+   reaches it — is visible instead of black-on-black. */
 [data-testid="stSidebarCollapseButton"],
 [data-testid="stSidebarCollapseButton"] button,
 [data-testid="stExpandSidebarButton"],
 [data-testid="stExpandSidebarButton"] button,
-[data-testid="stSidebarCollapsedControl"] {{
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapsedControl"] button {{
     visibility: visible !important;
     display: flex !important;
     opacity: 1 !important;
+    color: {cls.AMBER} !important;
 }}
 section[data-testid="stSidebar"] * {{
     color: {cls.WHITE} !important;
     font-family: {cls.FONT_MONO} !important;
     font-size: 11px !important;
 }}
-/* The forced monospace above also clobbers Material Symbols icon ligatures, so
-   the sidebar collapse arrow renders as the literal text
-   "keyboard_double_arrow_left" and a collapsed sidebar can't be reopened.
-   Re-assert the icon font (higher specificity than the `*` rule) on icon
-   elements, including the header expand/collapse controls. */
-section[data-testid="stSidebar"] [data-testid="stIconMaterial"],
-[data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"],
-[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"],
-[data-testid="stSidebarCollapsedControl"] [data-testid="stIconMaterial"] {{
+/* re-assert the icon font on sidebar Material icons in general (the monospace
+   `*` rule above otherwise breaks every ligature). */
+section[data-testid="stSidebar"] [data-testid="stIconMaterial"] {{
     font-family: 'Material Symbols Rounded', 'Material Symbols Outlined',
                  'Material Symbols Sharp' !important;
+}}
+/* The collapse/expand ARROW specifically. Two bugs to beat:
+   1. the sidebar monospace `*` rule turns the glyph into the literal text
+      "keyboard_double_arrow_left";
+   2. Streamlit hardcodes the EXPAND arrow's colour to `fadedText60`, which is
+      near-invisible on this black theme — so a collapsed sidebar looks like it
+      has no reopen control at all.
+   Target EVERY descendant (`*`) of the toggle controls — these buttons contain
+   only the glyph, so the universal selector is safe and matches whatever
+   element (span / i / svg) this Streamlit version wraps the icon in. Re-assert
+   the icon font, force terminal-green, and bump the size so it's unmissable. */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapseButton"] *,
+[data-testid="stExpandSidebarButton"],
+[data-testid="stExpandSidebarButton"] *,
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapsedControl"] * {{
+    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined',
+                 'Material Symbols Sharp' !important;
+    color: {cls.AMBER} !important;
+    fill: {cls.AMBER} !important;
+    font-size: 1.6rem !important;
+    opacity: 1 !important;
+}}
+/* Give the COLLAPSED-state reopen button a visible chip so it can never blend
+   into the background, and pin it on top of page content. */
+[data-testid="stExpandSidebarButton"] {{
+    background: {cls.BG_PANEL} !important;
+    border: 1px solid {cls.AMBER} !important;
+    border-radius: 0 !important;
+    z-index: 1000000 !important;
 }}
 section[data-testid="stSidebar"] h3,
 section[data-testid="stSidebar"] h4 {{

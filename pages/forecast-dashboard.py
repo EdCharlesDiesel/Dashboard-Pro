@@ -217,7 +217,7 @@ with tab_prob:
         fig_c.add_hline(y=fc.last - fc.sl_dist, line_dash="dash", line_color=RED, line_width=1)
         st.plotly_chart(_dark(fig_c, 380, legend=dict(orientation="h", y=1.05, bgcolor="rgba(0,0,0,0)"),
                               xaxis=dict(title="Trading days (0 = today)")),
-                        use_container_width=True, config=dict(displayModeBar=False))
+                        width="stretch", config=dict(displayModeBar=False))
     with cc2:
         st.markdown(f"**Where price lands in {horizon} days**")
         term = fc.terminal_sample
@@ -225,7 +225,7 @@ with tab_prob:
                                        marker=dict(color=[GREEN if t > fc.last else RED for t in term])))
         fig_h.add_vline(x=fc.last, line_color="#e6e6e6", line_width=1.5)
         st.plotly_chart(_dark(fig_h, 380, showlegend=False),
-                        use_container_width=True, config=dict(displayModeBar=False))
+                        width="stretch", config=dict(displayModeBar=False))
 
     with st.expander("◇ The math under the hood"):
         st.markdown(f"""
@@ -275,7 +275,7 @@ with tab_stat:
                           legend=dict(orientation="h", y=1.02, x=1, xanchor="right", bgcolor="rgba(0,0,0,0)"),
                           yaxis=dict(title="Price", range=[ymin - pad, ymax + pad]),
                           hovermode="x unified"),
-                    use_container_width=True)
+                    width="stretch")
 
     if stat_ok:
         end_val = float(sf.forecast.iloc[-1])
@@ -300,7 +300,7 @@ with tab_stat:
             if not fred_df.empty:
                 any_fred = True
                 st.markdown(f"**{name}**  \nLatest: {fred_df.iloc[-1, 0]:.2f} ({fred_df.index[-1]:%b %Y})")
-                st.line_chart(fred_df, height=170, use_container_width=True)
+                st.line_chart(fred_df, height=170, width="stretch")
             else:
                 st.markdown(f"**{name}**")
                 st.caption("Data unavailable from FRED right now.")
@@ -363,11 +363,11 @@ with tab_acc:
                                      line=dict(color=GREY, dash="dash"), hoverinfo="skip"))
             st.plotly_chart(_dark(fig, 320, showlegend=False,
                                   xaxis=dict(title="Actual"), yaxis=dict(title="Forecast")),
-                            use_container_width=True, config=dict(displayModeBar=False))
+                            width="stretch", config=dict(displayModeBar=False))
         with c2:
             st.markdown("**Forecast error distribution (%)**")
             fig_h = go.Figure(go.Histogram(x=acc.errors, nbinsx=40,
                                            marker=dict(color=AMBER)))
             fig_h.add_vline(x=0, line_color="#e6e6e6", line_width=1.5)
             st.plotly_chart(_dark(fig_h, 320, showlegend=False, xaxis=dict(title="Error %")),
-                            use_container_width=True, config=dict(displayModeBar=False))
+                            width="stretch", config=dict(displayModeBar=False))
