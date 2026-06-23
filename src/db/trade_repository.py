@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from contextlib import closing
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import psycopg2
 import psycopg2.extras
@@ -81,11 +81,27 @@ class TradeRepository:
         )
     """
 
-    def __init__(self, cfg: DBConfig) -> None:
+    def __init__(
+        self,
+        cfg: DBConfig,
+        connect_factory: Optional[Callable[[], Any]] = None,
+    ) -> None:
+        """``connect_factory`` overrides how a connection is obtained.
+
+        Defaults to a fresh ``psycopg2.connect`` per call. Inject a factory to
+        (a) borrow from a pooled/cached connection (see ``src/db/cache.py``) or
+        (b) hand the repository a fake connection in unit tests. The returned
+        object must support the psycopg2 connection contract used here:
+        ``cursor()``, transaction context (``__enter__``/``__exit__``), and
+        ``close()`` (which the pool wrapper repurposes as "return to pool").
+        """
         self.cfg = cfg
+        self._connect_factory = connect_factory
 
     # ── connection helper ───────────────────────────────────────────────────
     def _connect(self):
+        if self._connect_factory is not None:
+            return self._connect_factory()
         return psycopg2.connect(**self.cfg.as_kwargs())
 
     # ── schema ──────────────────────────────────────────────────────────────
@@ -231,7 +247,7 @@ class TradeRepository:
               AND DATE(logged_at) = CURRENT_DATE
         """
         try:
-            with self._connect() as conn, conn.cursor(
+            with closing(self._connect()) as conn, conn, conn.cursor(
                 cursor_factory=psycopg2.extras.RealDictCursor
             ) as cur:
                 cur.execute(sql)

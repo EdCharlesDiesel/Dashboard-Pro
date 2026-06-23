@@ -20,33 +20,37 @@ class NavEntry:
     path: str          # Streamlit page path (top-level file or pages/foo.py)
 
 
-# Ordered the way a professional day trader works a session:
-# scan for candidates → filter the day → establish bias → confirm → find the
-# zone → wait for the trigger → size the risk → final gate → review.
+# Ordered the way a professional day trader works a session, top-down:
+# start at the cockpit → scan for candidates → filter the day (macro/risk) →
+# weekly bias → daily confirm → 4H zone → 15M trigger → size the risk → review.
+# This is the single source of truth for both the sidebar and the README's
+# step-by-step guide — keep the two in sync when reordering.
 NAV_SECTIONS: List[tuple] = [
-    ("1 · SCAN", [
+    ("0 · START HERE", [
         NavEntry("CHCK", "00. Daily Checklist",      "📋", "app.py"),
         NavEntry("OVRV", "01. Market Overview",      "📊", "pages/market-overview.py"),
+    ]),
+    ("1 · SCAN — SHORTLIST", [
         NavEntry("RANK", "02. Setup Ranker",         "🎰", "pages/setup-ranker.py"),
         NavEntry("AMD",  "03. AMD Scanner",          "📊", "pages/amd-scanner.py"),
-        NavEntry("FCST", "04. Forecast Lab",         "📈", "pages/forecast-dashboard.py"),
-        NavEntry("VWAP", "05. VWAP-EMA Gold",        "🟡", "pages/vwap-ema-gold.py"),
+        NavEntry("TSIG", "04. Trend Signals",        "📡", "pages/trend-signals.py"),
+        NavEntry("20DB", "05. 20-Day Breakout",      "🚀", "pages/twenty_day_breakout_tab.py"),
         NavEntry("SMRT", "06. Smart Money",          "🕵️", "pages/smart_money_tab.py"),
-        NavEntry("TSIG", "07. Trend Signals",        "📡", "pages/trend-signals.py"),
-        NavEntry("PRED", "08. Predictive Analytics", "💱", "pages/predictive.py"),
-        NavEntry("20DB", "09. 20-Day Breakout",      "🚀", "pages/twenty_day_breakout_tab.py"),
+        NavEntry("PRED", "07. Predictive Analytics", "💱", "pages/predictive.py"),
+        NavEntry("FCST", "08. Forecast Lab",         "📈", "pages/forecast-dashboard.py"),
+        NavEntry("VWAP", "09. VWAP-EMA Gold",        "🟡", "pages/vwap-ema-gold.py"),
     ]),
     ("2 · FILTER THE DAY", [
-        NavEntry("DXAU", "10. DXY vs Gold",          "💵", "pages/dxy-gold.py"),
-        NavEntry("MACR", "11. Macro Bias",           "🌐", "pages/macro-bias.py"),
-        NavEntry("FUND", "12. Forex Fundamentals",   "🌍", "pages/forex_fundamentals_tab.py"),
-        NavEntry("NEWS", "13. News Filter",          "📰", "pages/news-filter.py"),
-        NavEntry("EVNT", "14. Event Impact",         "📅", "pages/event_impact_tab.py"),
-        NavEntry("RVRS", "15. Risk Reversals",       "🎭", "pages/risk_reversal_tab.py"),
-        NavEntry("RGME", "16. Market Regime",        "🌡️", "pages/regime.py"),
-        NavEntry("CORR", "17. Correlations",         "🔗", "pages/correlations.py"),
-        NavEntry("ATR",  "18. ATR Volatility",       "📊", "pages/atr-volatility.py"),
-        NavEntry("SEAS", "19. Seasonality",          "📅", "pages/seasonality.py"),
+        NavEntry("MACR", "10. Macro Bias",           "🌐", "pages/macro-bias.py"),
+        NavEntry("FUND", "11. Forex Fundamentals",   "🌍", "pages/forex_fundamentals_tab.py"),
+        NavEntry("DXAU", "12. DXY vs Gold",          "💵", "pages/dxy-gold.py"),
+        NavEntry("RGME", "13. Market Regime",        "🌡️", "pages/regime.py"),
+        NavEntry("RVRS", "14. Risk Reversals",       "🎭", "pages/risk_reversal_tab.py"),
+        NavEntry("NEWS", "15. News Filter",          "📰", "pages/news-filter.py"),
+        NavEntry("EVNT", "16. Event Impact",         "📅", "pages/event_impact_tab.py"),
+        NavEntry("SEAS", "17. Seasonality",          "📅", "pages/seasonality.py"),
+        NavEntry("CORR", "18. Correlations",         "🔗", "pages/correlations.py"),
+        NavEntry("ATR",  "19. ATR Volatility",       "📊", "pages/atr-volatility.py"),
     ]),
     ("3 · WEEKLY BIAS", [
         NavEntry("WEMA", "20. Weekly EMA",           "📉", "pages/weekly-ema.py"),

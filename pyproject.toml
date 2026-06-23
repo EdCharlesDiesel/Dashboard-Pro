@@ -24,7 +24,6 @@ source = ["src"]
 omit = [
     "src/pages_lib/*",        # Streamlit pages
     "src/ui/*",               # HTML/Plotly rendering
-    "src/db/*",               # Postgres persistence
     "src/core/ai_reports.py", # Anthropic API (optional dep)
     "src/core/data_provider.py",
     "src/core/observability.py",
