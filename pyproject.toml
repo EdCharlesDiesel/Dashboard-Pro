@@ -1,0 +1,47 @@
+[tool.pytest.ini_options]
+# Tests live in tests/; add the repo root to sys.path so `import src...` resolves
+# the same way it does under `streamlit run app.py`.
+pythonpath = ["."]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# Coverage on by default, scoped to src/ logic (see [tool.coverage]); the 80%
+# floor fails the run if logic coverage regresses.
+addopts = "-ra --cov=src --cov-report=term-missing --cov-fail-under=80"
+# Streamlit's @st.cache_data emits "No runtime found" warnings when imported
+# outside `streamlit run`; they are harmless for unit tests.
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+# Coverage is scoped to the pure-logic core. The omitted modules are Streamlit
+# pages, HTML/chart rendering, Postgres, email/observability, and live-network
+# fetchers — none unit-testable without a running app, DB, or Yahoo. They have
+# their own AppTest smoke-test path (see CLAUDE.md).
+source = ["src"]
+omit = [
+    "src/pages_lib/*",        # Streamlit pages
+    "src/ui/*",               # HTML/Plotly rendering
+    "src/db/*",               # Postgres persistence
+    "src/core/ai_reports.py", # Anthropic API (optional dep)
+    "src/core/data_provider.py",
+    "src/core/observability.py",
+    "src/core/reporting.py",
+    "src/core/secrets.py",
+    "src/services/alert_service.py",    # Gmail SMTP
+    "src/services/atr_service.py",      # yfinance fetch
+    "src/services/backtest_service.py", # heavy strategy engine
+    "src/services/forecast_service.py", # statsmodels forecasting
+    "src/services/mt4_import.py",       # file/HTML parsing
+    "src/services/mtf_service.py",      # yfinance fetch
+    "src/services/account_state.py",    # Streamlit session state
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

@@ -18,9 +18,9 @@ import psycopg2.extras
 class DBConfig:
     host: str = "localhost"
     port: int = 5432
-    dbname: str = "trading"
+    dbname: str = "dashboardprov1"
     user: str = "postgres"
-    password: str = ""
+    password: str = "$ta99Ath0"
 
     @classmethod
     def from_mapping(cls, m: Mapping[str, Any]) -> "DBConfig":
@@ -284,7 +284,7 @@ class TradeRepository:
     def realized_pnl(self, limit: int = 100_000) -> Dict[str, Any]:
         """Realised account-currency P/L summed across all closed trades.
 
-        Per-trade P/L uses the broker's stored ``profit`` when available (most
+        Per-trade P/L uses the broker's stored "profit`` when available (most
         exact — it includes swap/commission); otherwise it derives the figure
         from ``pips_gained × pip_value × lot_size``, which matches the app's risk
         model (``risk_amount = lot × sl_pips × pip_value``). Trades missing the
