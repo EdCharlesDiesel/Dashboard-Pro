@@ -8,7 +8,15 @@ from typing import List
 import pandas as pd
 import streamlit as st
 
-from src.db import DBConfig, TradeRepository
+from src.db import DBConfig
+from src.db.cache import (
+    cached_daily_losses,
+    cached_load_open,
+    cached_load_setups,
+    cached_performance_stats,
+    clear_read_caches,
+    pooled_repository,
+)
 from src.indicators import TrendSignalEvaluator
 from src.instruments import INSTRUMENTS
 from src.pages_lib.daily_trading.state import CHECKS_TOTAL, CRITICAL_CHECKS
@@ -349,7 +357,10 @@ class ChecklistController:
         dll = {"losses_today": 0, "limit": 2, "blocked": False}
         if st.session_state.db_ok:
             try:
-                dll = TradeRepository(db_cfg).daily_losses(max_losses=2)
+                dll = cached_daily_losses(
+                    db_cfg.host, db_cfg.port, db_cfg.dbname,
+                    db_cfg.user, db_cfg.password, max_losses=2,
+                )
             except Exception:
                 pass
         self._render_loss_banner(dll)
@@ -357,7 +368,10 @@ class ChecklistController:
         # Correlation warnings
         if st.session_state.db_ok:
             try:
-                opens = TradeRepository(db_cfg).load_open()
+                opens = cached_load_open(
+                    db_cfg.host, db_cfg.port, db_cfg.dbname,
+                    db_cfg.user, db_cfg.password,
+                )
                 warns = CorrelationService.check_exposure(opens, direction, inst_name)
                 if warns:
                     self._render_corr_warnings(warns)
@@ -542,7 +556,8 @@ class ChecklistController:
             "notes": st.session_state.notes,
         }
         try:
-            TradeRepository(db_cfg).save_setup(row)
+            pooled_repository(db_cfg).save_setup(row)
+            clear_read_caches()  # journal / stats / open-trades must re-query
             st.success(
                 f"✅ Saved — {display} · {verdict_label} · "
                 f"{datetime.now().strftime('%H:%M:%S')}"
@@ -562,7 +577,10 @@ class ChecklistController:
             st.info("◇ Connect to PostgreSQL in the sidebar to view stats.")
             return
         try:
-            stats = TradeRepository(self._db_cfg()).performance_stats(n=20)
+            cfg = self._db_cfg()
+            stats = cached_performance_stats(
+                cfg.host, cfg.port, cfg.dbname, cfg.user, cfg.password, n=20,
+            )
         except Exception as e:
             st.error(f"❌ Could not load stats: {e}")
             return
@@ -594,7 +612,10 @@ class ChecklistController:
             st.info("◇ Connect to PostgreSQL to close trades.")
             return
         try:
-            opens = TradeRepository(self._db_cfg()).load_open()
+            cfg = self._db_cfg()
+            opens = cached_load_open(
+                cfg.host, cfg.port, cfg.dbname, cfg.user, cfg.password,
+            )
         except Exception as e:
             st.error(f"❌ Could not load open trades: {e}")
             return
@@ -633,12 +654,11 @@ class ChecklistController:
         if st.button("◆ SAVE TRADE OUTCOME", type="primary",
                      width="stretch", key="save_outcome_btn"):
             try:
-                TradeRepository(self._db_cfg()).close_trade(
+                pooled_repository(self._db_cfg()).close_trade(
                     chosen_id, ct_entry, ct_close, ct_pips, ct_r, ct_outcome,
                 )
-                # Refresh the cached balance-from-history immediately.
-                from src.pages_lib.daily_trading.sidebar import _cached_realized_pnl
-                _cached_realized_pnl.clear()
+                # Closing a trade changes P/L, stats, open-trades and the journal.
+                clear_read_caches()
                 st.success(
                     f"✅ Trade #{chosen_id} closed — {ct_outcome} · "
                     f"{ct_r:+.2f}R · {ct_pips:+.1f} pips"
@@ -654,7 +674,10 @@ class ChecklistController:
             st.info("◇ Connect to PostgreSQL to view saved trades.")
             return
         try:
-            trades = TradeRepository(self._db_cfg()).load_setups(limit=100)
+            cfg = self._db_cfg()
+            trades = cached_load_setups(
+                cfg.host, cfg.port, cfg.dbname, cfg.user, cfg.password, limit=100,
+            )
         except Exception as e:
             st.error(f"❌ Could not load trades: {e}")
             return

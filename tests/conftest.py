@@ -10,6 +10,32 @@ import pandas as pd
 import pytest
 
 
+# ── slow/network test gating ──────────────────────────────────────────────────
+# Page smoke tests (AppTest) hit live yfinance and take 5–60s each, so they are
+# skipped unless --runslow is passed. They stay out of the default fast suite and
+# don't affect the coverage gate.
+def pytest_addoption(parser):
+    parser.addoption(
+        "--runslow", action="store_true", default=False,
+        help="run slow tests that hit the network (live yfinance page smoke tests)",
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "slow: slow test that hits the network (live yfinance)"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runslow"):
+        return
+    skip_slow = pytest.mark.skip(reason="needs --runslow (hits live yfinance)")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)
+
+
 def _ohlc_from_close(close: "list[float] | np.ndarray") -> pd.DataFrame:
     """Wrap a close-price array in a minimal OHLCV frame.
 

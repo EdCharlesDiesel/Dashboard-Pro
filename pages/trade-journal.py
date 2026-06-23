@@ -114,8 +114,8 @@ def _ingest_statement(cfg, content: bytes, offset: float) -> dict:
         repo.init_schema()
         imported = repo.import_mt4_rows(new_rows)
         if imported:
-            from src.pages_lib.daily_trading.sidebar import _cached_realized_pnl
-            _cached_realized_pnl.clear()
+            from src.db.cache import clear_read_caches
+            clear_read_caches()
     return {"trades": len(trades), "imported": imported, "balance": bal, "skipped": skipped}
 
 
@@ -209,8 +209,8 @@ def _render_manual_import(cfg, offset: float) -> None:
                 repo = TradeRepository(DBConfig.from_mapping(cfg))
                 repo.init_schema()
                 n = repo.import_mt4_rows(new_rows)
-                from src.pages_lib.daily_trading.sidebar import _cached_realized_pnl
-                _cached_realized_pnl.clear()
+                from src.db.cache import clear_read_caches
+                clear_read_caches()
                 st.success(f"Imported {n} trades. Reloading…")
                 st.rerun()
             except Exception as exc:  # noqa: BLE001
