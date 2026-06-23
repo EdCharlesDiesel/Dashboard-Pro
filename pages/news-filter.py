@@ -76,7 +76,7 @@ st.markdown("""
     .now-label{position:absolute;right:0;top:-10px;font-size:10px;color:#00ff41;font-weight:700;}
 
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 
@@ -527,7 +527,7 @@ with st.sidebar:
     else:
         st.caption("Finnhub key not found in secrets.toml")
 
-    if st.button("🔄 Refresh Calendar", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh Calendar", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -1088,7 +1088,7 @@ with st.expander("➕ Add Manual Event", expanded=False):
         m_time = st.time_input("Time (local)", value=time(14, 30), key="m_time")
     with mc5:
         m_impact = st.selectbox("Impact", ["High", "Medium", "Low"])
-        if st.button("➕ Add", use_container_width=True):
+        if st.button("➕ Add", width="stretch"):
             if m_title:  # Validate title is not empty
                 st.session_state.manual_events.append({
                     "datetime_local": user_tz.localize(datetime.combine(m_date, m_time)),
@@ -1127,7 +1127,7 @@ if st.session_state.manual_events:
                 st.session_state.manual_events.pop(idx)
                 st.rerun()
 
-    if st.button("🗑️ Clear All Manual Events", use_container_width=True):
+    if st.button("🗑️ Clear All Manual Events", width="stretch"):
         st.session_state.manual_events = []
         st.rerun()
 

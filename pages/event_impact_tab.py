@@ -1,17 +1,20 @@
 """
 event_impact_tab.py
 ===================
-"Which economic releases actually move EUR/USD?" — a Streamlit tab inspired by
-Figure 5.1 in Kathy Lien's *Day Trading and Swing Trading the Currency Market*.
+"Which economic releases actually move the market?" — a Streamlit tab inspired
+by Figure 5.1 in Kathy Lien's *Day Trading and Swing Trading the Currency
+Market*.
 
 Two halves:
   1. BOOK REFERENCE — the historical ranking from the book (2004 EUR/USD ranges
      and the 1992/1997 FX-dealer importance rankings), rendered interactively.
-  2. LIVE RECOMPUTE — measures the ACTUAL average daily EUR/USD range (in pips)
-     on real release days vs a normal-day baseline, and ranks releases by their
-     "impact multiple". Nonfarm Payrolls is generated automatically from the
-     first-Friday-of-month rule; any other release can be added by pasting its
-     dates. Free data only (yfinance EUR/USD daily OHLC).
+     This half is the fixed EUR/USD benchmark from the study.
+  2. LIVE RECOMPUTE — for any pair in the instrument registry, measures the
+     ACTUAL average daily range (in that pair's pips) on real release days vs a
+     normal-day baseline, and ranks releases by their "impact multiple". Nonfarm
+     Payrolls is generated automatically from the first-Friday-of-month rule;
+     any other release can be added by pasting its dates. Free data only
+     (yfinance daily OHLC).
 
 Entry point: render()
 Standalone:  streamlit run event_impact_tab.py
@@ -103,7 +106,7 @@ def daily_range_series(ohlc: pd.DataFrame, pip: float = PIP) -> pd.Series:
 def avg_range_on_dates(ohlc: pd.DataFrame, dates, pip: float = PIP,
                        span_days: int = 1) -> dict | None:
     """
-    Average EUR/USD range (pips) on the given release dates.
+    Average range (in `pip` units) on the given release dates.
       span_days=1 -> the release day's own high–low range
       span_days=2 -> high–low across the release day + next trading day
     Snaps to the next available trading day if a date is a weekend/holiday.
@@ -289,7 +292,7 @@ def _section_live_recompute():
               delta=f"last {last_px:.5f}" if abs(last_px) < 100 else f"last {last_px:.2f}",
               delta_color="off",
               help=f"Average {pair_name} daily high–low range across all days in window.")
-    st.dataframe(table, use_container_width=True, hide_index=True)
+    st.dataframe(table, width="stretch", hide_index=True)
     st.bar_chart(table.set_index("Release")["Avg range (pips)"], height=300)
 
     top = table.iloc[0]
@@ -335,7 +338,7 @@ if __name__ == "__main__":
 
     with st.sidebar:
         st.markdown("### 📅 Event Impact")
-        st.caption("Which releases actually move EUR/USD")
+        st.caption("Which releases actually move your pair")
         st.divider()
         render_sidebar_nav()
 

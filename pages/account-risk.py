@@ -196,7 +196,7 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**🛡️ Stop Loss**")
-    if st.button("⚡ Fetch Live Price + ATR", use_container_width=True, type="primary"):
+    if st.button("⚡ Fetch Live Price + ATR", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -342,7 +342,7 @@ for rp in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
         "Total Lots": round(rr["lots_total"], 2),
     })
 st.dataframe(
-    pd.DataFrame(ladder_rows), use_container_width=True, hide_index=True,
+    pd.DataFrame(ladder_rows), width="stretch", hide_index=True,
     column_config={
         "$ / Signal":   st.column_config.NumberColumn(format="$%.2f"),
         "$ / Trade":    st.column_config.NumberColumn(format="$%.2f"),
@@ -354,7 +354,7 @@ st.markdown('<div class="section-title">🌐 All-Pairs Lot Sizer</div>', unsafe_
 st.caption(f"Lots needed to risk {risk_pct:.2f}% (${r['risk_per_trade']:,.2f}/trade) "
            f"with each pair's live ATR×1.5 stop.")
 
-if st.button("📡 Scan all pairs (live ATR)", use_container_width=False):
+if st.button("📡 Scan all pairs (live ATR)", width="content"):
     st.cache_data.clear()
     st.rerun()
 
@@ -381,7 +381,7 @@ with st.expander("📋 All-Pairs Sizing Table", expanded=False):
         })
     prog.empty()
     st.dataframe(
-        pd.DataFrame(scan_rows), use_container_width=True, hide_index=True,
+        pd.DataFrame(scan_rows), width="stretch", hide_index=True,
         column_config={"$ / Trade": st.column_config.NumberColumn(format="$%.2f")})
 
 st.markdown("---")

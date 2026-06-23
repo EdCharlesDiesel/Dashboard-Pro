@@ -44,7 +44,7 @@ st.markdown("""
     .prog-track{ background:var(--border,#2a2a2a); border-radius:8px; height:12px;
                  margin:6px 0 2px 0; overflow:hidden; }
     [data-testid="stSidebarNav"]{ display:none; }
-    #MainMenu,footer,header{ visibility:hidden; }
+    #MainMenu,footer{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{ padding-top:1.5rem; max-width:1380px; }
 
@@ -413,7 +413,7 @@ with st.sidebar:
     swing_lb = st.slider("Swing lookback (candles)", 10, 100, 50, step=5)
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -584,7 +584,7 @@ with tab_scan:
                            r.get("grade",""), "Error") if r.get("ok") else "Error",
                 "Verdict": r.get("verdict", "No data"),
             })
-        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(table_rows), width="stretch", hide_index=True)
 
 # ══════════════════════════════════════════════
 #  TAB 2 — Pair Detail
@@ -839,7 +839,7 @@ with tab_detail:
             fib_res=fib_res, pivot_res=pivot_res, ema_res=ema_res,
             show_n=show_candles,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.markdown("---")
 
@@ -866,7 +866,7 @@ with tab_detail:
                          "In Zone": "✅" if dist <= price * tol_pct else "—"})
 
         ref_df = pd.DataFrame(rows).sort_values("Δ Pips").reset_index(drop=True)
-        st.dataframe(ref_df, use_container_width=True, hide_index=True,
+        st.dataframe(ref_df, width="stretch", hide_index=True,
                      column_config={
                          "Element": st.column_config.TextColumn("Element", width="small"),
                          "Label":   st.column_config.TextColumn("Label",   width="small"),

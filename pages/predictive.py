@@ -4,8 +4,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
+from src.ui.theme import BloombergTheme
+from src.pages_lib.navigation import render_sidebar_nav
+
 # Page configurations
 st.set_page_config(page_title="Forex Analytics Dashboard", layout="wide", page_icon="💱")
+BloombergTheme.apply()
 
 st.title("💱 Forex Analytics & Market Dashboard")
 st.markdown("Monitor real-time currency trends and track key technical indicators.")
@@ -109,11 +113,15 @@ try:
             xaxis_title="Date/Time"
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # --- DATA TABLE VIEW ---
         with st.expander("View Raw Historical Data"):
-            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
+            st.dataframe(df.sort_index(ascending=False), width="stretch")
 
 except Exception as e:
     st.error(f"An error occurred while loading data: {e}")
+
+with st.sidebar:
+    st.divider()
+    render_sidebar_nav()

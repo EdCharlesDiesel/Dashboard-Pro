@@ -45,7 +45,7 @@ st.markdown("""
     .outcome-loss{background:#2f0d0d;color:#ff3344;border:1px solid #8b2d2d;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
     .outcome-be{background:#1a1a0d;color:#ffcc00;border:1px solid #9e6a03;border-radius:5px;padding:2px 9px;font-size:11px;font-weight:700;display:inline-block;}
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarCollapseButton"]{visibility:visible !important;display:flex !important;}
     section[data-testid="stSidebar"]{display:block !important;}
@@ -179,7 +179,7 @@ def _render_manual_import(cfg, offset: float) -> None:
     st.markdown("**Symbol mapping** — fix any row that didn't auto-map:")
     map_df = pd.DataFrame([{"MT4 symbol": k, "Maps to": (v or "")} for k, v in auto.items()])
     edited = st.data_editor(
-        map_df, hide_index=True, use_container_width=True, key="mt4_map",
+        map_df, hide_index=True, width="stretch", key="mt4_map",
         column_config={"MT4 symbol": st.column_config.TextColumn(disabled=True),
                        "Maps to": st.column_config.SelectboxColumn(
                            options=[""] + list(INSTRUMENTS.keys()), required=False)})
@@ -201,7 +201,7 @@ def _render_manual_import(cfg, offset: float) -> None:
         prev = pd.DataFrame(new_rows)[
             ["logged_at", "instrument", "direction", "session", "lot_size",
              "entry_price", "close_price", "pips_gained", "r_multiple", "outcome"]]
-        st.dataframe(prev.head(50), use_container_width=True, hide_index=True)
+        st.dataframe(prev.head(50), width="stretch", hide_index=True)
         st.caption("R-multiple is blank where the MT4 row had no Stop Loss (can't infer risk).")
 
         if st.button(f"✅ Import {len(new_rows)} trades", type="primary", key="mt4_go"):
@@ -231,9 +231,9 @@ def _render_auto_import(cfg, offset: float) -> None:
                         value=st.session_state.get("mt4_auto_on", False), key="mt4_auto_on")
 
     b1, b2 = st.columns(2)
-    if b1.button("Import now", key="mt4_auto_now", disabled=not path, use_container_width=True):
+    if b1.button("Import now", key="mt4_auto_now", disabled=not path, width="stretch"):
         _do_auto_import(cfg, path, offset, force=True)
-    if b2.button("↺ Reset watch state", key="mt4_auto_reset", use_container_width=True):
+    if b2.button("↺ Reset watch state", key="mt4_auto_reset", width="stretch"):
         st.session_state.pop("mt4_last_mtime", None)
         st.toast("Watch state reset — next cycle re-reads the file.")
 
@@ -292,7 +292,7 @@ with st.sidebar:
 
     db_cfg = {"host": _host, "port": int(_port), "dbname": _name, "user": _user, "password": _pass}
 
-    if st.button("🔌 Connect & Load", use_container_width=True, type="primary"):
+    if st.button("🔌 Connect & Load", width="stretch", type="primary"):
         try:
             conn = get_db_connection(db_cfg)
             conn.close()
@@ -305,7 +305,7 @@ with st.sidebar:
 
     st.divider()
     show_n = st.slider("Max trades to load", 50, 500, 200, step=50)
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", width="stretch"):
         st.rerun()
 
     st.divider()
@@ -524,7 +524,7 @@ with tab_equity:
         fig.update_xaxes(showgrid=False, linecolor="#2a2a2a", row=row, col=1)
         fig.update_yaxes(showgrid=True, gridcolor="#2a2a2a", row=row, col=1)
 
-    st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
+    st.plotly_chart(fig, width="stretch", config=dict(displayModeBar=False))
 
     # ── Streak analysis ───────────────────────────────────────────
     st.markdown('<div class="section-title">🔥 Streak Analysis</div>', unsafe_allow_html=True)
@@ -608,14 +608,14 @@ with tab_session:
         xaxis=dict(showgrid=False), margin=dict(l=10, r=80, t=10, b=10),
         showlegend=False,
     )
-    st.plotly_chart(fig_s, use_container_width=True, config=dict(displayModeBar=False))
+    st.plotly_chart(fig_s, width="stretch", config=dict(displayModeBar=False))
 
     # Table
     st.dataframe(
         sess_group.style.format({
             "Win Rate %": "{:.1f}%", "Avg R": "{:+.2f}R", "Total R": "{:+.1f}R",
         }),
-        use_container_width=True, hide_index=True,
+        width="stretch", hide_index=True,
     )
 
     # Kill zone effectiveness
@@ -657,7 +657,7 @@ with tab_session:
             yaxis=dict(range=[0, 115], gridcolor="#2a2a2a", ticksuffix="%"),
             margin=dict(l=10, r=80, t=10, b=10), showlegend=False,
         )
-        st.plotly_chart(fig_h, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig_h, width="stretch", config=dict(displayModeBar=False))
 
 # ──────────────────────────────────────────────────────────────────
 # TAB 3 — BY PAIR
@@ -703,7 +703,7 @@ with tab_pair:
         yaxis=dict(showgrid=False),
         margin=dict(l=10, r=80, t=10, b=10), showlegend=False,
     )
-    st.plotly_chart(fig_p, use_container_width=True, config=dict(displayModeBar=False))
+    st.plotly_chart(fig_p, width="stretch", config=dict(displayModeBar=False))
 
     st.dataframe(
         pair_group.sort_values("Win Rate %", ascending=False)
@@ -711,7 +711,7 @@ with tab_pair:
             "Win Rate %": "{:.1f}%", "Avg R": "{:+.2f}R",
             "Total R": "{:+.1f}R", "Best R": "{:+.2f}R", "Worst R": "{:+.2f}R",
         }),
-        use_container_width=True, hide_index=True,
+        width="stretch", hide_index=True,
     )
 
 # ──────────────────────────────────────────────────────────────────
@@ -801,7 +801,7 @@ with tab_dir:
                 margin=dict(l=10, r=40, t=10, b=10), showlegend=False, title_text=direction,
                 title_font=dict(color=color, size=12),
             )
-            st.plotly_chart(fig_dir, use_container_width=True, config=dict(displayModeBar=False))
+            st.plotly_chart(fig_dir, width="stretch", config=dict(displayModeBar=False))
 
 # ──────────────────────────────────────────────────────────────────
 # TAB 5 — TRADE LOG
@@ -869,7 +869,7 @@ with tab_log:
 
     st.dataframe(
         df_view,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "id": st.column_config.NumberColumn("ID", width="small"),

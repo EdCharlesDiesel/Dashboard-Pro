@@ -20,3 +20,7 @@ account_state.json
 
 # DB dumps — contain real data, never commit
 backups/
+
+# Editor atomic-write temp files (accidentally committed before)
+*.py.tmp.*
+*.tmp.*

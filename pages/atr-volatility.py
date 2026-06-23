@@ -60,7 +60,7 @@ st.markdown("""
     .rank-num{width:28px;font-size:11px;font-weight:700;color:#555555;}
 
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -184,7 +184,7 @@ with st.sidebar:
     show_only_pass = st.checkbox("Show only ✅ ATR14 > ATR20", value=False)
     st.markdown("---")
 
-    if st.button("🔄 Refresh All ATR Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh All ATR Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -563,7 +563,7 @@ with right:
                              tickfont=dict(color="#9a9a9a", size=9), row=row, col=1)
 
         fig.update_annotations(font_color="#9a9a9a", font_size=11)
-        st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig, width="stretch", config=dict(displayModeBar=False))
 
         # ── All-pairs ATR comparison bar chart ────────────────────
         st.markdown("### 📊 All Pairs — ATR(14) Pips Comparison")
@@ -602,7 +602,7 @@ with right:
                        gridcolor="#2a2a2a", ticksuffix=" p"),
             bargap=0.25,
         )
-        st.plotly_chart(fig2, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig2, width="stretch", config=dict(displayModeBar=False))
 
         # ── Volatility Ranking Table ───────────────────────────────
         st.markdown("### 🏆 Volatility Ranking")
@@ -630,7 +630,7 @@ with right:
         df_rank = pd.DataFrame(rank_rows)
         st.dataframe(
             df_rank,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Rank":       st.column_config.NumberColumn("🏆", width="small"),

@@ -181,7 +181,7 @@ class TrendController:
         with Panel(f"CHART · {chosen}", tag=st.session_state.trend_timeframe).context():
             st.plotly_chart(
                 ChartBuilder.trend_panel(r["df"], chosen),
-                use_container_width=True,
+                width="stretch",
             )
 
         if r["conds"]:
@@ -256,7 +256,7 @@ class TrendController:
         ):
             if st.session_state.trend_alert_history:
                 df_h = pd.DataFrame(st.session_state.trend_alert_history[::-1])
-                st.dataframe(df_h, hide_index=True, use_container_width=True)
+                st.dataframe(df_h, hide_index=True, width="stretch")
                 if st.button("Clear History", key="clear_trend_history"):
                     st.session_state.trend_alert_history = []
                     st.rerun()

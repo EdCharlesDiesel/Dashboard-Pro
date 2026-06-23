@@ -35,10 +35,10 @@ with st.sidebar:
 
     max_rows = st.slider("Rows to load", 100, 5000, 1000, step=100)
 
-    if st.button("🔄 Refresh", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh", width="stretch", type="primary"):
         st.rerun()
 
-    if st.button("🔌 Retry Postgres sink", use_container_width=True):
+    if st.button("🔌 Retry Postgres sink", width="stretch"):
         observability.reset_pg()
         st.rerun()
 
@@ -128,7 +128,7 @@ with tab_events:
         st.dataframe(
             view[[c for c in ("ts", "level", "event_type", "page",
                               "session_id", "message", "data") if c in view]],
-            use_container_width=True, height=460,
+            width="stretch", height=460,
         )
 
     st.download_button(
@@ -158,4 +158,4 @@ with tab_pg:
     else:
         pg_df = pd.DataFrame(pg_events)
         st.caption(f"{len(pg_df)} rows from app_events (newest first)")
-        st.dataframe(pg_df, use_container_width=True, height=500)
+        st.dataframe(pg_df, width="stretch", height=500)

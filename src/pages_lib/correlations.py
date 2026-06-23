@@ -144,7 +144,7 @@ class CorrelationsPage(BloombergPage):
             index=focus_options.index(st.session_state.corr_focus),
         )
         st.divider()
-        if st.button("◆ REFRESH DATA", use_container_width=True, type="primary"):
+        if st.button("◆ REFRESH DATA", width="stretch", type="primary"):
             st.cache_data.clear()
             st.rerun()
 
@@ -242,7 +242,7 @@ class CorrelationsPage(BloombergPage):
             yaxis=dict(tickfont=dict(color=T.GREY, size=10), autorange="reversed"),
         )
         with Panel("CORRELATION HEATMAP", tag="LIVE").context():
-            st.plotly_chart(fig, use_container_width=True,
+            st.plotly_chart(fig, width="stretch",
                             config=dict(displayModeBar=False))
 
     @staticmethod
@@ -312,7 +312,7 @@ class CorrelationsPage(BloombergPage):
             hovermode="x unified",
         )
         with Panel(f"ROLLING {window}D CORRELATION · {focus} vs ALL").context():
-            st.plotly_chart(fig, use_container_width=True,
+            st.plotly_chart(fig, width="stretch",
                             config=dict(displayModeBar=False))
 
     @staticmethod
@@ -360,4 +360,4 @@ class CorrelationsPage(BloombergPage):
         pair_corrs = pair_corrs.sort_values("Correlation", ascending=False)
         pair_corrs.index = range(1, len(pair_corrs) + 1)
         with Panel("FULL CORRELATION TABLE", tag="ALL PAIRS").context():
-            st.dataframe(pair_corrs, use_container_width=True)
+            st.dataframe(pair_corrs, width="stretch")

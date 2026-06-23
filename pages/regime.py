@@ -221,7 +221,7 @@ def render():
                 delta=f"{100 - pct_trend:.0f}% ranging", delta_color="off")
 
     st.plotly_chart(_build_chart(df, value, want_mask, method, threshold, want),
-                    use_container_width=True)
+                    width="stretch")
     tactic = ("trend-following (MA, breakout)" if want == "trending"
               else "mean-reversion (POC / zone fade)")
     st.caption(f"Shaded bands mark **{want}** bars — where a {tactic} strategy is in "

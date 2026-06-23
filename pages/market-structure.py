@@ -43,7 +43,7 @@ st.markdown("""
     .struct-neutral{border-left:4px solid #555555;}
 
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarCollapseButton"]{visibility:visible !important;display:flex !important;}
     section[data-testid="stSidebar"]{display:block !important;}
@@ -330,7 +330,7 @@ with st.sidebar:
                                index=inst_keys.index(default_inst))
 
     st.divider()
-    if st.button("🔄 Refresh All", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh All", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -483,7 +483,7 @@ with tab_scan:
                     "BOS":       "⚡" if s["bos"] else "",
                     "Price":     f"{s['close']:.5f}" if s["close"] < 100 else f"{s['close']:.3f}",
                 })
-        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(table_rows), width="stretch", hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -580,7 +580,7 @@ with tab_detail:
         # ── Chart ─────────────────────────────────────────────────
         st.markdown('<div class="section-title">📊 Structure Chart</div>', unsafe_allow_html=True)
         fig = build_structure_chart(df, focus_pair, struct, show_candles)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # ── Interpretation ────────────────────────────────────────
         with st.expander("📖 Structure Interpretation Guide"):

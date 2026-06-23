@@ -200,16 +200,16 @@ class SetupRankerPage(BloombergPage):
         )
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("All", use_container_width=True):
+            if st.button("All", width="stretch"):
                 st.session_state.sr_pairs = INSTRUMENTS.keys()
         with col2:
-            if st.button("Majors", use_container_width=True):
+            if st.button("Majors", width="stretch"):
                 st.session_state.sr_pairs = [
                     "EUR/USD", "GBP/USD", "AUD/USD", "NZD/USD",
                     "USD/JPY", "USD/CHF", "USD/CAD",
                 ]
         with col3:
-            if st.button("Metals", use_container_width=True):
+            if st.button("Metals", width="stretch"):
                 st.session_state.sr_pairs = ["XAU/USD", "XAG/USD", "XPT/USD"]
         st.session_state.sr_pairs = st.multiselect(
             "Instruments", INSTRUMENTS.keys(),
@@ -259,7 +259,7 @@ class SetupRankerPage(BloombergPage):
             float(st.session_state.risk_pct), 0.25,
         )
         st.divider()
-        if st.button("◆ RESCAN ALL PAIRS", use_container_width=True, type="primary"):
+        if st.button("◆ RESCAN ALL PAIRS", width="stretch", type="primary"):
             st.cache_data.clear()
             st.rerun()
         st.caption(f"◷ {datetime.now().strftime('%H:%M')} · TTL 5min")
@@ -292,7 +292,7 @@ class SetupRankerPage(BloombergPage):
             st.caption("⚠ Set [gmail] in secrets.toml (or GMAIL_* env vars) to enable.")
         c_test, c_reset = st.columns(2)
         with c_test:
-            if st.button("✉ Test", use_container_width=True):
+            if st.button("✉ Test", width="stretch"):
                 ok, msg = alert_service.send_email(
                     "Setup Ranker — test alert",
                     "<p style='font-family:monospace;color:#0a0;'>✅ Setup Ranker email alerts "
@@ -301,7 +301,7 @@ class SetupRankerPage(BloombergPage):
                 )
                 (st.success if ok else st.error)(msg)
         with c_reset:
-            if st.button("↺ Reset", use_container_width=True,
+            if st.button("↺ Reset", width="stretch",
                          help="Clear the 'already-alerted' memory so current setups can re-fire."):
                 alert_service.NotifyCache("setup_ranker").reset()
                 st.toast("Alert memory cleared.")
@@ -658,7 +658,7 @@ class SetupRankerPage(BloombergPage):
             for k in criteria_keys:
                 row[k] = "✓" if r["scores"][k] else "✗"
             rows.append(row)
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     @staticmethod
     def _render_chart(results) -> None:
@@ -688,5 +688,5 @@ class SetupRankerPage(BloombergPage):
             margin=dict(l=10, r=80, t=10, b=10),
             showlegend=False,
         )
-        st.plotly_chart(fig, use_container_width=True,
+        st.plotly_chart(fig, width="stretch",
                         config=dict(displayModeBar=False))

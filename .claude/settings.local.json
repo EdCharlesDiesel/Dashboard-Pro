@@ -93,7 +93,8 @@
       "Bash(docker cp *)",
       "Bash(docker stop *)",
       "PowerShell(docker compose ps *)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(grep -rnE \"header[^a-zA-Z][^}]*visibility\\\\s*:\\\\s*hidden|header\\\\s*\\\\{[^}]*hidden|,\\\\s*header\\\\s*\\\\{|header,\\\\s*footer\" --include=\"*.py\" pages)"
     ]
   }
 }

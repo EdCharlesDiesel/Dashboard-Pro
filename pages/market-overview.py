@@ -285,7 +285,7 @@ def render_sidebar(fred_api_key: str = "") -> str:
         st.divider()
 
         st.subheader("🔄 Data Refresh")
-        if st.button("↺ Refresh Now", use_container_width=True):
+        if st.button("↺ Refresh Now", width="stretch"):
             clear_data_cache()
             st.rerun()
 
@@ -299,7 +299,7 @@ def render_sidebar(fred_api_key: str = "") -> str:
         if alert_service.email_configured():
             st.success(f"✅ Alerts → {alert_service.email_recipient()}")
             st.caption(f"Sending via {secrets.email_config().get('user', '')}")
-            if st.button("✉ Send test email", use_container_width=True):
+            if st.button("✉ Send test email", width="stretch"):
                 ok, msg = alert_service.send_email(
                     "Market Overview — test alert",
                     "<p style='font-family:monospace;color:#4af0c4;'>✅ Market Overview email "
@@ -361,7 +361,7 @@ def render_macro_table(macro_data: Dict, is_live: bool) -> None:
     rows = [{"Currency": ccy, **vals} for ccy, vals in macro_data.items()]
     df = pd.DataFrame(rows).set_index("Currency")
     st.dataframe(df.style.background_gradient(cmap="RdYlGn", subset=["GDP", "Inflation", "Rates", "Unemployment"]),
-                 use_container_width=True)
+                 width="stretch")
 
 
 def render_overview_tab(daily_data: Dict):
@@ -373,7 +373,7 @@ def render_overview_tab(daily_data: Dict):
                 price = df['Close'].iloc[-1]
                 change = df['Close'].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
                 rows.append({"Pair": pair, "Price": price, "Change %": change, "Bars": len(df)})
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch")
 
 
 def render_mtf_matrix_tab(data_by_timeframe: Dict):
@@ -421,7 +421,7 @@ def render_technical_chart_tab(data_by_timeframe: Dict):
                 fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
                 fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
             fig.update_layout(height=600, **CHART_LAYOUT)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
 
 def render_trading_view_tab(data_by_timeframe: Dict):
@@ -464,7 +464,7 @@ def render_trading_view_tab(data_by_timeframe: Dict):
                     fig.add_hline(y=val, line_dash="dot", line_color=color, annotation_text=level)
 
                 fig.update_layout(height=600, title=f"{tv_pair} - {tv_tf} with Pivot Points", **CHART_LAYOUT)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
 
 def render_15m_entry_tab(data_by_timeframe: Dict):
@@ -566,13 +566,13 @@ def render_signal_pro_tab(data_by_timeframe: Dict):
             fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
 
             fig.update_layout(height=600, **CHART_LAYOUT)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             st.markdown("#### Signal Score Timeline")
             fig_score = go.Figure(
                 go.Bar(x=df.index, y=df["Signal_Score"], marker_color=df["Signal_Score"], marker_colorscale="RdYlGn"))
             fig_score.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig_score, use_container_width=True)
+            st.plotly_chart(fig_score, width="stretch")
 
 
 def render_macro_pro_tab(fred_key: str):
@@ -622,7 +622,7 @@ def render_macro_pro_tab(fred_key: str):
         fig.update_xaxes(gridcolor="#1e2d45")
         fig.update_yaxes(gridcolor="#1e2d45")
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Macro Regime
         st.markdown("### Macro Regime Assessment")
@@ -868,7 +868,7 @@ def render_backtest_lab_tab():
             fig.add_trace(go.Bar(x=df_tf_ind["datetime"], y=df_tf_ind["MACD_Histogram"], name="MACD Hist", marker_color="#7986cb"), row=3, col=1)
 
         fig.update_layout(height=720, **CHART_LAYOUT)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.markdown("#### 💡 Backtest Trading Ideas")
         # Generate ideas logic from original script
@@ -998,7 +998,7 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
                     fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
 
                 fig.update_layout(height=420, **CHART_LAYOUT)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
     if aligned:
         st.markdown(f"#### ✅ Daily-Confirmed Setups ({len(aligned)})")
@@ -1063,7 +1063,7 @@ def render_volume_profile_tab(data_by_timeframe: Dict) -> None:
 
     fig.update_layout(height=600, **CHART_LAYOUT)
     fig.update_xaxes(showticklabels=False, row=1, col=2)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_supertrend_strategy_tab(data_by_timeframe: Dict) -> None:
@@ -1113,7 +1113,7 @@ def render_supertrend_strategy_tab(data_by_timeframe: Dict) -> None:
                              marker=dict(symbol="triangle-down", size=10, color="#ff3b6b"), name="Sell"))
 
     fig.update_layout(height=600, **CHART_LAYOUT)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_trend_following_tab(data_by_timeframe: Dict) -> None:
@@ -1225,7 +1225,7 @@ def render_trend_following_tab(data_by_timeframe: Dict) -> None:
 
     st.dataframe(
         display_df.style.apply(_style_row, axis=1),
-        use_container_width=True,
+        width="stretch",
         height=min(38 * len(rows) + 38, 450),
     )
 
@@ -1305,7 +1305,7 @@ def render_trend_following_tab(data_by_timeframe: Dict) -> None:
         fig.add_hline(y=30, line=RSI_OS, row=3, col=1)
 
     fig.update_layout(height=680, **CHART_LAYOUT)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── Trend read-out ────────────────────────────────────────────────────────
     st.markdown("##### Trend Read-out")
