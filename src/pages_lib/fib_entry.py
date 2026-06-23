@@ -53,13 +53,11 @@ EXT_TARGET = 0.618  # 1.618 extension beyond the leg end for TP2
 @st.cache_data(ttl=180, show_spinner=False)
 def _fetch_15m(ticker: str, days: int = 5) -> pd.DataFrame:
     """15-minute OHLCV (yfinance allows 15m up to ~60 days)."""
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="15m", period=f"{days}d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="15m", period=f"{days}d", ttl=180)
         if df.empty:
             return pd.DataFrame()
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
         return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
     except Exception:
         return pd.DataFrame()

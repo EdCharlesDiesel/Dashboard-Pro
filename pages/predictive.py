@@ -51,8 +51,8 @@ sma_period = st.sidebar.slider("SMA Period", min_value=5, max_value=100, value=2
 # --- FETCH DATA ---
 @st.cache_data(ttl=60)  # Cache data for 1 minute to avoid spamming the API
 def load_forex_data(ticker, p, i):
-    data = yf.download(tickers=ticker, period=p, interval=i)
-    return data
+    from src.db.market_cache import cached_ohlc
+    return cached_ohlc(ticker, period=p, interval=i, ttl=60)
 
 try:
     df = load_forex_data(ticker_symbol, period, interval)

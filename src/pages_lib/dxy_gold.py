@@ -31,12 +31,12 @@ _LOOKBACKS = {
 @st.cache_data(ttl=600, show_spinner=False)
 def _fetch_closes(period: str) -> pd.DataFrame:
     """Daily closes for DXY and Gold, aligned on shared sessions."""
+    from src.db.market_cache import cached_closes
     try:
-        raw = yf.download([DXY_TICKER, GOLD_TICKER], period=period,
-                          interval="1d", progress=False, auto_adjust=True)
-        if raw is None or raw.empty:
+        close = cached_closes([DXY_TICKER, GOLD_TICKER], period=period,
+                              interval="1d", ttl=600)
+        if close is None or close.empty:
             return pd.DataFrame()
-        close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
         close = close.rename(columns={DXY_TICKER: "DXY", GOLD_TICKER: "XAU/USD"})
         return close[["DXY", "XAU/USD"]].dropna()
     except Exception:

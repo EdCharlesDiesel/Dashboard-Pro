@@ -189,6 +189,13 @@ class ChecklistSidebar:
             # Plain (lazy) connection here so bad credentials surface as a
             # friendly message instead of crashing on eager pool creation.
             ok, msg = TradeRepository(cfg).init_schema()
+            if ok:
+                # Same connection target: stand up the market-data cache tables
+                # (OHLC bars / fetch metadata / blob store) so the read-through
+                # cache has somewhere to persist. Failure here is non-fatal —
+                # the cache degrades to live yfinance.
+                from src.db.market_data_repository import MarketDataRepository
+                MarketDataRepository(cfg).init_schema()
             st.session_state.db_ok = ok
             st.session_state.db_msg = msg
             if ok:

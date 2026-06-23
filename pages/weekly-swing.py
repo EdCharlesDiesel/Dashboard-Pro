@@ -137,9 +137,9 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_weekly(ticker: str) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1wk", period="2y",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1wk", period="2y", ttl=600)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
@@ -151,9 +151,9 @@ def fetch_weekly(ticker: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily(ticker: str) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1d", period="6mo",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1d", period="6mo", ttl=300)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):

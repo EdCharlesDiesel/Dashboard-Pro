@@ -62,9 +62,9 @@ DOW = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 # ══════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_history(ticker: str, period: str) -> pd.DataFrame | None:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period=period, interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
         if df.empty or len(df) < 60:
             return None
         if isinstance(df.columns, pd.MultiIndex):

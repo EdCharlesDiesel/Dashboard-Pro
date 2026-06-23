@@ -51,7 +51,8 @@ class FallbackProvider(MarketDataProvider):
                 needs_resample = True
                 resample_rule = "15min"
 
-            df = yf.Ticker(symbol).history(period=period, interval=yf_interval)
+            from src.db.market_cache import cached_ohlc
+            df = cached_ohlc(symbol, period=period, interval=yf_interval, ttl=300)
 
             if df.empty:
                 return df
@@ -166,13 +167,23 @@ def get_macro_data(api_key: str) -> Tuple[Dict[str, Dict[str, float]], bool]:
                                 reason="no_api_key")
         return MACRO_FALLBACKS.copy(), False
 
-    with observability.track_fetch("fred_macro", series=len(FRED_SERIES)) as fetch:
-        try:
-            fred = Fred(api_key=api_key)
-        except Exception:
-            fetch.rows = 0
-            return MACRO_FALLBACKS.copy(), False
-        return _get_macro_data_impl(fred, fetch)
+    def _live() -> Tuple[Dict[str, Dict[str, float]], bool]:
+        with observability.track_fetch("fred_macro", series=len(FRED_SERIES)) as fetch:
+            try:
+                fred = Fred(api_key=api_key)
+            except Exception:
+                fetch.rows = 0
+                return MACRO_FALLBACKS.copy(), False
+            return _get_macro_data_impl(fred, fetch)
+
+    # Persist the macro snapshot to Postgres and only re-pull from FRED when the
+    # stored copy is stale (read-through). Falls back to a live pull when the DB
+    # is unavailable. JSONB round-trips the (dict, bool) result as a 2-list.
+    from src.db.market_cache import cached_blob
+    result = cached_blob("fred_macro", 3600, _live)
+    if isinstance(result, (list, tuple)) and len(result) == 2:
+        return dict(result[0]), bool(result[1])
+    return MACRO_FALLBACKS.copy(), False
 
 
 def _get_macro_data_impl(fred, fetch) -> Tuple[Dict[str, Dict[str, float]], bool]:

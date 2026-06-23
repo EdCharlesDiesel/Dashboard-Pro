@@ -88,13 +88,11 @@ class _SetupRankerDataFeed:
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def daily(ticker: str, days: int = 300) -> pd.DataFrame:
+        from src.db.market_cache import cached_ohlc
         try:
-            df = yf.download(ticker, period=f"{days}d", interval="1d",
-                             progress=False, auto_adjust=True)
+            df = cached_ohlc(ticker, period=f"{days}d", interval="1d", ttl=300)
             if df.empty:
                 return pd.DataFrame()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
             return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
         except Exception:
             return pd.DataFrame()
@@ -102,15 +100,13 @@ class _SetupRankerDataFeed:
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def four_hour(ticker: str) -> pd.DataFrame:
+        from src.db.market_cache import cached_ohlc
         try:
             end = datetime.now(pytz.utc)
             start = end - timedelta(days=90)
-            df = yf.download(ticker, start=start, end=end, interval="1h",
-                             progress=False, auto_adjust=True)
+            df = cached_ohlc(ticker, start=start, end=end, interval="1h", ttl=300)
             if df.empty:
                 return pd.DataFrame()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
             return df.resample("4h").agg({
                 "Open": "first", "High": "max", "Low": "min",
@@ -122,13 +118,11 @@ class _SetupRankerDataFeed:
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def weekly(ticker: str) -> pd.DataFrame:
+        from src.db.market_cache import cached_ohlc
         try:
-            df = yf.download(ticker, period="2y", interval="1d",
-                             progress=False, auto_adjust=True)
+            df = cached_ohlc(ticker, period="2y", interval="1d", ttl=300)
             if df.empty:
                 return pd.DataFrame()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
             return df.resample("W").agg({
                 "Open": "first", "High": "max", "Low": "min",

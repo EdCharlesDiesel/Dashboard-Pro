@@ -107,9 +107,9 @@ def crossover_bars_ago(e20: pd.Series, e50: pd.Series) -> int | None:
 # ── Fetch ──────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily_trend(ticker: str, pip_size: float, days: int = 300):
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period=f"{days}d", interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period=f"{days}d", interval="1d", ttl=300)
         if df.empty or len(df) < 55:
             return None
         if isinstance(df.columns, pd.MultiIndex):

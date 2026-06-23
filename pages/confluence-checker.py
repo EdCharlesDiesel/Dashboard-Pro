@@ -122,11 +122,11 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_4h(ticker: str, days: int = 90) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
         end   = datetime.now(pytz.utc)
         start = end - timedelta(days=days)
-        df    = yf.download(ticker, start=start, end=end,
-                            interval="1h", progress=False, auto_adjust=True)
+        df    = cached_ohlc(ticker, start=start, end=end, interval="1h", ttl=300)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
@@ -239,9 +239,9 @@ def evaluate_confluence(price, fib_res, pivot_res, ema_res, pdh_pdl_bonus=False)
 @st.cache_data(ttl=300, show_spinner=False)
 def get_pdh_pdl(ticker: str):
     """Return previous day High/Low from daily data."""
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period="5d", interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period="5d", interval="1d", ttl=300)
         if df.empty or len(df) < 2:
             return None
         if isinstance(df.columns, pd.MultiIndex):

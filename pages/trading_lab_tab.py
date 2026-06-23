@@ -307,7 +307,8 @@ def load_ohlcv(ticker: str, period: str = "5y") -> pd.DataFrame:
     tick-only or zero for spot FX (e.g. EURUSD=X) — POC needs real volume."""
     if yf is None:
         return pd.DataFrame()
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
     if df is None or df.empty:
         return pd.DataFrame()
     if isinstance(df.columns, pd.MultiIndex):

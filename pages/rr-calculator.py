@@ -113,9 +113,9 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_price(ticker: str) -> float | None:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1d", period="5d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1d", period="5d", ttl=300)
         if df.empty:
             return None
         if isinstance(df.columns, pd.MultiIndex):
@@ -126,9 +126,9 @@ def fetch_price(ticker: str) -> float | None:
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_atr14(ticker: str) -> float | None:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1d", period="60d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1d", period="60d", ttl=300)
         if df.empty or len(df) < 15:
             return None
         if isinstance(df.columns, pd.MultiIndex):

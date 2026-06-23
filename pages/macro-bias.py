@@ -243,15 +243,16 @@ def fetch_fx_rates():
         "GBP/ZAR": "GBPZAR=X",
     }
 
+    from src.db.market_cache import cached_closes
     try:
         tickers = list(fx_pairs.values())
-        data = yf.download(tickers, period="2d", interval="1d", progress=False, auto_adjust=True)
+        close = cached_closes(tickers, period="2d", interval="1d", ttl=600)
 
         rates = {}
         for pair, ticker in fx_pairs.items():
-            if ticker in data["Close"].columns:
-                latest = data["Close"][ticker].iloc[-1]
-                prev = data["Close"][ticker].iloc[-2] if len(data) > 1 else latest
+            if ticker in close.columns:
+                latest = close[ticker].iloc[-1]
+                prev = close[ticker].iloc[-2] if len(close) > 1 else latest
                 change = ((latest - prev) / prev) * 100 if prev != 0 else 0
                 rates[pair] = {
                     "rate": round(float(latest), 4),
@@ -304,10 +305,11 @@ def fetch_yields():
         "JP10Y": "^TNX",  # Placeholder - Japan 10Y not easily available
     }
 
+    from src.db.market_cache import cached_ohlc
     results = {}
     for ccy, tkr in yield_tickers.items():
         try:
-            df = yf.download(tkr, period="5d", interval="1d", progress=False, auto_adjust=True)
+            df = cached_ohlc(tkr, period="5d", interval="1d", ttl=600)
             if not df.empty:
                 results[ccy] = round(float(df["Close"].iloc[-1]), 3)
         except Exception:
@@ -318,8 +320,9 @@ def fetch_yields():
 @st.cache_data(ttl=1800, show_spinner=False)  # 30 min cache
 def fetch_dxy():
     """Fetch DXY (US Dollar Index)"""
+    from src.db.market_cache import cached_ohlc
     try:
-        dxy = yf.download("DX-Y.NYB", period="5d", interval="1d", progress=False, auto_adjust=True)
+        dxy = cached_ohlc("DX-Y.NYB", period="5d", interval="1d", ttl=1800)
         if not dxy.empty:
             latest = float(dxy["Close"].iloc[-1])
             prev = float(dxy["Close"].iloc[-2]) if len(dxy) > 1 else latest
@@ -335,8 +338,9 @@ def fetch_dxy():
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_vix():
     """Fetch VIX (volatility index)"""
+    from src.db.market_cache import cached_ohlc
     try:
-        vix = yf.download("^VIX", period="5d", interval="1d", progress=False, auto_adjust=True)
+        vix = cached_ohlc("^VIX", period="5d", interval="1d", ttl=600)
         if not vix.empty:
             return round(float(vix["Close"].iloc[-1]), 2)
     except Exception:
