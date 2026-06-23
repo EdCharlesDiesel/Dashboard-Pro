@@ -25,7 +25,23 @@ streamlit run app.py
 python -m py_compile app.py pages/*.py $(find src -name '*.py')
 ```
 
-There is no test suite. Smoke-test a page headlessly with Streamlit's AppTest:
+Unit tests (pytest) cover the pure logic in `src/` — registry, risk/session/
+correlation services, indicator math, and the setup/trend scorers. They never
+touch yfinance or a Streamlit runtime (fixtures build synthetic OHLC frames):
+
+```bash
+# Dev deps (pytest, pytest-cov) live in requirements-dev.txt; config is in pyproject.toml.
+pip install -r requirements-dev.txt
+PYTHONIOENCODING=utf-8 python -m pytest          # ~5s, no network; prints coverage
+```
+
+Tests live in `tests/` (mirrors `src/` module-by-module). `pyproject.toml`'s
+`pythonpath = ["."]` makes `import src...` resolve from the repo root, exactly
+as it does under `streamlit run`. Coverage runs by default and is **scoped to
+the pure-logic core** (`[tool.coverage.run] omit` excludes pages, UI, DB,
+network fetchers, email/observability) with a **`--cov-fail-under=80` floor**;
+logic coverage currently sits ~91%. Pages and yfinance fetchers (`*.fetch()`)
+are deliberately out of scope — smoke-test a page headlessly with AppTest:
 
 ```bash
 PYTHONIOENCODING=utf-8 python - <<'EOF'
