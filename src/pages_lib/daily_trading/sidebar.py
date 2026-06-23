@@ -148,7 +148,7 @@ class ChecklistSidebar:
 
         st.markdown("---")
         st.markdown("**◆ ATR & LEVELS**")
-        if st.button("Fetch ATR + Levels", use_container_width=True):
+        if st.button("Fetch ATR + Levels", width="stretch"):
             with st.spinner("Fetching market data…"):
                 ATRService.fetch.clear()
                 result = ATRService.fetch(inst["ticker"], inst["pip_size"])
@@ -187,7 +187,7 @@ class ChecklistSidebar:
             "Password", value=st.session_state.db_pass, type="password",
         )
 
-        if st.button("Connect & Init DB", use_container_width=True):
+        if st.button("Connect & Init DB", width="stretch"):
             cfg = DBConfig.from_mapping({
                 "host": st.session_state.db_host,
                 "port": st.session_state.db_port,
@@ -211,7 +211,7 @@ class ChecklistSidebar:
         )
 
         st.markdown("---")
-        if st.button("Reset All Checks", use_container_width=True):
+        if st.button("Reset All Checks", width="stretch"):
             SessionStateBootstrap.reset_checks()
             st.rerun()
 
@@ -246,12 +246,12 @@ class TrendSidebar:
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("All Forex", use_container_width=True):
+            if st.button("All Forex", width="stretch"):
                 st.session_state.trend_selected_pairs = [
                     p for p in INSTRUMENTS.keys() if p not in TREND_COMMODITIES
                 ]
         with col2:
-            if st.button("All Metals", use_container_width=True):
+            if st.button("All Metals", width="stretch"):
                 st.session_state.trend_selected_pairs = [
                     p for p in INSTRUMENTS.keys() if p in TREND_COMMODITIES
                 ]
@@ -282,7 +282,7 @@ class TrendSidebar:
         auto = st.toggle("Enable", value=True)
         mins = st.slider("Interval (min)", 1, 60, 15, disabled=not auto)
 
-        if st.button("Refresh Now", use_container_width=True, type="primary"):
+        if st.button("Refresh Now", width="stretch", type="primary"):
             st.cache_data.clear()
             st.rerun()
 

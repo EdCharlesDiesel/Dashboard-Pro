@@ -50,7 +50,7 @@ st.markdown("""
     .gap-track{background:#2a2a2a;border-radius:6px;height:8px;margin:6px 0;overflow:hidden;position:relative;}
 
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -274,7 +274,7 @@ with st.sidebar:
     only_intact = st.checkbox("Show only ✅ Intact", value=False)
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -632,7 +632,7 @@ with right:
             fig.update_yaxes(showgrid=True, gridcolor="#2a2a2a",
                              tickfont=dict(color="#9a9a9a",size=9), row=row, col=1)
         fig.update_annotations(font_color="#9a9a9a", font_size=11)
-        st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig, width="stretch", config=dict(displayModeBar=False))
 
         # ── EMA gap bar chart all pairs ────────────────────────────
         st.markdown("### 📊 All Pairs — EMA20 vs EMA50 Gap (pips)")
@@ -668,7 +668,7 @@ with right:
                        zeroline=True, zerolinecolor="#555555"),
             showlegend=False, bargap=0.2,
         )
-        st.plotly_chart(fig2, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig2, width="stretch", config=dict(displayModeBar=False))
 
         # ── Summary table ──────────────────────────────────────────
         st.markdown("### 📋 Full Summary Table")
@@ -699,7 +699,7 @@ with right:
                 "Stack":      f"{ss.get('score','?')}/{ss.get('max','4')} {ss.get('label','—')}",
             })
         df_out = pd.DataFrame(rows)
-        st.dataframe(df_out, use_container_width=True, hide_index=True,
+        st.dataframe(df_out, width="stretch", hide_index=True,
                      column_config={
                          "Pair":       st.column_config.TextColumn("Pair"),
                          "Close":      st.column_config.NumberColumn("Close",       format="%.5f"),

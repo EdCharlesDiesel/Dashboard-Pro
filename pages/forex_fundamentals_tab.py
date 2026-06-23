@@ -714,7 +714,7 @@ def _section_economic_surprise():
         return
 
     detail = pd.DataFrame(rows)
-    st.dataframe(detail, use_container_width=True, hide_index=True)
+    st.dataframe(detail, width="stretch", hide_index=True)
 
     score = (detail.groupby("Currency")["Currency impact (z)"]
              .mean().sort_values(ascending=False).round(2))
@@ -853,7 +853,7 @@ def _section_priced_in():
         except Exception:
             continue
     if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
         st.caption("⚠️ The 10y rate carries a term premium, so this reads "
                    "*direction* and rough magnitude, not a clean probability. "
                    "For a single-meeting probability use the Fed funds tool below.")
@@ -1004,5 +1004,25 @@ def render():
 if __name__ == "__main__":
     if st is None:
         raise SystemExit("Run with: streamlit run forex_fundamentals_tab.py")
-    st.set_page_config(page_title="Forex Fundamentals", layout="wide")
+
+    # Page bootstrap — kept lazy so the pure helpers above can still be imported
+    # headlessly. Mirrors the legacy-page contract used across the app:
+    # set_page_config → BloombergTheme.apply() → sidebar (header → divider → nav).
+    from src.ui.theme import BloombergTheme
+    from src.pages_lib.navigation import render_sidebar_nav
+
+    st.set_page_config(
+        page_title="Forex Fundamentals · Trading System",
+        page_icon="🌍",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    BloombergTheme.apply()
+
+    with st.sidebar:
+        st.markdown("### 🌍 Forex Fundamentals")
+        st.caption("Rates · surprise · CB tone · risk sentiment")
+        st.divider()
+        render_sidebar_nav()
+
     render()

@@ -261,7 +261,7 @@ class FibEntryPage(BloombergPage):
         st.session_state.fib_show = st.slider(
             "Candles on chart", 40, 240, int(st.session_state.fib_show), step=8)
         st.divider()
-        if st.button("◆ RESCAN", use_container_width=True, type="primary"):
+        if st.button("◆ RESCAN", width="stretch", type="primary"):
             st.cache_data.clear()
             st.rerun()
         st.caption(f"◷ {datetime.now().strftime('%H:%M')} · TTL 3min")
@@ -291,7 +291,7 @@ class FibEntryPage(BloombergPage):
             st.caption("⚠ Set [gmail] in secrets.toml (or GMAIL_* env vars) to enable.")
         c_test, c_reset = st.columns(2)
         with c_test:
-            if st.button("✉ Test", use_container_width=True):
+            if st.button("✉ Test", width="stretch"):
                 ok, msg = alert_service.send_email(
                     "15M Fib Entry — test alert",
                     "<p style='font-family:monospace;color:#0a0;'>✅ Fib-entry email "
@@ -299,7 +299,7 @@ class FibEntryPage(BloombergPage):
                     "Fib-entry email alerts are wired up correctly.")
                 (st.success if ok else st.error)(msg)
         with c_reset:
-            if st.button("↺ Reset", use_container_width=True,
+            if st.button("↺ Reset", width="stretch",
                          help="Clear the already-alerted memory so current entries re-fire."):
                 alert_service.NotifyCache("fib_entry").reset()
                 st.toast("Alert memory cleared.")
@@ -611,7 +611,7 @@ class FibEntryPage(BloombergPage):
             unsafe_allow_html=True)
 
         fig = self._build_chart(df, pair, bias, fib, int(st.session_state.fib_show))
-        st.plotly_chart(fig, use_container_width=True,
+        st.plotly_chart(fig, width="stretch",
                         config=dict(displayModeBar=False))
 
         if fib["entries"]:
@@ -626,7 +626,7 @@ class FibEntryPage(BloombergPage):
                 f'<div style="color:{T.GREY};font-size:11px;margin:10px 0 4px;">'
                 f'All fib golden-zone entries in the loaded window</div>',
                 unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
         else:
             st.info("No confirmed golden-zone entries yet for this leg.")
 

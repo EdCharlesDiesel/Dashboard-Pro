@@ -69,7 +69,7 @@ st.markdown("""
     .zone-label{font-size:9px;color:#555555;display:flex;justify-content:space-between;margin-top:2px;}
 
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1400px;}
 </style>
@@ -201,7 +201,7 @@ with st.sidebar:
     show_only_room = st.checkbox("Show only ✅ Has Room", value=False)
 
     st.divider()
-    if st.button("🔄 Refresh RSI Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh RSI Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -539,7 +539,7 @@ with right:
             fig.update_yaxes(showgrid=True, gridcolor="#2a2a2a",
                              tickfont=dict(color="#9a9a9a", size=9), row=row, col=1)
         fig.update_annotations(font_color="#9a9a9a", font_size=11)
-        st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig, width="stretch", config=dict(displayModeBar=False))
 
         # ── All-pair RSI bar chart ─────────────────────────────────
         st.markdown("### 📊 All Pairs — RSI Snapshot")
@@ -581,7 +581,7 @@ with right:
                        range=[0, 105]),
             showlegend=False, bargap=0.2,
         )
-        st.plotly_chart(fig2, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig2, width="stretch", config=dict(displayModeBar=False))
 
         # ── Summary table ──────────────────────────────────────────
         st.markdown("### 📋 Full RSI Summary Table")
@@ -606,7 +606,7 @@ with right:
                 "Divergence":dd["divergence"] or "—",
             })
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True, column_config={
+        st.dataframe(df, width="stretch", hide_index=True, column_config={
             "Pair":      st.column_config.TextColumn("Pair"),
             "RSI":       st.column_config.NumberColumn("RSI",      format="%.2f"),
             "Prev RSI":  st.column_config.NumberColumn("Prev RSI", format="%.2f"),
