@@ -284,7 +284,7 @@ class ChecklistController:
         # Autofill button at the start
         with Panel("PRE-TRADE CHECKS", tag=f"{CHECKS_TOTAL}-POINT").context():
             if st.button("⚡ Auto-fill from Trend Signals", key="auto_trend",
-                         use_container_width=True):
+                         width="stretch"):
                 self._autofill_from_trend(inst, direction)
                 st.rerun()
 
@@ -417,7 +417,7 @@ class ChecklistController:
         with Panel("CONFLUENCE RADAR", tag="18 PTS").context():
             st.plotly_chart(
                 ChartBuilder.radar(cats, vals),
-                use_container_width=True,
+                width="stretch",
                 config=dict(displayModeBar=False),
             )
 
@@ -456,7 +456,7 @@ class ChecklistController:
             )
 
         # Save button
-        if st.button("◆ SAVE SETUP TO POSTGRES", type="primary", use_container_width=True):
+        if st.button("◆ SAVE SETUP TO POSTGRES", type="primary", width="stretch"):
             self._save_setup(
                 db_cfg, inst_name, display, direction, verdict_label, chip_kind,
                 checked, atr14, atr20, sl_pips, tp1_pips, tp2_pips, risk, dll,
@@ -631,7 +631,7 @@ class ChecklistController:
                        color="green" if ct_r >= 0 else "red").show()
 
         if st.button("◆ SAVE TRADE OUTCOME", type="primary",
-                     use_container_width=True, key="save_outcome_btn"):
+                     width="stretch", key="save_outcome_btn"):
             try:
                 TradeRepository(self._db_cfg()).close_trade(
                     chosen_id, ct_entry, ct_close, ct_pips, ct_r, ct_outcome,
@@ -667,4 +667,4 @@ class ChecklistController:
             df_log["checks_detail"] = df_log["checks_detail"].apply(
                 lambda x: str(x) if x else ""
             )
-        st.dataframe(df_log, use_container_width=True)
+        st.dataframe(df_log, width="stretch")

@@ -45,7 +45,7 @@ st.markdown("""
     .check-fail{background:#3a1a1a;border:1px solid #ff3344;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
     .check-auto{background:#1a2a3a;border:1px solid #00ff41;border-radius:6px;padding:8px 12px;margin:3px 0;font-size:13px;}
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarCollapseButton"]{visibility:visible !important;display:flex !important;}
     section[data-testid="stSidebar"]{display:block !important;}
@@ -99,7 +99,7 @@ with st.sidebar:
                             help="Round-trip cost applied as a worse entry fill. 0 = frictionless.")
 
     st.markdown("---")
-    run_btn = st.button("▶ Run Backtest", use_container_width=True, type="primary")
+    run_btn = st.button("▶ Run Backtest", width="stretch", type="primary")
 
     st.divider()
     render_sidebar_nav()
@@ -224,7 +224,7 @@ slippage are modelled as a worse entry fill.
                 fig.add_hline(y=account, line=dict(color=GREY, dash="dash", width=1))
                 st.plotly_chart(_dark(fig, 300, showlegend=False, hovermode="x unified",
                                       yaxis=dict(title="Equity ($)")),
-                                use_container_width=True, config=dict(displayModeBar=False))
+                                width="stretch", config=dict(displayModeBar=False))
             with c2:
                 st.markdown("**R per Trade**")
                 rs = [t["r"] for t in trades]
@@ -235,7 +235,7 @@ slippage are modelled as a worse entry fill.
                 fig_r.add_hline(y=0, line=dict(color=GREY, dash="dash", width=1))
                 st.plotly_chart(_dark(fig_r, 300, xaxis=dict(tickangle=-45, showgrid=False),
                                       yaxis=dict(title="R")),
-                                use_container_width=True, config=dict(displayModeBar=False))
+                                width="stretch", config=dict(displayModeBar=False))
 
             # ── Outcome distribution ──────────────────────────────────
             st.markdown("**Outcome Distribution**")
@@ -259,7 +259,7 @@ slippage are modelled as a worse entry fill.
                       .map(lambda v: f'color:{GREEN if v > 0 else RED}', subset=["r"])
                       .format({"entry": "{:.5f}", "exit": "{:.5f}", "sl": "{:.5f}", "tp1": "{:.5f}",
                                "r": "{:+.2f}R", "pips": "{:.0f}"}))
-            st.dataframe(styled, use_container_width=True, height=320)
+            st.dataframe(styled, width="stretch", height=320)
 
             st.download_button("⬇ Download trade log (CSV)",
                                df_log.to_csv(index=False).encode(),
@@ -305,7 +305,7 @@ with tab_rob:
                                              hoverinfo="skip", showlegend=False))
                 fig.add_hline(y=account, line=dict(color=GREY, dash="dash", width=1))
                 st.plotly_chart(_dark(fig, 320, yaxis=dict(title="Equity ($)")),
-                                use_container_width=True, config=dict(displayModeBar=False))
+                                width="stretch", config=dict(displayModeBar=False))
             with c2:
                 st.markdown("**Distribution of final return (%)**")
                 fig_h = go.Figure(go.Histogram(
@@ -313,7 +313,7 @@ with tab_rob:
                     marker=dict(color=[GREEN if v > 0 else RED for v in mc.final_returns])))
                 fig_h.add_vline(x=0, line_color="#e6e6e6", line_width=1.5)
                 st.plotly_chart(_dark(fig_h, 320, showlegend=False, xaxis=dict(title="Final return %")),
-                                use_container_width=True, config=dict(displayModeBar=False))
+                                width="stretch", config=dict(displayModeBar=False))
 
         st.markdown("---")
 
@@ -358,7 +358,7 @@ with tab_rob:
                 hovertemplate="SL %{y} · RR %{x}<br>%{z:.2f}<extra></extra>",
                 text=np.round(grid.values, 1), texttemplate="%{text}"))
             st.plotly_chart(_dark(fig, 360, xaxis=dict(title="R:R"), yaxis=dict(title="SL × ATR")),
-                            use_container_width=True, config=dict(displayModeBar=False))
+                            width="stretch", config=dict(displayModeBar=False))
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -404,7 +404,7 @@ with tab_pf:
                                        hovertemplate="$%{y:,.0f}<extra></extra>"))
             fig.add_hline(y=account, line=dict(color=GREY, dash="dash", width=1))
             st.plotly_chart(_dark(fig, 320, yaxis=dict(title="Equity ($)")),
-                            use_container_width=True, config=dict(displayModeBar=False))
+                            width="stretch", config=dict(displayModeBar=False))
         with c2:
             st.markdown("**Per-Instrument Leaderboard**")
             lb = pd.DataFrame(pf["leaderboard"])
@@ -412,7 +412,7 @@ with tab_pf:
                 styled = (lb.style
                           .map(lambda v: f'color:{GREEN if v > 0 else RED}', subset=["net_r"])
                           .format({"net_r": "{:+.1f}R", "win_rate": "{:.0f}%", "profit_factor": "{:.2f}"}))
-                st.dataframe(styled, use_container_width=True, height=300)
+                st.dataframe(styled, width="stretch", height=300)
 
 
 # ══════════════════════════════════════════════════════════════════

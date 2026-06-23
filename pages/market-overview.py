@@ -16,8 +16,8 @@ from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
 from src.core.signals import (
-    generate_trading_ideas, safe_get, entry_generator,
-    generate_weekly_swing_ideas, generate_supertrend_signals, evaluate_trend_following_signal
+    generate_trading_ideas,
+    generate_weekly_swing_ideas, evaluate_trend_following_signal
 )
 
 st.set_page_config(
@@ -285,7 +285,7 @@ def render_sidebar(fred_api_key: str = "") -> str:
         st.divider()
 
         st.subheader("🔄 Data Refresh")
-        if st.button("↺ Refresh Now", use_container_width=True):
+        if st.button("↺ Refresh Now", width="stretch"):
             clear_data_cache()
             st.rerun()
 
@@ -299,7 +299,7 @@ def render_sidebar(fred_api_key: str = "") -> str:
         if alert_service.email_configured():
             st.success(f"✅ Alerts → {alert_service.email_recipient()}")
             st.caption(f"Sending via {secrets.email_config().get('user', '')}")
-            if st.button("✉ Send test email", use_container_width=True):
+            if st.button("✉ Send test email", width="stretch"):
                 ok, msg = alert_service.send_email(
                     "Market Overview — test alert",
                     "<p style='font-family:monospace;color:#4af0c4;'>✅ Market Overview email "
@@ -361,7 +361,7 @@ def render_macro_table(macro_data: Dict, is_live: bool) -> None:
     rows = [{"Currency": ccy, **vals} for ccy, vals in macro_data.items()]
     df = pd.DataFrame(rows).set_index("Currency")
     st.dataframe(df.style.background_gradient(cmap="RdYlGn", subset=["GDP", "Inflation", "Rates", "Unemployment"]),
-                 use_container_width=True)
+                 width="stretch")
 
 
 def render_overview_tab(daily_data: Dict):
@@ -373,7 +373,7 @@ def render_overview_tab(daily_data: Dict):
                 price = df['Close'].iloc[-1]
                 change = df['Close'].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
                 rows.append({"Pair": pair, "Price": price, "Change %": change, "Bars": len(df)})
-        st.dataframe(pd.DataFrame(rows), use_container_width=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch")
 
 
 def render_mtf_matrix_tab(data_by_timeframe: Dict):
@@ -384,44 +384,186 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
 
     for pair in config.assets.keys():
         sentiments = analyzer.get_mtf_sentiment(data_by_timeframe, pair)
-        row = {"Pair": pair}
-        for tf in target_tfs:
-            row[tf] = sentiments.get(tf, "N/A")
+        tf_vals = {tf: sentiments.get(tf, "N/A") for tf in target_tfs}
+
+        # Overall = net score across the timeframes (+1 Bullish, -1 Bearish,
+        # 0 for Neutral/N/A). Sign of the net decides the bias label; the score
+        # is shown alongside so a 4/0 read is distinguishable from a 2/1.
+        bull = sum(1 for v in tf_vals.values() if v == "Bullish")
+        bear = sum(1 for v in tf_vals.values() if v == "Bearish")
+        net = bull - bear
+        if net > 0:
+            overall = f"🟢 {net:+d}"
+        elif net < 0:
+            overall = f"🔴 {net:+d}"
+        else:
+            overall = "⚪ 0"
+
+        # "Overall" sits right after the Pair index (dict insertion order).
+        row = {"Pair": pair, "Overall": overall, **tf_vals}
         mtf_rows.append(row)
 
     mtf_df = pd.DataFrame(mtf_rows).set_index("Pair")
 
     def color_sentiment(val):
-        if val == "Bullish": return "background-color: #249d53; color: white;"
-        if val == "Bearish": return "background-color: #ca2427; color: white;"
+        # Matches both the per-timeframe word cells ("Bullish"/"Bearish") and the
+        # icon-based "Overall" cell ("🟢 +3" / "🔴 -2") so all colour consistently.
+        text = str(val)
+        if text.startswith("Bullish") or "🟢" in text: return "background-color: #249d53; color: white;"
+        if text.startswith("Bearish") or "🔴" in text: return "background-color: #ca2427; color: white;"
         return ""
 
     st.table(mtf_df.style.map(color_sentiment))
 
 
+# ── Perfect Order (Lien, Ch.16) ──────────────────────────────────────────────
+# A "perfect order" is the 10/20/50/100/200 SMA stack in strict sequence:
+#   bullish → SMA10 > SMA20 > SMA50 > SMA100 > SMA200
+#   bearish → SMA10 < SMA20 < SMA50 < SMA100 < SMA200
+# It signals a strong trend (confirm with ADX > 20 and rising). Entry is 5
+# candles after the order first forms; stop is the formation day's low (long) /
+# high (short); exit when the order breaks (10 crosses back through 20).
+PERFECT_ORDER_SMAS = [10, 20, 50, 100, 200]
+PERFECT_ORDER_COLORS = {10: "#00e0ff", 20: "#00ff41", 50: "#ffcc00",
+                        100: "#ff8c00", 200: "#ff3366"}
+
+
+def _perfect_order_state(values) -> str:
+    """bullish / bearish / none for one ordered list of [SMA10..SMA200]."""
+    if any(pd.isna(v) for v in values):
+        return "none"
+    if values[0] > values[1] > values[2] > values[3] > values[4]:
+        return "bullish"
+    if values[0] < values[1] < values[2] < values[3] < values[4]:
+        return "bearish"
+    return "none"
+
+
+def _perfect_order_runs(states):
+    """Contiguous [start, end, state] spans where the order holds (for shading)."""
+    runs, i, n = [], 0, len(states)
+    while i < n:
+        if states[i] != "none":
+            j = i
+            while j + 1 < n and states[j + 1] == states[i]:
+                j += 1
+            runs.append((i, j, states[i]))
+            i = j + 1
+        else:
+            i += 1
+    return runs
+
+
+@st.cache_data(ttl=config.cache_ttl, show_spinner=False)
+def _fetch_perfect_order_daily(symbol: str) -> pd.DataFrame:
+    """2y of daily bars — enough history to seed the 200-day SMA."""
+    return fetch_data(symbol, "1d", "2y")
+
+
 def render_technical_chart_tab(data_by_timeframe: Dict):
-    st.subheader("📈 Technical Analysis Chart")
+    st.subheader("📈 Technical Analysis Chart — Perfect Order")
+    st.caption("Moving averages in **perfect order** (10>20>50>100>200 for an "
+               "uptrend, reversed for a downtrend) flag a strong trend. Confirm "
+               "with ADX > 20 and rising; enter 5 candles after the order forms, "
+               "stop at the formation day's low/high, exit when the order breaks.")
+
     daily_data = data_by_timeframe.get('Daily', {})
     avail = [p for p, d in daily_data.items() if not d.empty]
-    if avail:
-        c1, c2 = st.columns(2)
-        pair = c1.selectbox("Pair", avail, key="chart_pair")
-        tf = c2.selectbox("Timeframe", list(config.timeframes.keys()), key="chart_tf")
-        df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
-        if not df.empty:
-            df = analyzer.add_indicators(df)
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3],
-                                subplot_titles=(f"{pair} — {tf}", "RSI"))
-            fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-                                         name="Price", **CANDLE_STYLE), row=1, col=1)
-            for ma, color in [(k, v) for k, v in EMA_COLORS.items() if k in df.columns]:
-                fig.add_trace(go.Scatter(x=df.index, y=df[ma], name=ma, line=dict(color=color, width=1.4)), row=1, col=1)
-            if 'RSI' in df.columns:
-                fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI", line=RSI_LINE), row=2, col=1)
-                fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
-                fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
-            fig.update_layout(height=600, **CHART_LAYOUT)
-            st.plotly_chart(fig, use_container_width=True)
+    if not avail:
+        st.info("No daily data available.")
+        return
+
+    pair = st.selectbox("Pair", avail, key="chart_pair")
+    symbol = config.assets.get(pair)
+
+    df = _fetch_perfect_order_daily(symbol) if symbol else pd.DataFrame()
+    if df.empty or len(df) < PERFECT_ORDER_SMAS[-1]:
+        st.warning(f"Need ≥{PERFECT_ORDER_SMAS[-1]} daily bars for the 200-SMA — "
+                   f"only {len(df)} returned for {pair}.")
+        return
+
+    df = analyzer.add_indicators(df)
+    for p in PERFECT_ORDER_SMAS:
+        df[f"SMA_{p}"] = df["Close"].rolling(p).mean()
+    states = [_perfect_order_state([row[f"SMA_{p}"] for p in PERFECT_ORDER_SMAS])
+              for _, row in df.iterrows()]
+    df["po_state"] = states
+    runs = _perfect_order_runs(states)
+
+    # ── Current read + entry plan ────────────────────────────────────────────
+    current = states[-1]
+    adx = float(df["ADX"].iloc[-1]) if "ADX" in df.columns and pd.notna(df["ADX"].iloc[-1]) else 0.0
+    adx_prev = float(df["ADX"].iloc[-5]) if "ADX" in df.columns and len(df) > 5 and pd.notna(df["ADX"].iloc[-5]) else adx
+    adx_rising = adx > adx_prev
+    icon = {"bullish": "🟢 BULLISH", "bearish": "🔴 BEARISH", "none": "⚪ NONE"}[current]
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Perfect Order", icon)
+    m2.metric("ADX", f"{adx:.1f}", delta=("rising" if adx_rising else "falling"),
+              delta_color="normal" if adx_rising else "inverse",
+              help="Strategy wants ADX > 20 and rising.")
+
+    entry_marker = stop_marker = None
+    plan = "—"
+    if current != "none" and runs:
+        f_start, f_end, f_state = runs[-1]
+        bars_held = (len(df) - 1) - f_start
+        entry_ok = adx > 20 and adx_rising
+        if bars_held >= 5:
+            entry_idx = f_start + 5
+            entry_px = float(df["Close"].iloc[entry_idx])
+            # Stop = formation day's low (long) / high (short).
+            stop_px = (float(df["Low"].iloc[f_start]) if f_state == "bullish"
+                       else float(df["High"].iloc[f_start]))
+            side = "LONG" if f_state == "bullish" else "SHORT"
+            risk = abs(entry_px - stop_px)
+            plan = (f"{side} · entry {entry_px:.5f} (5 bars after formation) · "
+                    f"stop {stop_px:.5f} · risk {risk:.5f}")
+            entry_marker = (df.index[entry_idx], entry_px, side)
+            stop_marker = (df.index[f_start], stop_px)
+        else:
+            plan = (f"Order forming ({bars_held}/5 bars) — wait for the 5th candle "
+                    f"after formation before entering.")
+        m3.metric("Entry Trigger", "✅ READY" if (entry_ok and bars_held >= 5)
+                  else ("⏳ WAIT" if bars_held < 5 else "⚠ ADX weak"))
+    else:
+        m3.metric("Entry Trigger", "—")
+
+    if plan != "—":
+        st.info(f"**Plan:** {plan}")
+
+    # ── Chart: price + 5-SMA stack + shaded perfect-order regions, ADX below ──
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                        row_heights=[0.72, 0.28], subplot_titles=(f"{pair} — Daily", "ADX"))
+    fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'],
+                                 low=df['Low'], close=df['Close'], name="Price",
+                                 **CANDLE_STYLE), row=1, col=1)
+    for p in PERFECT_ORDER_SMAS:
+        fig.add_trace(go.Scatter(x=df.index, y=df[f"SMA_{p}"], name=f"SMA{p}",
+                                 line=dict(color=PERFECT_ORDER_COLORS[p], width=1.3)),
+                      row=1, col=1)
+    # shade where the order holds (green bullish / red bearish)
+    for s_idx, e_idx, s_state in runs:
+        fig.add_vrect(x0=df.index[s_idx], x1=df.index[e_idx], row=1, col=1,
+                      line_width=0, layer="below",
+                      fillcolor="rgba(0,255,65,0.10)" if s_state == "bullish"
+                      else "rgba(255,51,102,0.10)")
+    if entry_marker:
+        ex, ey, eside = entry_marker
+        fig.add_trace(go.Scatter(x=[ex], y=[ey], mode="markers", name=f"Entry ({eside})",
+                                 marker=dict(symbol="triangle-up" if eside == "LONG"
+                                 else "triangle-down", size=14, color="#ffffff",
+                                 line=dict(width=1.5, color="#00ff41"))), row=1, col=1)
+    if stop_marker:
+        sx, sy = stop_marker
+        fig.add_hline(y=sy, line=dict(color="#ff3366", width=1, dash="dot"), row=1, col=1)
+
+    if "ADX" in df.columns:
+        fig.add_trace(go.Scatter(x=df.index, y=df["ADX"], name="ADX",
+                                 line=dict(color="#00e0ff", width=1.4)), row=2, col=1)
+        fig.add_hline(y=20, line=dict(color="#ffcc00", width=1, dash="dot"), row=2, col=1)
+    fig.update_layout(height=640, **CHART_LAYOUT)
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_trading_view_tab(data_by_timeframe: Dict):
@@ -464,115 +606,7 @@ def render_trading_view_tab(data_by_timeframe: Dict):
                     fig.add_hline(y=val, line_dash="dot", line_color=color, annotation_text=level)
 
                 fig.update_layout(height=600, title=f"{tv_pair} - {tv_tf} with Pivot Points", **CHART_LAYOUT)
-                st.plotly_chart(fig, use_container_width=True)
-
-
-def render_15m_entry_tab(data_by_timeframe: Dict):
-    st.subheader("⏱️ 15-Minute Entry Signal")
-    daily_data = data_by_timeframe.get('Daily', {})
-    avail_pairs = [p for p in daily_data if not daily_data[p].empty]
-    if avail_pairs:
-        pair_e = st.selectbox("Pair", avail_pairs, key="entry_pair")
-        df_15m = data_by_timeframe.get('15 Minute', {}).get(pair_e, pd.DataFrame())
-        df_d = data_by_timeframe.get('Daily', {}).get(pair_e, pd.DataFrame())
-
-        if not df_15m.empty and not df_d.empty:
-            df_d = analyzer.add_indicators(df_d)
-            di = df_d.iloc[-1]
-            adx_v = safe_get(di, "ADX", 0.0)
-            close_v = safe_get(di, "Close", 0.0)
-            ema20_v = safe_get(di, "EMA_20", close_v)
-
-            bias_v = ("Long" if close_v > ema20_v else "Short") if adx_v > config.adx_trend_min else "Neutral"
-            st.write(f"**Daily Trend Bias:** `{bias_v}` | ADX = {adx_v:.1f}")
-
-            sig = entry_generator.get_entry_signal(df_15m, bias_v)
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if sig["signal"] == 1:
-                    st.success("### 🟢 LONG")
-                elif sig["signal"] == -1:
-                    st.error("### 🔴 SHORT")
-                else:
-                    st.info("### ⚪ NO SIGNAL")
-            c2.metric("Confidence", f"{sig['confidence']}/5")
-            c3.metric("Price", f"{sig.get('price', 0):.5f}")
-
-            for r in sig.get("reasons", []):
-                st.info(f"ℹ️ {r}")
-        else:
-            st.warning("Insufficient data for 15-minute analysis")
-
-
-def render_signal_pro_tab(data_by_timeframe: Dict):
-    st.subheader("⚡ Signal Dashboard (QuantConnect-Style)")
-    daily_data = data_by_timeframe.get('Daily', {})
-    avail = [p for p, d in daily_data.items() if not d.empty]
-    if avail:
-        c1, c2 = st.columns([1, 4])
-        with c1:
-            pair = st.selectbox("Select Asset", avail, key="pro_pair")
-            tf = st.selectbox("Timeframe", ["Daily", "4 Hour", "Hourly", "15 Minute"], key="pro_tf")
-            pivot_tf = st.selectbox("Pivot Lookback", ["Weekly", "Daily"], index=0, key="pro_piv_tf")
-
-        df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
-        df_piv = data_by_timeframe.get(pivot_tf, {}).get(pair, pd.DataFrame())
-
-        if not df.empty and not df_piv.empty:
-            pivots = analyzer.calculate_expanded_pivots(df_piv)
-            df = analyzer.generate_pro_signals(df, pivots)
-
-            # Metrics
-            latest = df["Close"].iloc[-1]
-            last_signal = df["Signal"].iloc[-1]
-            rsi_val = df["RSI"].iloc[-1] if "RSI" in df.columns else 0
-
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Price", f"{latest:.5f}")
-            m2.metric("Signal", last_signal)
-            m3.metric("RSI", f"{rsi_val:.1f}")
-            m4.metric("PP Level", f"{pivots['PP']:.5f}")
-
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3])
-            fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-                                         name="Price", **CANDLE_STYLE), row=1, col=1)
-
-            # Add Pivot Lines
-            pivot_style = {
-                "R3": ("#c0392b", "dash"), "M4": ("#e74c3c", "dot"), "R2": ("#e74c3c", "dash"),
-                "M3": ("#e74c3c", "dot"), "R1": ("#c0392b", "dashdot"), "M2": ("#e74c3c", "dot"),
-                "PP": ("#e0e8ff", "solid"), "M1": ("#27ae60", "dot"), "S1": ("#27ae60", "dashdot"),
-                "M0": ("#27ae60", "dot"), "S2": ("#1e8449", "dash"), "S3": ("#1e8449", "dash"),
-            }
-            for level, (color, dash) in pivot_style.items():
-                val = pivots.get(level)
-                if val is None: continue
-                lw = 1.8 if level in ("PP", "R3", "S3") else 1.2
-                fig.add_hline(y=val, line_dash=dash, line_color=color, line_width=lw,
-                              annotation_text=level, row=1, col=1)
-
-            # Add Signal markers
-            for sig, color, sym in [("STRONG BUY", "#26a69a", "triangle-up"), ("BUY", "#66bb6a", "triangle-up"),
-                                    ("STRONG SELL", "#ef5350", "triangle-down"), ("SELL", "#ffa726", "triangle-down")]:
-                mask = df["Signal"] == sig
-                if mask.any():
-                    fig.add_trace(go.Scatter(x=df.index[mask], y=df.loc[mask, "High" if "SELL" in sig else "Low"],
-                                             mode="markers", marker=dict(symbol=sym, color=color, size=10), name=sig),
-                                  row=1, col=1)
-
-            # RSI
-            fig.add_trace(go.Scatter(x=df.index, y=df["RSI"], name="RSI", line=RSI_LINE), row=2, col=1)
-            fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
-            fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
-
-            fig.update_layout(height=600, **CHART_LAYOUT)
-            st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("#### Signal Score Timeline")
-            fig_score = go.Figure(
-                go.Bar(x=df.index, y=df["Signal_Score"], marker_color=df["Signal_Score"], marker_colorscale="RdYlGn"))
-            fig_score.update_layout(height=150, margin=dict(l=10, r=10, t=10, b=10))
-            st.plotly_chart(fig_score, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
 
 def render_macro_pro_tab(fred_key: str):
@@ -622,7 +656,7 @@ def render_macro_pro_tab(fred_key: str):
         fig.update_xaxes(gridcolor="#1e2d45")
         fig.update_yaxes(gridcolor="#1e2d45")
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Macro Regime
         st.markdown("### Macro Regime Assessment")
@@ -725,169 +759,6 @@ def render_trading_ideas_tab():
             f"Distance: {idea['stop_loss_pips']} pips"
         )
         st.divider()
-
-
-def render_backtest_lab_tab():
-    st.subheader("🧪 Modular Backtest Lab")
-
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        st.markdown("### 📁 Data Source")
-        data_file = st.text_input("Path to CSV (M1, semi-colon separated)", "DAT_NT_EURUSD_M1_2025.csv")
-
-        if not Path(data_file).exists():
-            st.warning("Please provide a valid path to the data file.")
-            return
-
-        try:
-            df_raw = pd.read_csv(
-                data_file,
-                sep=";",
-                header=None,
-                names=["datetime", "open", "high", "low", "close", "volume"],
-                parse_dates=["datetime"],
-                date_format="%Y%m%d %H%M%S",
-            )
-            df_raw = df_raw.dropna(subset=["datetime"])
-            df_raw = df_raw.sort_values("datetime").reset_index(drop=True)
-            df_raw["date"] = df_raw["datetime"].dt.date
-            # Rename columns to standard OHLC for the modular analyzer
-            df_raw.columns = [col.capitalize() if col != 'datetime' and col != 'date' else col for col in df_raw.columns]
-        except Exception as e:
-            st.error(f"Error loading file: {e}")
-            return
-
-        all_dates = sorted(df_raw["date"].unique())
-        date_options = [str(d) for d in all_dates]
-
-        st.markdown("### ⚙️ Controls")
-        selected_str = st.selectbox("📅 Select Trading Day", date_options, index=0)
-        selected_date = pd.Timestamp(selected_str).date()
-        tf_choice = st.selectbox("⏱ Timeframe", ["M5", "M15", "M30", "H1", "M1"], index=1)
-        show_ema = st.checkbox("EMA (20 / 50)", value=True)
-        show_bb = st.checkbox("Bollinger Bands", value=False)
-        show_sessions = st.checkbox("Session Shading", value=True)
-
-    df_day = df_raw[df_raw["date"] == selected_date].copy()
-    if df_day.empty:
-        st.warning("No data for selected date.")
-        return
-
-    rules = {"M1": "1min", "M5": "5min", "M15": "15min", "M30": "30min", "H1": "1h"}
-    if tf_choice != "M1":
-        df_tf = df_day.set_index("datetime").resample(rules[tf_choice]).agg(
-            Open=("Open", "first"),
-            High=("High", "max"),
-            Low=("Low", "min"),
-            Close=("Close", "last"),
-            Volume=("Volume", "sum"),
-        ).dropna().reset_index()
-    else:
-        df_tf = df_day.copy()
-
-    df_tf_ind = analyzer.add_indicators(df_tf.copy())
-    bias, confidence = analyzer.compute_daily_bias(df_day)
-    sess = analyzer.session_analysis(df_day)
-
-    # Key Levels for display
-    c_last = df_day["Close"].iloc[-1]
-    h_day = df_day["High"].max()
-    l_day = df_day["Low"].min()
-    rng = h_day - l_day
-    pp = (h_day + l_day + c_last) / 3
-    levels = {
-        "pp": pp,
-        "r1": 2 * pp - l_day,
-        "r2": pp + rng,
-        "s1": 2 * pp - h_day,
-        "s2": pp - rng
-    }
-
-    with c2:
-        st.markdown(f"### {selected_str} | Bias: {bias} ({confidence:.0f}%)")
-        sess_cols = st.columns(3)
-        for i, (name, data) in enumerate(sess.items()):
-            with sess_cols[i]:
-                if data:
-                    st.markdown(f"**{name}** {data['direction']}")
-                    st.caption(f"Range: {data['range_pips']} pips | H: {data['high']:.5f} L: {data['low']:.5f}")
-                else:
-                    st.markdown(f"**{name}** — no data")
-
-        # Build Chart
-        fig = make_subplots(
-            rows=3, cols=1,
-            shared_xaxes=True,
-            row_heights=[0.55, 0.23, 0.22],
-            vertical_spacing=0.04,
-            subplot_titles=[f"Backtest {tf_choice} — {selected_date}", "RSI (14)", "MACD"],
-        )
-
-        fig.add_trace(go.Candlestick(
-            x=df_tf_ind["datetime"],
-            open=df_tf_ind["Open"], high=df_tf_ind["High"],
-            low=df_tf_ind["Low"], close=df_tf_ind["Close"],
-            name="Price", showlegend=False, **CANDLE_STYLE,
-        ), row=1, col=1)
-
-        if show_ema:
-            for col, color in EMA_COLORS.items():
-                if col in df_tf_ind.columns:
-                    fig.add_trace(go.Scatter(x=df_tf_ind["datetime"], y=df_tf_ind[col],
-                                             line=dict(color=color, width=1.4), name=col), row=1, col=1)
-
-        if show_bb:
-            bb_styles = [("BB_Upper", "#4fc3f7", "dot"), ("BB_Middle", "#90a4ae", "solid"), ("BB_Lower", "#4fc3f7", "dot")]
-            for col, color, dash in bb_styles:
-                if col in df_tf_ind.columns:
-                    fig.add_trace(go.Scatter(x=df_tf_ind["datetime"], y=df_tf_ind[col],
-                                             line=dict(color=color, width=1, dash=dash),
-                                             name=col, opacity=0.7), row=1, col=1)
-            if "BB_Upper" in df_tf_ind.columns and "BB_Lower" in df_tf_ind.columns:
-                fig.add_trace(
-                    go.Scatter(x=pd.concat([df_tf_ind["datetime"], df_tf_ind["datetime"][::-1]]),
-                               y=pd.concat([df_tf_ind["BB_Upper"], df_tf_ind["BB_Lower"][::-1]]),
-                               fill="toself", fillcolor="rgba(79,195,247,0.05)",
-                               line=dict(color="rgba(0,0,0,0)"), showlegend=False, name="BB Band"), row=1, col=1)
-
-        level_colors = {"pp": "#9e9e9e", "r1": "#ef5350", "r2": "#e53935", "s1": "#26a69a", "s2": "#00897b"}
-        for key, price in levels.items():
-            fig.add_hline(y=price, line_dash="dot", line_color=level_colors[key], line_width=0.8, row=1, col=1)
-
-        if show_sessions:
-            sess_colors = {"Asian": "rgba(255,193,7,0.06)", "London": "rgba(30,136,229,0.07)", "NY": "rgba(239,83,80,0.06)"}
-            for name, (s, e) in analyzer.get_sessions(selected_date).items():
-                fig.add_vrect(x0=s, x1=e, fillcolor=sess_colors[name], layer="below", line_width=0, annotation_text=name, row=1, col=1)
-
-        if "RSI" in df_tf_ind.columns:
-            fig.add_trace(go.Scatter(x=df_tf_ind["datetime"], y=df_tf_ind["RSI"], line=RSI_LINE, name="RSI"), row=2, col=1)
-            fig.add_hline(y=70, line=RSI_OB, row=2, col=1)
-            fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
-
-        if "MACD_Histogram" in df_tf_ind.columns:
-            fig.add_trace(go.Bar(x=df_tf_ind["datetime"], y=df_tf_ind["MACD_Histogram"], name="MACD Hist", marker_color="#7986cb"), row=3, col=1)
-
-        fig.update_layout(height=720, **CHART_LAYOUT)
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("#### 💡 Backtest Trading Ideas")
-        # Generate ideas logic from original script
-        backtest_ideas = []
-        if bias == "Bullish":
-            backtest_ideas.append({"icon": "🟢", "text": f"BUY on pullback to S1 ({levels['s1']:.5f}) or mid-range ({(h_day+l_day)/2:.5f}). Target R1 ({levels['r1']:.5f})."})
-        elif bias == "Bearish":
-            backtest_ideas.append({"icon": "🔴", "text": f"SELL on bounce to R1 ({levels['r1']:.5f}) or mid-range ({(h_day+l_day)/2:.5f}). Target S1 ({levels['s1']:.5f})."})
-        else:
-            backtest_ideas.append({"icon": "⚪", "text": f"Range day. BUY near lows ({l_day:.5f}) / SELL near highs ({h_day:.5f}). Fade the extremes."})
-
-        last_ind = df_tf_ind.iloc[-1]
-        if "RSI" in last_ind:
-            rv = last_ind["RSI"]
-            if rv > 70: backtest_ideas.append({"icon": "⚠️", "text": f"RSI overbought ({rv:.1f}). Caution on longs."})
-            elif rv < 30: backtest_ideas.append({"icon": "⚠️", "text": f"RSI oversold ({rv:.1f}). Caution on shorts."})
-
-        for idea in backtest_ideas:
-            st.info(f"{idea['icon']} {idea['text']}")
 
 
 def render_weekly_swing_tab(data_by_timeframe: Dict):
@@ -998,7 +869,7 @@ def render_weekly_swing_tab(data_by_timeframe: Dict):
                     fig.add_hline(y=30, line=RSI_OS, row=2, col=1)
 
                 fig.update_layout(height=420, **CHART_LAYOUT)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
     if aligned:
         st.markdown(f"#### ✅ Daily-Confirmed Setups ({len(aligned)})")
@@ -1063,64 +934,14 @@ def render_volume_profile_tab(data_by_timeframe: Dict) -> None:
 
     fig.update_layout(height=600, **CHART_LAYOUT)
     fig.update_xaxes(showticklabels=False, row=1, col=2)
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_supertrend_strategy_tab(data_by_timeframe: Dict) -> None:
-    st.subheader("🛡️ Supertrend + QQE + DEMA Strategy")
-    st.caption("Trend-following confluence strategy using dual Supertrends, DEMA filter, and QQE momentum.")
-
-    avail_pairs = list(config.assets.keys())
-    c1, c2 = st.columns(2)
-    pair = c1.selectbox("Select Pair", avail_pairs, key="st_pair")
-    tf = c2.selectbox("Timeframe", ["Daily", "4 Hour", "Hourly", "15 Minute"], index=1, key="st_tf")
-
-    df = data_by_timeframe.get(tf, {}).get(pair, pd.DataFrame())
-    if df.empty:
-        st.warning(f"No data available for {pair} on {tf} timeframe.")
-        return
-
-    # Strategy Params
-    with st.expander("⚙️ Strategy Parameters"):
-        dema_p = st.slider("DEMA Period", 50, 300, 200, 10)
-        st_p1 = st.slider("Supertrend 1 Period", 5, 20, 10)
-        st_m1 = st.slider("Supertrend 1 Mult", 1.0, 5.0, 3.0, 0.5)
-
-    signals = generate_supertrend_signals(df, dema_period=dema_p, st_period1=st_p1, st_mult1=st_m1)
-
-    last_sig = signals.iloc[-1]
-    sig_label = "🟢 BUY" if last_sig == 1 else ("🔴 SELL" if last_sig == -1 else "⚪ HOLD")
-
-    st.metric("Current Strategy Signal", sig_label)
-
-    # Charting
-    df_st = df.copy()
-    st1 = analyzer.calculate_supertrend(df_st, st_p1, st_m1)
-    dema = analyzer.calculate_dema(df_st["Close"], dema_p)
-
-    fig = go.Figure()
-    fig.add_trace(go.Candlestick(x=df_st.index, open=df_st["Open"], high=df_st["High"], low=df_st["Low"], close=df_st["Close"],
-                                 name="Price", **CANDLE_STYLE))
-    fig.add_trace(go.Scatter(x=df_st.index, y=st1["Line"], name="Supertrend", line=dict(color="#0eed8a", width=1)))
-    fig.add_trace(go.Scatter(x=df_st.index, y=dema, name="DEMA Filter", line=dict(color="#f59e0b", width=2)))
-
-    # Buy/Sell markers
-    buy_mask = signals == 1
-    sell_mask = signals == -1
-    fig.add_trace(go.Scatter(x=df_st.index[buy_mask], y=df_st["Low"][buy_mask]*0.999, mode="markers",
-                             marker=dict(symbol="triangle-up", size=10, color="#0eed8a"), name="Buy"))
-    fig.add_trace(go.Scatter(x=df_st.index[sell_mask], y=df_st["High"][sell_mask]*1.001, mode="markers",
-                             marker=dict(symbol="triangle-down", size=10, color="#ff3b6b"), name="Sell"))
-
-    fig.update_layout(height=600, **CHART_LAYOUT)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_trend_following_tab(data_by_timeframe: Dict) -> None:
     st.subheader("📈 Forex Trend Following")
     st.caption(
         "Scans all pairs for clean trending conditions — ADX strength, EMA alignment, and momentum. "
-        "Use as a pair-selection filter before drilling into the Technical Chart or Signal Pro tabs."
+        "Use as a pair-selection filter before drilling into the Technical Chart or Pivots & Fibonacci tabs."
     )
 
     # ── Controls ─────────────────────────────────────────────────────────────
@@ -1225,7 +1046,7 @@ def render_trend_following_tab(data_by_timeframe: Dict) -> None:
 
     st.dataframe(
         display_df.style.apply(_style_row, axis=1),
-        use_container_width=True,
+        width="stretch",
         height=min(38 * len(rows) + 38, 450),
     )
 
@@ -1305,7 +1126,7 @@ def render_trend_following_tab(data_by_timeframe: Dict) -> None:
         fig.add_hline(y=30, line=RSI_OS, row=3, col=1)
 
     fig.update_layout(height=680, **CHART_LAYOUT)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── Trend read-out ────────────────────────────────────────────────────────
     st.markdown("##### Trend Read-out")
@@ -1385,14 +1206,9 @@ def main():
         "🧭 Multi-Timeframe Matrix",    # Step 4 — timeframe alignment
         "📈 Technical Chart",           # Step 5 — chart analysis per pair
         "🛒 Pivots & Fibonacci",        # Step 6 — session key levels
-        "⚡ Signal Pro",                # Step 7 — signal confirmation
-        "🎯 Trading Ideas",             # Step 8 — auto-refreshed setups
-        "⏱️ 15-Min Entry",              # Step 9 — execution timing
-        "🔥 Trend Following",           # Step 10 — trending pair scanner
-
-        "🔊 Volume Profile",            # Step 11 — volume distribution
-        "🛡️ Supertrend Strategy",      # Step 12 — specialized strategy
-        "🧪 Backtest Lab",              # Step 13 — historical testing
+        "🎯 Trading Ideas",             # Step 7 — auto-refreshed setups
+        "🔥 Trend Following",           # Step 8 — trending pair scanner
+        "🔊 Volume Profile",            # Step 9 — volume distribution
     ])
 
     with tabs[0]:
@@ -1410,19 +1226,11 @@ def main():
     with tabs[6]:
         render_trading_view_tab(data_by_timeframe)
     with tabs[7]:
-        render_signal_pro_tab(data_by_timeframe)
-    with tabs[8]:
         render_trading_ideas_tab()
-    with tabs[9]:
-        render_15m_entry_tab(data_by_timeframe)
-    with tabs[10]:
+    with tabs[8]:
         render_trend_following_tab(data_by_timeframe)
-    with tabs[11]:
+    with tabs[9]:
         render_volume_profile_tab(data_by_timeframe)
-    with tabs[12]:
-        render_supertrend_strategy_tab(data_by_timeframe)
-    with tabs[13]:
-        render_backtest_lab_tab()
 
 # Streamlit runs this file as a page (imported, not __main__), so call
 # unconditionally — matching every other page in pages/.

@@ -97,7 +97,7 @@ st.markdown("""
     .metric-label{font-size:10px;color:#9a9a9a;margin-top:2px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;}
 
     [data-testid="stSidebarNav"]{display:none;}
-    #MainMenu,footer,header{visibility:hidden;}
+    #MainMenu,footer{visibility:hidden;}
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     .block-container{padding-top:1.5rem;max-width:1420px;}
 </style>
@@ -439,7 +439,7 @@ with st.sidebar:
     # Refresh controls
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🔄 Refresh All", use_container_width=True, type="primary"):
+        if st.button("🔄 Refresh All", width="stretch", type="primary"):
             st.cache_data.clear()
             st.rerun()
     with col2:
@@ -623,7 +623,7 @@ fig_rates.update_layout(
     showlegend=False,
     bargap=0.25,
 )
-st.plotly_chart(fig_rates, use_container_width=True, config=dict(displayModeBar=False))
+st.plotly_chart(fig_rates, width="stretch", config=dict(displayModeBar=False))
 
 st.markdown("""
 <div style="display:flex;gap:20px;font-size:12px;color:#9a9a9a;padding:4px 0 16px 0;">
@@ -782,7 +782,7 @@ with chart_col1:
             yaxis=dict(tickfont=dict(color="#e6e6e6", size=12), showgrid=False),
             showlegend=False,
         )
-        st.plotly_chart(fig_gdp, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig_gdp, width="stretch", config=dict(displayModeBar=False))
     st.markdown('</div>', unsafe_allow_html=True)
 
 with chart_col2:
@@ -820,7 +820,7 @@ with chart_col2:
             yaxis=dict(tickfont=dict(color="#e6e6e6", size=12), showgrid=False),
             showlegend=False,
         )
-        st.plotly_chart(fig_cpi, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(fig_cpi, width="stretch", config=dict(displayModeBar=False))
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════

@@ -93,7 +93,7 @@ with st.sidebar:
     fetch_interval = interval_options[sel_interval]
     lookback_days = st.slider("Backtest Period (Days)", 5, 365, 60, 5)
 
-    if st.button("🔄 Refresh Market Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh Market Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -379,7 +379,7 @@ if metrics:
     fig.update_layout(height=760, xaxis_rangeslider_visible=False, **PLOTLY_LAYOUT)
     style_axes(fig, 3)
     fig.update_annotations(font_color=T.GREY, font_size=11)
-    st.plotly_chart(fig, use_container_width=True, config=dict(displayModeBar=False))
+    st.plotly_chart(fig, width="stretch", config=dict(displayModeBar=False))
 
     # ── R-distribution + monthly returns ─────────────────────────
     col_a, col_b = st.columns(2)
@@ -396,7 +396,7 @@ if metrics:
         rfig.update_layout(title="R-Multiple Distribution", height=360, **PLOTLY_LAYOUT)
         rfig.update_xaxes(showgrid=False, linecolor=T.BORDER)
         rfig.update_yaxes(showgrid=True, gridcolor=T.BORDER)
-        st.plotly_chart(rfig, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(rfig, width="stretch", config=dict(displayModeBar=False))
 
     with col_b:
         mdf = df_trades.copy()
@@ -409,7 +409,7 @@ if metrics:
         mfig.update_layout(title="Monthly Returns (% of Capital)", height=360, **PLOTLY_LAYOUT)
         mfig.update_xaxes(showgrid=False, linecolor=T.BORDER)
         mfig.update_yaxes(showgrid=True, gridcolor=T.BORDER, ticksuffix="%")
-        st.plotly_chart(mfig, use_container_width=True, config=dict(displayModeBar=False))
+        st.plotly_chart(mfig, width="stretch", config=dict(displayModeBar=False))
 
     # ── Trade table + download ───────────────────────────────────
     st.markdown("#### 📋 Trade Summary")
@@ -420,7 +420,7 @@ if metrics:
         disp[c] = disp[c].round(2)
     disp = disp[["entry_date", "exit_date", "type", "entry_price", "exit_price",
                  "r_multiple", "pnl", "exit_reason", "bars_held"]]
-    st.dataframe(disp, use_container_width=True, hide_index=True, height=380)
+    st.dataframe(disp, width="stretch", hide_index=True, height=380)
     st.download_button("📥 Download Trade Data (CSV)", disp.to_csv(index=False),
                        file_name="vwap_ema_gold_trades.csv", mime="text/csv")
 else:

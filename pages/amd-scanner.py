@@ -525,7 +525,7 @@ with st.sidebar:
         f"📡 Ticker: `{symbol}` · ⏱️ Daily-trading preset: "
         f"**{INTERVAL} bars · {PERIOD} lookback** (auto-loads)"
     )
-    if st.button("🔄 Refresh data", use_container_width=True):
+    if st.button("🔄 Refresh data", width="stretch"):
         load_yfinance.clear()
         st.rerun()
 
@@ -585,7 +585,7 @@ with st.sidebar:
     )
     st.session_state["amd_alerts_on"] = enable_alerts
 
-    if st.button("✉️ Send test email", use_container_width=True, disabled=not creds_ready):
+    if st.button("✉️ Send test email", width="stretch", disabled=not creds_ready):
         ok, info = send_gmail(
             gmail_sender, gmail_app_pw, gmail_recipient,
             "AMD Scanner — test email",
@@ -694,7 +694,7 @@ if df_raw is not None and not df_raw.empty:
                 )
             week_view = _this_week(labeled)
             st.plotly_chart(make_chart(week_view, symbol, INTERVAL),
-                            use_container_width=True)
+                            width="stretch")
             st.caption(
                 f"Chart shows **this trading week** ({len(week_view)} × 1H bars "
                 f"since {week_view.index[0]:%a %d %b}); phase detection still "
@@ -716,12 +716,12 @@ if df_raw is not None and not df_raw.empty:
                 st.write("No non-neutral phases detected with current settings. "
                          "Try widening the range window or lowering the sweep depth.")
             else:
-                st.dataframe(seg.iloc[::-1], use_container_width=True, hide_index=True)
+                st.dataframe(seg.iloc[::-1], width="stretch", hide_index=True)
             with st.expander("Per-bar labels (raw)"):
                 st.dataframe(
                     labeled[["Open", "High", "Low", "Close", "Volume",
                              "phase", "sweep_dir", "notes"]],
-                    use_container_width=True,
+                    width="stretch",
                 )
                 st.download_button(
                     "Download labeled data (CSV)",

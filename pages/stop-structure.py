@@ -28,7 +28,7 @@ st.markdown("""
     html,body,[class*="css"]{ font-family:'JetBrains Mono','Fira Code',monospace; }
     .stApp{ background:var(--background-color); }
     section[data-testid="stSidebar"]{ background:var(--secondary-background-color)!important; border-right:1px solid var(--border,#2a2a2a); }
-    #MainMenu,footer,header{ visibility:hidden; }
+    #MainMenu,footer{ visibility:hidden; }
     [data-testid="stSidebarCollapsedControl"]{visibility:visible !important;}
     [data-testid="stSidebarNav"]{ display:none; }
     .block-container{ padding-top:1.5rem; max-width:1380px; }
@@ -453,7 +453,7 @@ with st.sidebar:
     show_n   = st.slider("Candles on chart", 40, 200, 80, step=10)
 
     st.divider()
-    if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+    if st.button("🔄 Refresh Data", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
 
@@ -620,7 +620,7 @@ with tab_scan:
                 "R:R TP1 L":     f'{r["rr_tp1_long"]:.2f}'  if r.get("ok") else "—",
                 "R:R TP1 S":     f'{r["rr_tp1_short"]:.2f}' if r.get("ok") else "—",
             })
-        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(table_rows), width="stretch", hide_index=True)
 
 # ══════════════════════════════════════════════
 #  TAB 2 — Pair Detail
@@ -702,7 +702,7 @@ with tab_detail:
         st.markdown('<div class="section-title">📈 Daily Chart — Structure · SL · TP Levels</div>',
                     unsafe_allow_html=True)
         fig = build_chart(df, selected_pair, calc, struct, direction, show_n=show_n)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.markdown("---")
 
@@ -717,7 +717,7 @@ with tab_detail:
                 "TP1 Pips":           (atr_hist.values * float(atr_mult) / pip_size * 2).round(1),
                 "TP2 Pips":           (atr_hist.values * float(atr_mult) / pip_size * 3).round(1),
             })
-            st.dataframe(atr_df, use_container_width=True, hide_index=True)
+            st.dataframe(atr_df, width="stretch", hide_index=True)
 
         st.markdown("---")
 

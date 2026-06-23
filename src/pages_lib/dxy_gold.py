@@ -66,7 +66,7 @@ class DxyGoldPage(BloombergPage):
             help="20 days ≈ one trading month — the standard regime window.",
         )
         st.divider()
-        if st.button("◆ REFRESH DATA", use_container_width=True, type="primary"):
+        if st.button("◆ REFRESH DATA", width="stretch", type="primary"):
             _fetch_closes.clear()
             st.rerun()
 
@@ -123,12 +123,12 @@ class DxyGoldPage(BloombergPage):
         with col_overlay:
             with Panel(f"REBASED OVERLAY · {lookback}", tag="BASE 100").context():
                 st.plotly_chart(self._overlay_chart(closes),
-                                use_container_width=True,
+                                width="stretch",
                                 config=dict(displayModeBar=False))
         with col_roll:
             with Panel(f"ROLLING {window}D CORRELATION", tag="DAILY RETURNS").context():
                 st.plotly_chart(self._rolling_chart(rolling),
-                                use_container_width=True,
+                                width="stretch",
                                 config=dict(displayModeBar=False))
 
         st.caption(
