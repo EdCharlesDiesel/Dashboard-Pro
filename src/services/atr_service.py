@@ -46,14 +46,11 @@ class ATRService:
     @st.cache_data(ttl=300, show_spinner=False)
     def fetch(ticker: str, pip_size: float) -> Optional[dict]:
         """Returns a dict shaped exactly like the legacy fetch_atr output."""
+        from src.db.market_cache import cached_ohlc
         try:
-            df = yf.download(
-                ticker, period="60d", interval="1d",
-                progress=False, auto_adjust=True,
-            )
+            df = cached_ohlc(ticker, period="60d", interval="1d", ttl=300)
             if df.empty or len(df) < 22:
                 return None
-            df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
 
             df["atr14"] = TechnicalIndicators.atr(df["High"], df["Low"], df["Close"], 14)
             df["atr20"] = TechnicalIndicators.atr(df["High"], df["Low"], df["Close"], 20)

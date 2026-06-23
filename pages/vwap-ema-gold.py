@@ -107,12 +107,11 @@ with st.sidebar:
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_gold_data(period_days: int, interval: str) -> pd.DataFrame:
     """Fetch XAU/USD (GC=F) OHLCV, robust to yfinance's MultiIndex columns."""
-    df = yf.download("GC=F", period=f"{period_days}d", interval=interval,
-                     progress=False, auto_adjust=True)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc("GC=F", period=f"{period_days}d", interval=interval, ttl=300)
     if df.empty:
         # Intraday windows are capped (~60d for <1h); fall back to daily.
-        df = yf.download("GC=F", period=f"{period_days}d", interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc("GC=F", period=f"{period_days}d", interval="1d", ttl=300)
     if df.empty:
         return df
 

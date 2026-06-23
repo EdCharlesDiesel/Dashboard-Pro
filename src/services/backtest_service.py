@@ -127,15 +127,19 @@ CRITICAL_KEYS: List[str] = [k for k, _, mode, crit in CHECK_META if mode == "cal
 @st.cache_data(ttl=1800, show_spinner=False)
 def load_data(ticker: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Daily (1y) + weekly (3y) OHLC, MultiIndex-flattened and tz-naive."""
-    daily = yf.download(ticker, period="1y", interval="1d", auto_adjust=True, progress=False)
-    weekly = yf.download(ticker, period="3y", interval="1wk", auto_adjust=True, progress=False)
-    if isinstance(daily.columns, pd.MultiIndex):
-        daily.columns = daily.columns.get_level_values(0)
-    if isinstance(weekly.columns, pd.MultiIndex):
-        weekly.columns = weekly.columns.get_level_values(0)
-    daily.index = pd.to_datetime(daily.index).tz_localize(None)
-    weekly.index = pd.to_datetime(weekly.index).tz_localize(None)
+    from src.db.market_cache import cached_ohlc
+    daily = cached_ohlc(ticker, period="1y", interval="1d", ttl=1800)
+    weekly = cached_ohlc(ticker, period="3y", interval="1wk", ttl=1800)
+    daily.index = _tz_naive(daily.index)
+    weekly.index = _tz_naive(weekly.index)
     return daily.dropna(), weekly.dropna()
+
+
+def _tz_naive(idx) -> pd.DatetimeIndex:
+    """Drop tz info — works whether the source frame is tz-aware (live yfinance)
+    or already tz-naive (reconstructed from Postgres)."""
+    idx = pd.to_datetime(idx)
+    return idx.tz_localize(None) if idx.tz is not None else idx
 
 
 # ══════════════════════════════════════════════════════════════════

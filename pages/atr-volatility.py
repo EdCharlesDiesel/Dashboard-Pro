@@ -112,9 +112,9 @@ def calc_atr(high, low, close, period):
 # ── Data Fetcher ───────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_instrument_data(ticker: str, pip_size: float, period: str = "60d", interval: str = "1d"):
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period=period, interval=interval,
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period=period, interval=interval, ttl=300)
         if df.empty or len(df) < 25:
             return None
 

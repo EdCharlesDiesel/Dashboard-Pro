@@ -86,11 +86,11 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_ohlcv(ticker: str, interval: str, days: int) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
         end   = datetime.now(pytz.utc)
         start = end - timedelta(days=days)
-        df    = yf.download(ticker, start=start, end=end,
-                            interval=interval, progress=False, auto_adjust=True)
+        df    = cached_ohlc(ticker, start=start, end=end, interval=interval, ttl=300)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):

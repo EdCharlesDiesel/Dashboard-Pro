@@ -68,15 +68,11 @@ class _CorrelationFetcher:
     @staticmethod
     @st.cache_data(ttl=600, show_spinner=False)
     def fetch(tickers: Tuple[str, ...], period: str, interval: str):
+        from src.db.market_cache import cached_closes
         try:
-            raw = yf.download(list(tickers), period=period, interval=interval,
-                              progress=False, auto_adjust=True)
-            if raw.empty:
+            close = cached_closes(list(tickers), period=period, interval=interval, ttl=600)
+            if close is None or close.empty:
                 return None
-            if isinstance(raw.columns, pd.MultiIndex):
-                close = raw["Close"]
-            else:
-                close = raw[["Close"]].rename(columns={"Close": tickers[0]})
             return close.pct_change().dropna()
         except Exception:
             return None

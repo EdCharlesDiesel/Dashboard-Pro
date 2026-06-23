@@ -149,7 +149,8 @@ def _cache(ttl):
 def load_spot(ticker: str, period: str = "2y") -> pd.Series:
     if yf is None:
         return pd.Series(dtype=float)
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
     if df is None or df.empty:
         return pd.Series(dtype=float)
     if isinstance(df.columns, pd.MultiIndex):

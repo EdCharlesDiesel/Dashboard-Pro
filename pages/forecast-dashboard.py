@@ -89,7 +89,8 @@ def _dark(fig, height=360, **kw):
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def load_history(ticker: str, period: str, interval: str) -> pd.DataFrame:
-    df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval=interval, auto_adjust=False, ttl=1800)
     if df.empty:
         return df
     if isinstance(df.columns, pd.MultiIndex):

@@ -219,8 +219,9 @@ def current_assessment(labeled: pd.DataFrame, tail: int = 8) -> dict:
 # --------------------------------------------------------------------------- #
 @st.cache_data(ttl=300, show_spinner=False)
 def load_yfinance(symbol: str, period: str, interval: str) -> pd.DataFrame:
-    df = yf.download(symbol, period=period, interval=interval,
-                     auto_adjust=False, progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(symbol, period=period, interval=interval,
+                     auto_adjust=False, ttl=300)
     if df is None or df.empty:
         raise ValueError("No data returned. Check the symbol / period / interval.")
     return df

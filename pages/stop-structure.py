@@ -115,9 +115,9 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_data(ticker: str) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1d", period="1y",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1d", period="1y", ttl=300)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
