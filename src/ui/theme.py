@@ -67,20 +67,30 @@ html, body, [class*="css"] {{
     max-width: 100% !important;
 }}
 
-/* hide streamlit chrome — but NEVER the header itself: in current Streamlit
-   the sidebar expand/collapse arrow lives inside the header, so hiding the
-   whole header makes a collapsed sidebar impossible to reopen. Hide only the
-   menu, footer, toolbar (Deploy cluster) and the auto page-nav. */
+/* hide streamlit chrome — but NEVER the header OR toolbar wholesale. In
+   Streamlit 1.57 the collapsed-sidebar EXPAND arrow (stExpandSidebarButton) is
+   rendered INSIDE stToolbar, as a sibling of the Deploy/menu cluster. A
+   `display:none` on stToolbar removes that whole subtree — the arrow included —
+   so a collapsed sidebar can never be reopened. Hide only the individual chrome
+   items and leave the toolbar + expand arrow intact. */
 #MainMenu, footer {{ visibility: hidden; }}
-[data-testid="stToolbar"] {{ display: none !important; }}
+[data-testid="stMainMenu"],
+[data-testid="stToolbarActions"],
+[data-testid="stAppDeployButton"],
+[data-testid="stStatusWidget"] {{ display: none !important; }}
 [data-testid="stDecoration"] {{ display: none !important; }}
 [data-testid="stSidebarNav"] {{ display: none; }}
-/* Keep the header visible — the sidebar collapse/expand arrow lives inside it.
-   Legacy pages hide it with `header{{visibility:hidden}}`; override that so a
-   collapsed sidebar can always be reopened. */
+/* Keep the header AND toolbar visible — the sidebar expand arrow lives inside
+   the toolbar. Legacy pages hide the header with `header{{visibility:hidden}}`;
+   override that so a collapsed sidebar can always be reopened. */
 header[data-testid="stHeader"] {{
     background: transparent !important;
     visibility: visible !important;
+}}
+[data-testid="stToolbar"] {{
+    background: transparent !important;
+    visibility: visible !important;
+    display: flex !important;
 }}
 
 /* Sidebar APPEARANCE ONLY — never pin it open. The previous build forced
