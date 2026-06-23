@@ -26,22 +26,27 @@ python -m py_compile app.py pages/*.py $(find src -name '*.py')
 ```
 
 Unit tests (pytest) cover the pure logic in `src/` — registry, risk/session/
-correlation services, indicator math, and the setup/trend scorers. They never
-touch yfinance or a Streamlit runtime (fixtures build synthetic OHLC frames):
+correlation services, indicator math, the setup/trend scorers, **and the
+Postgres repository + DB cache layer** (with a mocked psycopg2 connection). They
+never touch yfinance, a live DB, or a Streamlit runtime (fixtures build synthetic
+OHLC frames; `TradeRepository(cfg, connect_factory=...)` injects a fake conn):
 
 ```bash
 # Dev deps (pytest, pytest-cov) live in requirements-dev.txt; config is in pyproject.toml.
 pip install -r requirements-dev.txt
-PYTHONIOENCODING=utf-8 python -m pytest          # ~5s, no network; prints coverage
+PYTHONIOENCODING=utf-8 python -m pytest               # ~5s, no network; prints coverage
+PYTHONIOENCODING=utf-8 python -m pytest --runslow --no-cov tests/test_pages_smoke.py  # page smoke tests (live yfinance, ~2min)
 ```
 
 Tests live in `tests/` (mirrors `src/` module-by-module). `pyproject.toml`'s
 `pythonpath = ["."]` makes `import src...` resolve from the repo root, exactly
 as it does under `streamlit run`. Coverage runs by default and is **scoped to
-the pure-logic core** (`[tool.coverage.run] omit` excludes pages, UI, DB,
+the pure-logic core + DB layer** (`[tool.coverage.run] omit` excludes pages, UI,
 network fetchers, email/observability) with a **`--cov-fail-under=80` floor**;
-logic coverage currently sits ~91%. Pages and yfinance fetchers (`*.fetch()`)
-are deliberately out of scope — smoke-test a page headlessly with AppTest:
+coverage currently sits ~92%. **Page smoke tests** (`tests/test_pages_smoke.py`)
+run each page under AppTest and assert no uncaught exception; they hit live
+yfinance so they're marked `@pytest.mark.slow` and skipped unless `--runslow` is
+passed (kept out of the coverage gate). To smoke-test a single page ad hoc:
 
 ```bash
 PYTHONIOENCODING=utf-8 python - <<'EOF'
@@ -82,7 +87,8 @@ Brand/page header → **page controls (symbol picker first)** → divider → na
 
 - All yfinance fetchers are wrapped in `@st.cache_data(ttl=300)` (600 for correlations). **Never remove the cache decorator** — Streamlit reruns the whole script on every widget interaction, and uncached fetchers hammer Yahoo into rate-limiting.
 - yfinance quirks handled everywhere: MultiIndex column flattening, spot FX (`=X` tickers) reports zero volume (AMD scanner substitutes a true-range activity proxy), 1-hour bars limited to ~730 days.
-- Postgres persistence is in `src/db/trade_repository.py` (`trade_setups` table; schema auto-migrates via `ADD COLUMN IF NOT EXISTS`). Connections use `with closing(self._connect()) as conn, conn, cursor` — closing handles close, the middle `conn` handles commit/rollback. DB credentials come from the sidebar/session state, not config files.
+- Postgres persistence is in `src/db/trade_repository.py` (`trade_setups` table; schema auto-migrates via `ADD COLUMN IF NOT EXISTS`). Connections use `with closing(self._connect()) as conn, conn, cursor` — closing handles close, the middle `conn` handles commit/rollback. DB credentials come from the sidebar/session state, not config files. `TradeRepository` is Streamlit-free; its `connect_factory` arg lets callers inject a pooled or fake connection.
+- **DB caching/pooling lives in `src/db/cache.py`** (keeps the repository Streamlit-free). `pooled_repository(cfg)` borrows from a `@st.cache_resource` connection pool (one per DB target); the `cached_*` read fns wrap reads in `@st.cache_data(ttl=60)`. **Every write must call `clear_read_caches()`** so the journal/stats/open-trades/P&L re-query — you never cache a write, you invalidate after one. Schema init (`init_schema`) stays on a plain (lazy) `TradeRepository` so bad credentials surface as a message instead of crashing on eager pool creation.
 - Secrets live in `.streamlit/secrets.toml` (gitignored): `[api]` FRED key, `[database]`, `[gmail]` (AMD scanner email alerts). `.streamlit/config.toml` is theme-only and is tracked — never put keys in it.
 
 ## Domain conventions (forex)

@@ -1,0 +1,331 @@
+"""Unit tests for src/db/trade_repository.py.
+
+No live Postgres — a fake connection (injected via ``connect_factory``) records
+every SQL string and parameter set, so we can assert exactly what is written and
+prove the save path persists all data.
+"""
+from __future__ import annotations
+
+import re
+
+import pytest
+
+from src.db.trade_repository import DBConfig, TradeRepository
+
+
+# ── fakes ─────────────────────────────────────────────────────────────────────
+class FakeCursor:
+    def __init__(self, fetchall_rows=None, fetchone_row=None):
+        self.executed = []          # [(sql, params), ...]
+        self._fetchall = fetchall_rows if fetchall_rows is not None else []
+        self._fetchone = fetchone_row
+
+    def execute(self, sql, params=None):
+        self.executed.append((sql, params))
+
+    def fetchall(self):
+        return self._fetchall
+
+    def fetchone(self):
+        return self._fetchone
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class FakeConnection:
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.committed = False
+        self.closed = False
+        self.entered = False
+
+    def cursor(self, *args, **kwargs):
+        return self._cursor
+
+    def commit(self):
+        self.committed = True
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+    def __enter__(self):
+        self.entered = True
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _repo(cursor):
+    conn = FakeConnection(cursor)
+    repo = TradeRepository(DBConfig(), connect_factory=lambda: conn)
+    return repo, conn
+
+
+def _sample_setup_row():
+    return {
+        "logged_at": "2026-06-23 12:00:00", "instrument": "EUR/USD",
+        "ticker": "EURUSD=X", "direction": "Long", "session": "London Kill Zone",
+        "score": "17/18", "verdict": "GO", "atr14": 0.0012, "atr20": 0.0010,
+        "sl_pips": 18.0, "tp1_pips": 36.0, "tp2_pips": 54.0, "lot_size": 0.55,
+        "risk_amount": 100.0, "rr_tp1": 2.0, "rr_tp2": 3.0, "account_bal": 10000.0,
+        "risk_pct": 1.0, "checks_passed": 17, "checks_total": 18,
+        "checks_detail": '{"check_1": true}', "notes": "clean setup",
+    }
+
+
+# ── completeness audit ────────────────────────────────────────────────────────
+def _create_columns():
+    """Column names declared in CREATE_SQL (the source-of-truth schema)."""
+    cols = []
+    for line in TradeRepository.CREATE_SQL.splitlines():
+        m = re.match(
+            r"\s*(\w+)\s+(SERIAL|VARCHAR|FLOAT|INT|JSONB|TIMESTAMP|TEXT|BOOLEAN)",
+            line,
+        )
+        if m:
+            cols.append(m.group(1))
+    return cols
+
+
+class TestSaveSetupCompleteness:
+    def test_insert_persists_every_schema_column(self):
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        row = _sample_setup_row()
+        repo.save_setup(row)
+
+        sql, params = cur.executed[0]
+        assert params is row  # the row dict is passed straight through
+
+        # Every CREATE_SQL column except the auto id must be written by save_setup.
+        expected = [c for c in _create_columns() if c != "id"]
+        for col in expected:
+            assert col in sql, f"column {col} missing from INSERT"
+            assert f"%({col})s" in sql, f"placeholder for {col} missing"
+        # ...and the row supplies a value for each (logged_at is set explicitly).
+        for col in expected:
+            assert col in row, f"save_setup row is missing {col}"
+
+    def test_commit_and_close_called(self):
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.save_setup(_sample_setup_row())
+        assert conn.committed is True
+        assert conn.closed is True  # closing() ran
+
+
+# ── writes ────────────────────────────────────────────────────────────────────
+class TestWrites:
+    def test_close_trade_params_order(self):
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        repo.close_trade(7, 1.1000, 1.1050, 50.0, 2.5, "WIN")
+        sql, params = cur.executed[0]
+        assert "UPDATE trade_setups" in sql
+        assert "is_open = FALSE" in sql
+        assert params == (1.1000, 1.1050, 50.0, 2.5, "WIN", 7)
+
+    def test_delete_setup(self):
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.delete_setup(42)
+        sql, params = cur.executed[0]
+        assert "DELETE FROM trade_setups WHERE id" in sql
+        assert params == (42,)
+        assert conn.committed is True
+
+    def test_import_mt4_rows_batches_and_counts(self, monkeypatch):
+        captured = {}
+
+        def fake_execute_batch(cur, sql, payload):
+            captured["sql"] = sql
+            captured["payload"] = payload
+
+        monkeypatch.setattr(
+            "src.db.trade_repository.psycopg2.extras.execute_batch",
+            fake_execute_batch,
+        )
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        rows = [
+            {"logged_at": "t", "instrument": "EUR/USD", "ticker": "EURUSD=X",
+             "direction": "Long", "session": "x", "lot_size": 0.1,
+             "entry_price": 1.1, "close_price": 1.2, "outcome": "WIN",
+             "pips_gained": 100, "r_multiple": 2.0, "sl_pips": 50,
+             "notes": "MT4 #123", "profit": 55.0, "ignored": "dropped"},
+        ]
+        n = repo.import_mt4_rows(rows)
+        assert n == 1
+        # Only the mapped keys are forwarded (extra keys dropped).
+        assert "ignored" not in captured["payload"][0]
+        assert captured["payload"][0]["instrument"] == "EUR/USD"
+        assert conn.committed is True
+
+    def test_import_mt4_rows_empty_is_noop(self):
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        assert repo.import_mt4_rows([]) == 0
+        assert cur.executed == []
+
+
+class TestImportedTickets:
+    def test_parses_ticket_numbers_from_notes(self):
+        # imported_tickets reads plain tuples (no RealDictCursor).
+        cur = FakeCursor(fetchall_rows=[("MT4 #123 closed",), ("MT4 #456",), (None,),
+                                        ("no ticket here",)])
+        repo, _ = _repo(cur)
+        assert repo.imported_tickets() == {123, 456}
+        sql, _ = cur.executed[0]
+        assert "source = 'mt4_import'" in sql
+
+    def test_swallows_errors(self):
+        repo = TradeRepository(DBConfig(), connect_factory=lambda: (_ for _ in ()).throw(OSError()))
+        assert repo.imported_tickets() == set()
+
+
+# ── schema ────────────────────────────────────────────────────────────────────
+class TestSchema:
+    def test_init_schema_creates_table_and_outcome_columns(self):
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        ok, msg = repo.init_schema()
+        assert ok is True
+        assert msg == "Connected"
+        statements = " ".join(sql for sql, _ in cur.executed)
+        assert "CREATE TABLE IF NOT EXISTS trade_setups" in statements
+        # One ALTER per outcome column.
+        assert statements.count("ADD COLUMN IF NOT EXISTS") == len(repo.OUTCOME_COLUMNS)
+
+    def test_init_schema_reports_failure(self):
+        def boom():
+            raise RuntimeError("connection refused")
+
+        repo = TradeRepository(DBConfig(), connect_factory=boom)
+        ok, msg = repo.init_schema()
+        assert ok is False
+        assert "connection refused" in msg
+
+
+# ── reads ─────────────────────────────────────────────────────────────────────
+class TestReads:
+    def test_load_setups_returns_dicts(self):
+        rows = [{"id": 1, "instrument": "EUR/USD"}, {"id": 2, "instrument": "XAU/USD"}]
+        cur = FakeCursor(fetchall_rows=rows)
+        repo, _ = _repo(cur)
+        out = repo.load_setups(limit=10)
+        assert out == rows
+        sql, params = cur.executed[0]
+        assert "FROM trade_setups" in sql
+        assert params == (10,)
+
+    def test_load_open_filters_open_trades(self):
+        cur = FakeCursor(fetchall_rows=[{"id": 1}])
+        repo, _ = _repo(cur)
+        repo.load_open()
+        sql, _ = cur.executed[0]
+        assert "is_open IS TRUE OR is_open IS NULL" in sql
+
+    def test_daily_losses_blocked_when_over_limit(self):
+        cur = FakeCursor(fetchone_row={"cnt": 3})
+        repo, conn = _repo(cur)
+        res = repo.daily_losses(max_losses=2)
+        assert res == {"losses_today": 3, "limit": 2, "blocked": True}
+        assert conn.closed is True  # leak fix: connection is now closed
+
+    def test_daily_losses_not_blocked(self):
+        cur = FakeCursor(fetchone_row={"cnt": 1})
+        repo, _ = _repo(cur)
+        assert repo.daily_losses(max_losses=2)["blocked"] is False
+
+    def test_daily_losses_swallows_errors(self):
+        repo = TradeRepository(DBConfig(), connect_factory=lambda: (_ for _ in ()).throw(OSError()))
+        res = repo.daily_losses()
+        assert res["losses_today"] == 0
+        assert res["blocked"] is False
+
+
+class TestPerformanceStats:
+    def test_none_when_no_rows(self):
+        cur = FakeCursor(fetchall_rows=[])
+        repo, _ = _repo(cur)
+        assert repo.performance_stats() is None
+
+    def test_win_rate_and_expectancy(self):
+        rows = [
+            {"outcome": "WIN", "r_multiple": 2.0, "pips_gained": 40},
+            {"outcome": "WIN", "r_multiple": 3.0, "pips_gained": 60},
+            {"outcome": "LOSS", "r_multiple": -1.0, "pips_gained": -20},
+            {"outcome": "BE", "r_multiple": 0.0, "pips_gained": 0},
+        ]
+        cur = FakeCursor(fetchall_rows=rows)
+        repo, _ = _repo(cur)
+        stats = repo.performance_stats()
+        assert stats["total"] == 4
+        assert stats["wins"] == 2
+        assert stats["losses"] == 1
+        assert stats["be"] == 1
+        assert stats["win_rate"] == pytest.approx(50.0)
+        assert stats["avg_win_r"] == pytest.approx(2.5)
+        assert stats["avg_loss_r"] == pytest.approx(1.0)
+
+
+class TestRealizedPnl:
+    def test_uses_broker_profit_when_present(self):
+        rows = [{"is_open": False, "outcome": "WIN", "profit": 55.0,
+                 "instrument": "EUR/USD"}]
+        cur = FakeCursor(fetchall_rows=rows)
+        repo, _ = _repo(cur)
+        res = repo.realized_pnl()
+        assert res["pnl"] == pytest.approx(55.0)
+        assert res["counted"] == 1
+        assert res["skipped"] == 0
+
+    def test_derives_from_pips_when_no_profit(self):
+        # EUR/USD pip value is 10.0; 30 pips × 0.5 lot × 10 = 150.0
+        rows = [{"is_open": False, "outcome": "WIN", "profit": None,
+                 "pips_gained": 30.0, "lot_size": 0.5, "instrument": "EUR/USD"}]
+        cur = FakeCursor(fetchall_rows=rows)
+        repo, _ = _repo(cur)
+        res = repo.realized_pnl()
+        assert res["pnl"] == pytest.approx(150.0)
+        assert res["counted"] == 1
+
+    def test_skips_incomputable_rows(self):
+        rows = [{"is_open": False, "outcome": "WIN", "profit": None,
+                 "pips_gained": None, "lot_size": None, "instrument": "EUR/USD"}]
+        cur = FakeCursor(fetchall_rows=rows)
+        repo, _ = _repo(cur)
+        res = repo.realized_pnl()
+        assert res["counted"] == 0
+        assert res["skipped"] == 1
+
+    def test_ignores_open_trades(self):
+        rows = [{"is_open": True, "outcome": None, "profit": 99.0,
+                 "instrument": "EUR/USD"}]
+        cur = FakeCursor(fetchall_rows=rows)
+        repo, _ = _repo(cur)
+        res = repo.realized_pnl()
+        assert res["pnl"] == 0.0
+        assert res["counted"] == 0
+
+
+# ── DBConfig ──────────────────────────────────────────────────────────────────
+class TestDBConfig:
+    def test_from_mapping_defaults_and_overrides(self):
+        cfg = DBConfig.from_mapping({"host": "db", "name": "trading", "port": "5433"})
+        assert cfg.host == "db"
+        assert cfg.dbname == "trading"
+        assert cfg.port == 5433  # coerced to int
+
+    def test_as_kwargs_roundtrip(self):
+        cfg = DBConfig(host="h", port=1, dbname="d", user="u", password="p")
+        assert cfg.as_kwargs() == {"host": "h", "port": 1, "dbname": "d",
+                                   "user": "u", "password": "p"}
