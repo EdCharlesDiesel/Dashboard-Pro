@@ -94,7 +94,11 @@
       "Bash(docker stop *)",
       "PowerShell(docker compose ps *)",
       "Bash(echo \"exit:$?\")",
-      "Bash(grep -rnE \"header[^a-zA-Z][^}]*visibility\\\\s*:\\\\s*hidden|header\\\\s*\\\\{[^}]*hidden|,\\\\s*header\\\\s*\\\\{|header,\\\\s*footer\" --include=\"*.py\" pages)"
+      "Bash(grep -rnE \"header[^a-zA-Z][^}]*visibility\\\\s*:\\\\s*hidden|header\\\\s*\\\\{[^}]*hidden|,\\\\s*header\\\\s*\\\\{|header,\\\\s*footer\" --include=\"*.py\" pages)",
+      "Bash(grep -vE \"ChainedAssignment|chained assignment|copy_on_write|intermediate object|never works|Try using|See the doc|ha\\\\['Open'\\\\]|^\\\\s*$|Such chained\")",
+      "Bash(grep -vE \"Chained|chained|copy_on_write|intermediate|never works|Try using|See the|ha\\\\[|^\\\\s*$|Such chained|warn\")",
+      "Bash(grep -vE \"ChainedAssignment|chained assignment|copy_on_write|intermediate object|never works|Try using|See the doc|ha\\\\['Open'\\\\]|^\\\\s*$|Such chained|Docs:\")",
+      "Bash(grep -vE \"Chained|chained|copy_on_write|intermediate|never works|Try using|See the|ha\\\\[|^\\\\s*$|Such chained\")"
     ]
   }
 }
