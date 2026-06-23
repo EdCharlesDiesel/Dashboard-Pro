@@ -7,30 +7,21 @@ from typing import Optional
 import streamlit as st
 
 from src.db import DBConfig, TradeRepository
+from src.db.cache import cached_realized_pnl, clear_read_caches
 from src.instruments import INSTRUMENTS, TREND_COMMODITIES, TREND_TIMEFRAMES
 from src.pages_lib.daily_trading.state import CHECKS_TOTAL, SessionStateBootstrap
 from src.services import ATRService, account_state
-
-
-@st.cache_data(ttl=60, show_spinner=False)
-def _cached_realized_pnl(host, port, dbname, user, password):
-    """Realised P/L from the journal, cached 60s so it isn't re-queried on every
-    sidebar rerun. Keyed on the connection so changing DB invalidates it."""
-    cfg = DBConfig.from_mapping({
-        "host": host, "port": port, "dbname": dbname,
-        "user": user, "password": password,
-    })
-    return TradeRepository(cfg).realized_pnl()
 
 
 class ChecklistSidebar:
     """Sidebar for CHECKLIST mode — instrument, risk, ATR, DB config."""
 
     def _realized_pnl(self):
-        """Realised P/L from the journal DB (cached 60s), or None if it can't be
-        read (not connected, or the schema predates the `profit` column)."""
+        """Realised P/L from the journal DB (cached, see src/db/cache.py), or
+        None if it can't be read (not connected, or the schema predates the
+        `profit` column)."""
         try:
-            return _cached_realized_pnl(
+            return cached_realized_pnl(
                 st.session_state.db_host, st.session_state.db_port,
                 st.session_state.db_name, st.session_state.db_user,
                 st.session_state.db_pass,
@@ -195,9 +186,13 @@ class ChecklistSidebar:
                 "user": st.session_state.db_user,
                 "password": st.session_state.db_pass,
             })
+            # Plain (lazy) connection here so bad credentials surface as a
+            # friendly message instead of crashing on eager pool creation.
             ok, msg = TradeRepository(cfg).init_schema()
             st.session_state.db_ok = ok
             st.session_state.db_msg = msg
+            if ok:
+                clear_read_caches()  # re-read against the (re)connected DB
 
         badge_color = "#00ff66" if st.session_state.db_ok else "#ff3344"
         badge_text = (
