@@ -1,3 +1,6 @@
+import json
+from datetime import datetime
+
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple
@@ -577,6 +580,78 @@ def generate_trading_ideas(data_by_timeframe: Dict) -> Tuple[List[Dict], List[st
 
     ideas.sort(key=lambda x: (x['conviction'] == 'High', x['strength_score']), reverse=True)
     return ideas, skipped
+
+
+def signal_to_setup_row(idea: Dict, session: str) -> Dict:
+    """Map a :func:`generate_trading_ideas` idea onto a ``trade_setups`` row dict
+    — the exact schema :meth:`TradeRepository.save_setup` writes — so Market
+    Overview signals can be persisted alongside checklist trades.
+
+    Pure: no DB, no Streamlit, no network. Ticker/pip size come from the
+    instrument registry (the single source of truth); price-distance targets are
+    converted to pips via ``pip_size``. Sizing fields the page can't know
+    (lot/account/risk) are left ``None``; the full signal context is preserved in
+    ``checks_detail`` JSON so nothing is lost.
+    """
+    from src.instruments.registry import INSTRUMENTS
+
+    pair = idea.get("pair", "")
+    inst = INSTRUMENTS.get(pair)
+    ticker = inst.ticker if inst else None
+    pip_size = (inst.pip_size if inst else 0.0001) or 0.0001
+
+    entry = float(idea.get("entry", 0.0) or 0.0)
+    tp1 = idea.get("take_profit_1")
+    tp2 = idea.get("take_profit_2")
+    score = idea.get("strength_score")
+
+    def _pips(level) -> Optional[float]:
+        if level is None or not entry:
+            return None
+        return round(abs(float(level) - entry) / pip_size, 1)
+
+    detail = {
+        "entry": entry,
+        "take_profit_1": tp1,
+        "take_profit_2": tp2,
+        "stop_loss": idea.get("stop_loss"),
+        "strength_score": score,
+        "confidence": idea.get("confidence"),
+        "conviction": idea.get("conviction"),
+        "thesis": idea.get("thesis"),
+        "stop_loss_method": idea.get("stop_loss_method"),
+    }
+
+    return {
+        "logged_at": datetime.now(),
+        "instrument": pair,
+        "ticker": ticker,
+        "direction": idea.get("bias"),
+        "session": session,
+        "score": f"{score}/10" if score is not None else None,
+        # verdict column is VARCHAR(20) — cap so a long conviction label can't
+        # overflow the insert (the full text lives in `thesis` / `checks_detail`).
+        "verdict": (str(idea["conviction"])[:20]
+                    if idea.get("conviction") is not None else None),
+        "atr14": idea.get("atr"),
+        "atr20": None,
+        "sl_pips": idea.get("stop_loss_pips"),
+        "tp1_pips": _pips(tp1),
+        "tp2_pips": _pips(tp2),
+        "lot_size": None,
+        "risk_amount": None,
+        "rr_tp1": idea.get("risk_reward_1"),
+        "rr_tp2": idea.get("risk_reward_2"),
+        "account_bal": None,
+        "risk_pct": None,
+        "checks_passed": None,
+        "checks_total": None,
+        "checks_detail": json.dumps(detail),
+        "notes": (
+            f"Market Overview signal · {idea.get('conviction')} · "
+            f"score {score}/10 · {str(idea.get('thesis', ''))[:160]}"
+        ),
+    }
 
 
 def generate_weekly_swing_ideas(data_by_timeframe: Dict) -> List[Dict]:

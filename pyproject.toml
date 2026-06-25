@@ -36,6 +36,8 @@ omit = [
     "src/services/mt4_import.py",       # file/HTML parsing
     "src/services/mtf_service.py",      # yfinance fetch
     "src/services/account_state.py",    # Streamlit session state
+    "src/db/connection.py",             # Streamlit session-state + live-DB auto-connect glue
+    "src/data_backbone/*",              # SQLAlchemy store, Redis cache, APScheduler worker, yfinance seeder
 ]
 
 [tool.coverage.report]

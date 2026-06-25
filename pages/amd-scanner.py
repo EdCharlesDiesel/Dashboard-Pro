@@ -19,6 +19,7 @@ from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 from src.core import observability
 from src.instruments import INSTRUMENTS
+from src.services.signal_store import persist_signals
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -676,6 +677,19 @@ if df_raw is not None and not df_raw.empty:
                 st.toast(f"📧 Email sent: {last_phase.upper()} on {instrument}", icon="✉️")
             else:
                 st.error(f"Email alert failed: {info}")
+
+        # --- Persist a directional AMD read to the journal DB ---
+        _bias = str(assess.get("bias", "")).lower()
+        _dir = "Long" if "bull" in _bias else "Short" if "bear" in _bias else None
+        if _dir and last_phase in ("manipulation", "distribution"):
+            persist_signals("amd_scanner", [{
+                "pair": instrument,
+                "bias": _dir,
+                "entry": float(last_bar["Close"]),
+                "conviction": last_phase,
+                "thesis": (f"AMD Scanner — {last_phase} phase, {assess.get('bias')} read · "
+                           f"{str(assess.get('detail', ''))[:120]}"),
+            }])
 
         with tab_chart:
             c1, c2, c3 = st.columns(3)

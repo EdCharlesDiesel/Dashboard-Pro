@@ -12,6 +12,7 @@ from pathlib import Path
 from streamlit_autorefresh import st_autorefresh
 from src.core import secrets
 from src.services import alert_service
+from src.services.signal_store import persist_signals
 from src.core.config import default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS, RSI_LINE, RSI_OB, RSI_OS
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.data_provider import fetch_data, get_macro_data, fetch_fred_series
@@ -208,6 +209,7 @@ def check_and_notify(ideas: List[Dict]) -> List[Dict]:
 
     if new_alerts:
         _NOTIFY.save(st.session_state.notified_keys)
+        persist_signals("market_overview", new_alerts)  # ← saved once per unique signal
         send_email_alert(new_alerts)   # ← email fired once per unique signal
         play_alert_sound(new_alerts[0]['bias'])
 

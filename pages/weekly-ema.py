@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 from src.instruments.registry import INSTRUMENTS
 from src.core.data_provider import fetch_data
 from src.indicators.technical import TechnicalIndicators
@@ -216,6 +217,18 @@ loaded  = {p: d for p, d in results.items() if d}
 bull    = {p: d for p, d in loaded.items() if d["overall"] == "Bullish"}
 bear    = {p: d for p, d in loaded.items() if d["overall"] == "Bearish"}
 neutral = {p: d for p, d in loaded.items() if d["overall"] == "Neutral"}
+
+# Persist Bullish/Bearish weekly-EMA reads as directional signals
+# (deduped per pair/direction/price, tagged source='weekly_ema').
+persist_signals("weekly_ema", [{
+    "pair": p,
+    "bias": "Long" if d["overall"] == "Bullish" else "Short",
+    "entry": d["price"],
+    "conviction": ("Full stack" if (d["stack_bull"] or d["stack_bear"])
+                   else d["overall"]),
+    "thesis": (f"Weekly EMA — {d['overall']} slope majority"
+               + (" + full EMA stack" if (d["stack_bull"] or d["stack_bear"]) else "")),
+} for p, d in {**bull, **bear}.items()])
 
 # Alignment with user's direction
 aligned     = bull if trade_direction == "LONG" else bear

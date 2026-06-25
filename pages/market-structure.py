@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -390,6 +391,17 @@ with tab_scan:
         scan_results.append({"pair": pair_name, "ok": True, "struct": struct, "df": df_s})
 
     prog.empty()
+
+    # Persist BULLISH/BEARISH market-structure reads as directional signals
+    # (deduped per pair/direction/price, tagged source='market_structure').
+    persist_signals("market_structure", [{
+        "pair": r["pair"],
+        "bias": "Long" if r["struct"]["trend"] == "BULLISH" else "Short",
+        "entry": float(r["df"]["Close"].iloc[-1]),
+        "conviction": r["struct"]["trend"],
+        "thesis": f"Market Structure — {r['struct']['label']}",
+    } for r in scan_results
+        if r.get("ok") and r["struct"]["trend"] in ("BULLISH", "BEARISH")])
 
     # ── Summary counts ──────────────────────────────────────────
     cnt_bull    = sum(1 for r in scan_results if r.get("ok") and r["struct"]["trend"] == "BULLISH")

@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -298,6 +299,17 @@ intact   = [p for p, c in checks.items() if c["status"].startswith("✅")]
 weak     = [p for p, c in checks.items() if c["status"].startswith("⚠️")]
 broken   = [p for p, c in checks.items() if c["status"].startswith("❌")]
 failed   = [p for p in INSTRUMENTS if p not in loaded]
+
+# Persist confirmed (intact) daily trends as directional signals — deduped per
+# pair/direction/price, tagged source='daily_trend'.
+persist_signals("daily_trend", [{
+    "pair": p,
+    "bias": "Long" if loaded[p]["trend_bull"] else "Short",
+    "entry": loaded[p]["close"],
+    "conviction": "Trend Intact",
+    "thesis": (f"Daily Trend — EMA20 {'>' if loaded[p]['trend_bull'] else '<'} EMA50, "
+               f"gap {loaded[p]['gap_pips']}p"),
+} for p in intact])
 
 # ══════════════════════════════════════════════════════════════════
 # HERO

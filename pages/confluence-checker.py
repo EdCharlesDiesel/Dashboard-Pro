@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -498,6 +499,16 @@ with tab_scan:
             scan_results.append({"pair": pair_name, "ok": False})
 
     prog.empty()
+
+    # Persist confluence-met events (≥2/3 elements). Confluence is non-directional
+    # (price sitting at a key zone), so bias is recorded Neutral. source='confluence_checker'.
+    persist_signals("confluence_checker", [{
+        "pair": r["pair"],
+        "bias": "Neutral",
+        "entry": r["price"],
+        "conviction": r["verdict"],
+        "thesis": f"Confluence Checker — {r['verdict']} ({r.get('passed', 0)}/3 elements)",
+    } for r in scan_results if r.get("ok") and r.get("grade") in ("pass3", "pass2")])
 
     # ── Summary counts ──────────────────────────
     cnt_3 = sum(1 for r in scan_results if r.get("grade") == "pass3")

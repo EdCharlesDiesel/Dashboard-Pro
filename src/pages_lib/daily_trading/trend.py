@@ -9,6 +9,7 @@ import streamlit as st
 
 from src.indicators import TrendSignalEvaluator
 from src.instruments import INSTRUMENTS, TREND_COMMODITIES, TREND_TIMEFRAMES
+from src.services.signal_store import persist_signals
 from src.ui.charts import ChartBuilder
 from src.ui.components import (
     Chip, CommandBar, DataRow, MetricCell, Panel, ProgressBar,
@@ -41,6 +42,7 @@ class TrendController:
         ).show()
 
         results = self._scan_markets(selected, interval, period, resample, min_conds)
+        self._persist_signals(results)
         self._render_ticker_strip(results)
         self._render_signal_grid(results)
         self._render_detail_panel(results, selected)
@@ -226,6 +228,28 @@ class TrendController:
 - MACD **below** signal line
 - ADX **> 25** (trend strength)
 """)
+
+    @staticmethod
+    def _persist_signals(results: Dict[str, dict]) -> None:
+        """Persist directional BUY/SELL signals to trade_setups (deduped,
+        source='trend_signals'). NEUTRAL/error rows are skipped."""
+        signals = []
+        for pair, r in results.items():
+            if r.get("error"):
+                continue
+            direction = r.get("direction")
+            if direction not in ("STRONG_BUY", "BUY", "STRONG_SELL", "SELL"):
+                continue
+            signals.append({
+                "pair": pair,
+                "bias": "Long" if direction in ("STRONG_BUY", "BUY") else "Short",
+                "entry": r.get("close"),
+                "conviction": r.get("signal"),
+                "thesis": (f"Trend Signals — {r.get('signal')} · "
+                           f"{r.get('score')}/{r.get('max_score')} conditions · "
+                           f"RSI {r.get('rsi', 0):.0f} ADX {r.get('adx', 0):.0f}"),
+            })
+        persist_signals("trend_signals", signals)
 
     @staticmethod
     def _record_alert_history(results: Dict[str, dict]) -> None:

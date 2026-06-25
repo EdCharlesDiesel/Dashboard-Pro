@@ -14,6 +14,7 @@ import streamlit as st
 import yfinance as yf
 
 from src.pages_lib.base import BloombergPage, PageContext
+from src.services.signal_store import persist_signals
 from src.ui.components import CommandBar, MetricCell, Panel, render_metric_row
 from src.ui.theme import BloombergTheme as T
 
@@ -109,6 +110,19 @@ class DxyGoldPage(BloombergPage):
 
         # Who's stronger + what to do about it
         sig = self._strength_signal(closes)
+
+        # Persist a directional XAU/USD read when there's a clear side
+        # (source='dxy_gold'); "NO CLEAR SIDE — WAIT" is not saved.
+        if sig["action"].startswith(("BUY", "SELL")):
+            persist_signals("dxy_gold", [{
+                "pair": "XAU/USD",
+                "bias": "Long" if sig["action"].startswith("BUY") else "Short",
+                "entry": xau_last,
+                "conviction": sig["action"],
+                "thesis": (f"DXY vs Gold — {sig['action']} (corr {current_corr:+.2f}) · "
+                           f"{sig['why'][:120]}"),
+            }])
+
         col_sig, col_regime = st.columns([3, 2], gap="medium")
         with col_sig:
             Panel("WHO'S STRONGER — TRADE SIGNAL", tag=sig["stronger"],
