@@ -36,6 +36,7 @@ from src.pages_lib.setup_ranker import (
     _SetupRankerDataFeed, fmt_price, money_breakdown, trade_levels,
 )
 from src.services import alert_service, account_state
+from src.services.signal_store import persist_signals
 from src.ui.components import CommandBar, MetricCell, render_metric_row
 from src.ui.theme import BloombergTheme as T
 
@@ -322,6 +323,8 @@ class FibEntryPage(BloombergPage):
         signals = self._scan_signals(pairs, min_score)
         results = self._analyse(signals)
 
+        self._persist_signals(results)
+
         if st.session_state.get("fib_email_on"):
             self._maybe_email(results)
 
@@ -384,6 +387,38 @@ class FibEntryPage(BloombergPage):
                 continue
             results.append({"sig": sig, "fib": fib, "df": df})
         return results
+
+    # ── DB persistence ────────────────────────────────────────────────────────
+    @staticmethod
+    def _persist_signals(results) -> None:
+        """Persist live fib entries (ENTRY_FIRED / IN_ZONE) to trade_setups via the
+        shared signal store. Deduped per pair/direction/price, source='fib_entry'."""
+        signals = []
+        for r in results:
+            fib = r["fib"]
+            if fib["status"] not in ("ENTRY_FIRED", "IN_ZONE"):
+                continue
+            sig = r["sig"]
+            inst = INSTRUMENTS.get(sig["pair"])
+            pip_size = inst.pip_size if inst else None
+            sl_pips = (round(abs(fib["entry"] - fib["sl"]) / pip_size, 1)
+                       if pip_size else None)
+            signals.append({
+                "pair": sig["pair"],
+                "bias": sig["direction"],
+                "entry": fib["entry"],
+                "stop_loss": fib["sl"],
+                "stop_loss_pips": sl_pips,
+                "take_profit_1": fib["tp1"],
+                "take_profit_2": fib["tp2"],
+                "risk_reward_1": fib["rr1"],
+                "risk_reward_2": fib["rr2"],
+                "strength_score": sig["score"],
+                "conviction": fib["status"],
+                "thesis": (f"15M Fib Entry — golden-zone {sig['direction']}, "
+                           f"setup {sig['score']}/10 ({sig['grade']})"),
+            })
+        persist_signals("fib_entry", signals)
 
     # ── email ────────────────────────────────────────────────────────────────
     def _maybe_email(self, results) -> None:

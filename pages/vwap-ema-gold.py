@@ -32,6 +32,7 @@ import warnings
 
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 
 warnings.filterwarnings("ignore")
 
@@ -314,6 +315,19 @@ df = calculate_indicators(df)
 signals = identify_entry_signals(df)
 trades, equity_curve = backtest_strategy(df, signals)
 metrics, df_trades = calculate_metrics(trades, equity_curve)
+
+# Persist only a signal firing on the latest bar (a current, actionable read) —
+# the rest of `signals` are historical entries for the backtest. source='vwap_ema_gold'.
+if signals and signals[-1][1] >= len(df) - 2:
+    _side, _i, _px, _atr = signals[-1]
+    persist_signals("vwap_ema_gold", [{
+        "pair": "XAU/USD",
+        "bias": "Long" if _side == "LONG" else "Short",
+        "entry": float(_px),
+        "atr": float(_atr) if _atr else None,
+        "conviction": "VWAP+EMA pullback",
+        "thesis": f"VWAP-EMA Gold — {_side} rejection at VWAP/EMA pullback",
+    }])
 
 c1, c2, c3 = st.columns(3)
 c1.success(f"✅ {len(df)} bars loaded")

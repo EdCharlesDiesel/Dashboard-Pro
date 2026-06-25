@@ -121,6 +121,32 @@ class TestSaveSetupCompleteness:
         assert conn.committed is True
         assert conn.closed is True  # closing() ran
 
+    def test_default_call_passes_row_unchanged_without_source(self):
+        # The no-source path must stay byte-identical: row passed straight
+        # through, and the source column never appears in the INSERT.
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        row = _sample_setup_row()
+        repo.save_setup(row)
+        sql, params = cur.executed[0]
+        assert params is row
+        assert "source" not in sql
+        assert "%(source)s" not in sql
+
+    def test_source_arg_adds_column_without_mutating_row(self):
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        row = _sample_setup_row()
+        repo.save_setup(row, source="market_overview")
+        sql, params = cur.executed[0]
+        assert "source" in sql and "%(source)s" in sql
+        assert params["source"] == "market_overview"
+        assert params is not row            # caller's dict untouched
+        assert "source" not in row          # not mutated
+        # every original schema column is still present
+        for col in (c for c in _create_columns() if c != "id"):
+            assert f"%({col})s" in sql
+
 
 # ── writes ────────────────────────────────────────────────────────────────────
 class TestWrites:

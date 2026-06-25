@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -637,6 +638,18 @@ with tab_scan:
     ranging  = [p for p, v in loaded_s.items() if v["aln"]["status"] == "RANGING"]
     unclear  = [p for p, v in loaded_s.items() if v["aln"]["status"] == "UNCLEAR"]
     no_data  = [p for p in INSTRUMENTS if p not in loaded_s]
+
+    # Persist ALIGNED pairs (weekly bias confirmed by daily trend) as directional
+    # signals — deduped per pair/direction/price, tagged source='weekly_swing'.
+    _aligned_signals = [{
+        "pair": p,
+        "bias": "Long" if loaded_s[p]["sw"]["bias"] == "BULLISH" else "Short",
+        "entry": loaded_s[p]["dt"]["price"],
+        "conviction": "Aligned",
+        "thesis": (f"Weekly Swing — weekly {loaded_s[p]['sw']['bias']} aligned with "
+                   f"daily {loaded_s[p]['dt']['trend']}"),
+    } for p in aligned]
+    persist_signals("weekly_swing", _aligned_signals)
 
     s1, s2, s3, s4, s5 = st.columns(5)
     for col_, val_, lbl_, c_ in [

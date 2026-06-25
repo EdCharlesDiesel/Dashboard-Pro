@@ -169,6 +169,24 @@ elif cur_avg < -0.3 and cur_wr <= 40:
 else:
     band_color, band_txt = "#ffcc00", f"🟡 NEUTRAL SEASON — {cur_month_name} avg {cur_avg:+.2f}%, green {cur_wr:.0f}% of years"
 
+# Persist a BULLISH/BEARISH seasonal bias for the current month (source='seasonality').
+# Neutral / no-data months are skipped. Dedupe (pair+bias+price) keeps it to once
+# per price level — a seasonal bias is a slow-moving tailwind, not a repeat trigger.
+if band_color in ("#00ff66", "#ff3344"):
+    try:
+        from src.services.signal_store import persist_signals
+        _entry = float(hist["Close"].iloc[-1]) if "Close" in getattr(hist, "columns", []) else None
+        persist_signals("seasonality", [{
+            "pair": selected_pair,
+            "bias": "Long" if band_color == "#00ff66" else "Short",
+            "entry": _entry,
+            "conviction": f"{cur_month_name} seasonal",
+            "thesis": (f"Seasonality — {cur_month_name} avg {cur_avg:+.2f}%, "
+                       f"green {cur_wr:.0f}% of {years_covered} years"),
+        }])
+    except Exception:
+        pass
+
 st.markdown(f"""
 <div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
             border:1px solid #2a2a2a; padding:24px 28px; margin-bottom:20px;">

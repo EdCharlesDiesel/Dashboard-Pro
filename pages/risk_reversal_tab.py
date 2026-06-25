@@ -260,6 +260,21 @@ def render():
     if proxy_note:
         st.caption(proxy_note)
 
+    # Persist the contrarian read — but NOT on synthetic demo data (data honesty).
+    # Overbought → contrarian SELL (Short); Oversold → contrarian BUY (Long).
+    if source != "Demo (synthetic)" and ("Overbought" in state or "Oversold" in state):
+        try:
+            from src.services.signal_store import persist_signals
+            persist_signals("risk_reversal", [{
+                "pair": pair,
+                "bias": "Short" if "Overbought" in state else "Long",
+                "entry": float(spot.iloc[-1]),
+                "conviction": "RR contrarian",
+                "thesis": f"Risk Reversal — {state} (RR {last:+.2f})",
+            }])
+        except Exception:
+            pass
+
     st.plotly_chart(_chart(spot, rr, bands, signals, pair), width="stretch")
     st.caption("Dashed RR (right axis) vs spot (left). Red/green dashed lines are "
                "the ±1 SD extreme bands; triangles mark contrarian buy/sell signals "

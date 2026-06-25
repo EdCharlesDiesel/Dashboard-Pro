@@ -6,8 +6,7 @@ from typing import Optional
 
 import streamlit as st
 
-from src.db import DBConfig, TradeRepository
-from src.db.cache import cached_realized_pnl, clear_read_caches
+from src.db.cache import cached_realized_pnl
 from src.instruments import INSTRUMENTS, TREND_COMMODITIES, TREND_TIMEFRAMES
 from src.pages_lib.daily_trading.state import CHECKS_TOTAL, SessionStateBootstrap
 from src.services import ATRService, account_state
@@ -178,28 +177,11 @@ class ChecklistSidebar:
             "Password", value=st.session_state.db_pass, type="password",
         )
 
-        if st.button("Connect & Init DB", width="stretch"):
-            cfg = DBConfig.from_mapping({
-                "host": st.session_state.db_host,
-                "port": st.session_state.db_port,
-                "dbname": st.session_state.db_name,
-                "user": st.session_state.db_user,
-                "password": st.session_state.db_pass,
-            })
-            # Plain (lazy) connection here so bad credentials surface as a
-            # friendly message instead of crashing on eager pool creation.
-            ok, msg = TradeRepository(cfg).init_schema()
-            if ok:
-                # Same connection target: stand up the market-data cache tables
-                # (OHLC bars / fetch metadata / blob store) so the read-through
-                # cache has somewhere to persist. Failure here is non-fatal —
-                # the cache degrades to live yfinance.
-                from src.db.market_data_repository import MarketDataRepository
-                MarketDataRepository(cfg).init_schema()
-            st.session_state.db_ok = ok
-            st.session_state.db_msg = msg
-            if ok:
-                clear_read_caches()  # re-read against the (re)connected DB
+        # Auto-connected from secrets on startup; this is a manual reconnect for
+        # when the credentials above are edited. Re-runs the same connect path.
+        if st.button("Reconnect & Init DB", width="stretch"):
+            from src.db.connection import auto_connect
+            auto_connect(force=True)
 
         badge_color = "#00ff66" if st.session_state.db_ok else "#ff3344"
         badge_text = (

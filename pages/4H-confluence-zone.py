@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -388,6 +389,16 @@ with tab_scan:
             scan_results.append({"pair": pair_name, "ok": False})
 
     prog.empty()
+
+    # Persist pairs with a strong 4H confluence zone (non-directional → Neutral bias).
+    persist_signals("confluence_zone_4h", [{
+        "pair": r["pair"],
+        "bias": "Neutral",
+        "entry": r["current_price"],
+        "conviction": "Strong zone",
+        "thesis": (f"4H Confluence Zone — {r.get('strong', 0)} strong zone(s)"
+                   f"{' + key level' if r.get('has_key_level') else ''}"),
+    } for r in scan_results if r.get("ok") and r.get("strong", 0) > 0])
 
     # ── Summary counts ──────────────────────────
     cnt_strong   = sum(1 for r in scan_results if r.get("ok") and r.get("strong", 0) > 0)

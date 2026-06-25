@@ -120,7 +120,10 @@ class TradeRepository:
             return False, str(exc)
 
     # ── writes ──────────────────────────────────────────────────────────────
-    def save_setup(self, row: Dict[str, Any]) -> None:
+    def save_setup(self, row: Dict[str, Any], source: Optional[str] = None) -> None:
+        """Insert one setup row. ``source`` tags where the row came from (e.g.
+        ``"market_overview"`` for auto-saved scanner signals); when omitted the
+        ``source`` column keeps its ``'checklist'`` default."""
         sql = """
             INSERT INTO trade_setups (
                 logged_at, instrument, ticker, direction, session,
@@ -134,8 +137,19 @@ class TradeRepository:
                 %(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s
             )
         """
+        params: Dict[str, Any] = row
+        if source is not None:
+            # Add the source column without mutating the caller's row dict.
+            sql = sql.replace(
+                "checks_passed, checks_total, checks_detail, notes\n",
+                "checks_passed, checks_total, checks_detail, notes, source\n",
+            ).replace(
+                "%(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s\n",
+                "%(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s, %(source)s\n",
+            )
+            params = {**row, "source": source}
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
-            cur.execute(sql, row)
+            cur.execute(sql, params)
             conn.commit()
 
     def imported_tickets(self) -> set:
