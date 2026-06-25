@@ -14,6 +14,11 @@ pytz==2026.2
 psycopg2-binary==2.9.12
 pandas_datareader==0.10.0
 statsmodels==0.14.6
+# data_backbone pipeline (src/data_backbone): SQLAlchemy store, Redis cache,
+# APScheduler worker. psycopg2-binary is already pinned above.
+SQLAlchemy>=2.0
+redis>=5.0
+APScheduler>=3.10
 lxml==6.1.1  # HTML parsing backend for pandas.read_html (MT4 statement import)
 # anthropic: optional — powers AI report summaries (src/core/ai_reports.py),
 # which self-disable when it's absent. Not installed in the working venv, so
