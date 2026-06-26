@@ -31,6 +31,13 @@ _PAGES = [
     "pages/correlations.py",
     "pages/market-overview.py",
     "pages/daily_cockpit_tab.py",
+    # Market Overview's broken-out analysis pages (share market_overview_lib).
+    "pages/trading-ideas.py",
+    "pages/mtf-matrix.py",
+    "pages/technical-chart.py",
+    "pages/pivots-fibonacci.py",
+    "pages/volume-profile.py",
+    "pages/fred-macro-grid.py",
 ]
 
 

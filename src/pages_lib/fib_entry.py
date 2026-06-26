@@ -39,6 +39,7 @@ from src.services import alert_service, account_state
 from src.services.signal_store import persist_signals
 from src.ui.components import CommandBar, MetricCell, render_metric_row
 from src.ui.theme import BloombergTheme as T
+from src.core.config import CANDLE_STYLE
 
 # Fibonacci retracement fractions measured from the impulse END back toward its
 # START. 0.0 = leg end (prior swing extreme), 1.0 = leg origin. The 0.382–0.618
@@ -671,9 +672,7 @@ class FibEntryPage(BloombergPage):
         fig.add_trace(go.Candlestick(
             x=plot.index, open=plot["Open"], high=plot["High"],
             low=plot["Low"], close=plot["Close"],
-            increasing_line_color=T.GREEN, decreasing_line_color=T.RED,
-            increasing_fillcolor="rgba(0,255,65,0.22)",
-            decreasing_fillcolor="rgba(248,81,73,0.22)",
+            **CANDLE_STYLE,
             name="15M", showlegend=False), row=1, col=1)
 
         # Golden zone shading.

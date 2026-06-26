@@ -30,6 +30,12 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("CHCK", "00. Daily Checklist",      "📋", "app.py"),
         NavEntry("DCKP", "01. Daily Cockpit",        "🛫", "pages/daily_cockpit_tab.py"),
         NavEntry("OVRV", "02. Market Overview",      "📊", "pages/market-overview.py"),
+        NavEntry("IDEA", "02a. Trading Ideas",       "🎯", "pages/trading-ideas.py"),
+        NavEntry("MTRX", "02b. MTF Matrix",          "🧭", "pages/mtf-matrix.py"),
+        NavEntry("PORD", "02c. Technical Chart",     "📈", "pages/technical-chart.py"),
+        NavEntry("PIVF", "02d. Pivots & Fibonacci",  "🛒", "pages/pivots-fibonacci.py"),
+        NavEntry("VPRO", "02e. Volume Profile",      "🔊", "pages/volume-profile.py"),
+        NavEntry("FRED", "02f. FRED Macro Grid",     "🏛", "pages/fred-macro-grid.py"),
     ]),
     ("1 · SCAN — SHORTLIST", [
         NavEntry("RANK", "03. Setup Ranker",         "🎰", "pages/setup-ranker.py"),

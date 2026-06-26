@@ -1,5 +1,6 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
 from src.instruments.registry import INSTRUMENTS
 from src.core.data_provider import fetch_data
@@ -472,8 +473,7 @@ with right:
         fig.add_trace(go.Candlestick(
             x=hist.index, open=hist["Open"], high=hist["High"],
             low=hist["Low"], close=hist["Close"], name="Price",
-            increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
-            increasing_fillcolor="#0d2f1a",  decreasing_fillcolor="#2f0d0d",
+            **CANDLE_STYLE,
         ), row=1, col=1)
 
         # EMA21 on price

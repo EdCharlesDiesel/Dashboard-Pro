@@ -21,7 +21,7 @@ scans the identical universe with the identical tickers.
 ```
 Dashboard-Pro/
 ├── app.py                  # Entry point — the 18-point Daily Checklist (master page)
-├── pages/                  # 38 workflow pages (auto-register as Streamlit multipage)
+├── pages/                  # 44 workflow pages (auto-register as Streamlit multipage)
 ├── src/
 │   ├── core/               # analyzer, signals, config — the shared analysis engine
 │   ├── indicators/         # EMA/RSI/MACD/ADX/ATR + the 6-condition trend scorer
@@ -94,7 +94,13 @@ them top to bottom; most days you touch a handful and take one clean trade.
 |---|------|---------------|
 | 00 | [📋 Daily Checklist](app.py) | **The cockpit.** The 18-point pre-trade gate; saves the trade and the journal. Everything else feeds this. |
 | 01 | [🛫 Daily Cockpit](pages/daily_cockpit_tab.py) | Pre-market routine on one screen — risk regime → rate bias → events → fresh setups, with the parts that agree flagged. |
-| 02 | [📊 Market Overview](pages/market-overview.py) | Morning scan — what moved overnight across FX, metals, indices. |
+| 02 | [📊 Market Overview](pages/market-overview.py) | Morning snapshot — headline KPIs + price table across FX, metals, indices. Its analysis tabs are now the 02a–02f pages below. |
+| 02a | [🎯 Trading Ideas](pages/trading-ideas.py) | Live, auto-refreshing multi-timeframe setups; fires the email/sound/DB alerts. |
+| 02b | [🧭 MTF Matrix](pages/mtf-matrix.py) | Weekly/Daily/4H/Hourly sentiment alignment grid per pair. |
+| 02c | [📈 Technical Chart](pages/technical-chart.py) | Perfect-Order SMA stack (10>20>50>100>200) + ADX, with the entry plan. |
+| 02d | [🛒 Pivots & Fibonacci](pages/pivots-fibonacci.py) | Pivot points and Fibonacci levels on the anchor timeframe. |
+| 02e | [🔊 Volume Profile](pages/volume-profile.py) | Volume-by-price: Point of Control and value-area high/low. |
+| 02f | [🏛 FRED Macro Grid](pages/fred-macro-grid.py) | 8-series FRED macro dashboard + a quick macro-regime read. |
 
 ### 1 · Scan — build the shortlist
 | # | Page | What it's for |

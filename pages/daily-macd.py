@@ -1,5 +1,6 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
 from src.services.signal_store import persist_signals
 import pandas as pd
@@ -315,8 +316,7 @@ def build_chart(m: dict, pair: str,
         x=df.index,
         open=df["Open"], high=df["High"],
         low=df["Low"],   close=df["Close"],
-        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
-        increasing_fillcolor="rgba(63,185,80,0.20)", decreasing_fillcolor="rgba(248,81,73,0.20)",
+        **CANDLE_STYLE,
         name="Daily", showlegend=False,
     ), row=1, col=1)
 

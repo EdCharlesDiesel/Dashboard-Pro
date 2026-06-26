@@ -31,6 +31,7 @@ from datetime import datetime
 import warnings
 
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
 from src.services.signal_store import persist_signals
 
@@ -363,7 +364,7 @@ if metrics:
     )
     fig.add_trace(go.Candlestick(
         x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
-        name="Price", increasing_line_color=T.GREEN, decreasing_line_color=T.RED,
+        name="Price", **CANDLE_STYLE,
     ), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["EMA_pull"], name=f"EMA {ema_pull}",
                              line=dict(color=T.YELLOW, width=1)), row=1, col=1)
