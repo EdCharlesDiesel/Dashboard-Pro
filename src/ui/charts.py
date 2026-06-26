@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from src.ui.theme import BloombergTheme as T
+from src.core.config import CANDLE_STYLE
 
 
 class ChartBuilder:
@@ -29,8 +30,7 @@ class ChartBuilder:
         fig.add_trace(go.Candlestick(
             x=df.index, open=df["Open"], high=df["High"],
             low=df["Low"], close=df["Close"], name="Price",
-            increasing_line_color=T.GREEN, decreasing_line_color=T.RED,
-            increasing_fillcolor=T.GREEN, decreasing_fillcolor=T.RED,
+            **CANDLE_STYLE,
         ), row=1, col=1)
         fig.add_trace(go.Scatter(
             x=df.index, y=df["EMA50"], name="50 EMA",

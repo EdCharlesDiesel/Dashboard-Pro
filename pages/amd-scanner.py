@@ -18,6 +18,7 @@ import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 from src.core import observability
+from src.core.config import CANDLE_STYLE
 from src.instruments import INSTRUMENTS
 from src.services.signal_store import persist_signals
 import yfinance as yf
@@ -387,8 +388,7 @@ def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.F
         go.Candlestick(
             x=labeled.index, open=labeled["Open"], high=labeled["High"],
             low=labeled["Low"], close=labeled["Close"], name="price",
-            increasing_line_color=CANDLE_UP, decreasing_line_color=CANDLE_DOWN,
-            increasing_fillcolor=CANDLE_UP, decreasing_fillcolor=CANDLE_DOWN,
+            **CANDLE_STYLE,
         ),
         row=1, col=2,
     )

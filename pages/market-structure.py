@@ -1,5 +1,6 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
 from src.services.signal_store import persist_signals
 import pandas as pd
@@ -217,9 +218,7 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
         x=plot.index,
         open=plot["Open"], high=plot["High"],
         low=plot["Low"],   close=plot["Close"],
-        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
-        increasing_fillcolor="rgba(63,185,80,0.15)",
-        decreasing_fillcolor="rgba(248,81,73,0.15)",
+        **CANDLE_STYLE,
         name="Price", showlegend=False,
     ), row=1, col=1)
 
