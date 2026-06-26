@@ -84,13 +84,14 @@ class BloombergPage:
 
     @staticmethod
     def _sidebar_header(ctx: PageContext) -> None:
+        # The brand logo is injected once at the top of the sidebar by
+        # BloombergTheme (uniform on every page), so here we only stamp the
+        # active function code beneath it.
         st.markdown(
             f"""
-<div style="padding:6px 0 10px 0;border-bottom:1px solid #2a2a2a;margin-bottom:8px;">
-  <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;
-              color:#00ff41;letter-spacing:0.18em;">DASHBOARD&nbsp;PRO</div>
+<div style="padding:0 0 8px 0;margin-bottom:6px;">
   <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#9a9a9a;
-              letter-spacing:0.12em;margin-top:2px;">TERMINAL · {ctx.code}</div>
+              letter-spacing:0.12em;">TERMINAL · {ctx.code}</div>
 </div>
 """,
             unsafe_allow_html=True,

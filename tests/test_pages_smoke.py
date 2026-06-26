@@ -30,6 +30,7 @@ _PAGES = [
     "pages/setup-ranker.py",
     "pages/correlations.py",
     "pages/market-overview.py",
+    "pages/daily_cockpit_tab.py",
 ]
 
 

@@ -255,6 +255,31 @@ def cached_realized_pnl(
     return val  # pragma: no cover - needs live DB
 
 
+# ── app_state key/value (cache-aside read + write-through) ────────────────────
+# Used for durable app-level state such as the live account balance. Reads are
+# cached like the trade reads; writes go straight to Postgres and prime the cache
+# with the new value so the next read is immediate.
+def cached_get_state(
+    host: str, port: int, dbname: str, user: str, password: str, state_key: str
+) -> Optional[Any]:
+    key = _key("app_state", host, port, dbname, user, state_key)
+    hit = _cache_get(key)
+    if hit is not _MISS:
+        return hit
+    val = pooled_repository(_cfg(host, port, dbname, user, password)).get_state(state_key)  # pragma: no cover - needs live DB
+    _cache_set(key, val)  # pragma: no cover - needs live DB
+    return val  # pragma: no cover - needs live DB
+
+
+def set_state(
+    host: str, port: int, dbname: str, user: str, password: str,
+    state_key: str, value: Any
+) -> None:
+    """Persist ``value`` to Postgres and prime the Redis cache with it."""
+    pooled_repository(_cfg(host, port, dbname, user, password)).set_state(state_key, value)  # pragma: no cover - needs live DB
+    _cache_set(_key("app_state", host, port, dbname, user, state_key), value)  # pragma: no cover - needs live DB
+
+
 # Every cached read function — kept in one place for documentation/tests.
 _READ_CACHES = (
     cached_load_setups,

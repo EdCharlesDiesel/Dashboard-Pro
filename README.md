@@ -21,7 +21,7 @@ scans the identical universe with the identical tickers.
 ```
 Dashboard-Pro/
 ├── app.py                  # Entry point — the 18-point Daily Checklist (master page)
-├── pages/                  # 37 workflow pages (auto-register as Streamlit multipage)
+├── pages/                  # 38 workflow pages (auto-register as Streamlit multipage)
 ├── src/
 │   ├── core/               # analyzer, signals, config — the shared analysis engine
 │   ├── indicators/         # EMA/RSI/MACD/ADX/ATR + the 6-condition trend scorer
@@ -93,79 +93,80 @@ them top to bottom; most days you touch a handful and take one clean trade.
 | # | Page | What it's for |
 |---|------|---------------|
 | 00 | [📋 Daily Checklist](app.py) | **The cockpit.** The 18-point pre-trade gate; saves the trade and the journal. Everything else feeds this. |
-| 01 | [📊 Market Overview](pages/market-overview.py) | Morning scan — what moved overnight across FX, metals, indices. |
+| 01 | [🛫 Daily Cockpit](pages/daily_cockpit_tab.py) | Pre-market routine on one screen — risk regime → rate bias → events → fresh setups, with the parts that agree flagged. |
+| 02 | [📊 Market Overview](pages/market-overview.py) | Morning scan — what moved overnight across FX, metals, indices. |
 
 ### 1 · Scan — build the shortlist
 | # | Page | What it's for |
 |---|------|---------------|
-| 02 | [🎰 Setup Ranker](pages/setup-ranker.py) | The 10-point multi-timeframe scorer. Run **Both** directions; pairs scoring 7+/10 are today's candidates. |
-| 03 | [📊 AMD Scanner](pages/amd-scanner.py) | Accumulation / Manipulation / Distribution scanner (1H × 1 month). |
-| 04 | [📡 Trend Signals](pages/trend-signals.py) | The 6-condition trend-following scan (50/200 EMA, RSI, MACD, ADX). |
-| 05 | [🚀 20-Day Breakout](pages/twenty_day_breakout_tab.py) | Donchian-style 20-day breakout candidates. |
-| 06 | [🕵️ Smart Money](pages/smart_money_tab.py) | Order-block / liquidity (smart-money concepts) view. |
-| 07 | [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |
-| 08 | [📈 Forecast Lab](pages/forecast-dashboard.py) | Time-series forecasting sandbox. |
-| 09 | [🟡 VWAP-EMA Gold](pages/vwap-ema-gold.py) | A dedicated VWAP+EMA strategy view for Gold. |
+| 03 | [🎰 Setup Ranker](pages/setup-ranker.py) | The 10-point multi-timeframe scorer. Run **Both** directions; pairs scoring 7+/10 are today's candidates. |
+| 04 | [📊 AMD Scanner](pages/amd-scanner.py) | Accumulation / Manipulation / Distribution scanner (1H × 1 month). |
+| 05 | [📡 Trend Signals](pages/trend-signals.py) | The 6-condition trend-following scan (50/200 EMA, RSI, MACD, ADX). |
+| 06 | [🚀 20-Day Breakout](pages/twenty_day_breakout_tab.py) | Donchian-style 20-day breakout candidates. |
+| 07 | [🕵️ Smart Money](pages/smart_money_tab.py) | Order-block / liquidity (smart-money concepts) view. |
+| 08 | [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |
+| 09 | [📈 Forecast Lab](pages/forecast-dashboard.py) | Time-series forecasting sandbox. |
+| 10 | [🟡 VWAP-EMA Gold](pages/vwap-ema-gold.py) | A dedicated VWAP+EMA strategy view for Gold. |
 
 ### 2 · Filter the day — macro & risk backdrop
 | # | Page | What it's for |
 |---|------|---------------|
-| 10 | [🌐 Macro Bias](pages/macro-bias.py) | Rate differentials, inflation, GDP per currency — the directional filter. |
-| 11 | [🌍 Forex Fundamentals](pages/forex_fundamentals_tab.py) | Priced-in analyzer + risk-sentiment regime (see [methodology](#appendix--forex-fundamentals-methodology)). |
-| 12 | [💵 DXY vs Gold](pages/dxy-gold.py) | Dollar vs Gold inverse — the cross-asset confirmation. |
-| 13 | [🌡️ Market Regime](pages/regime.py) | Trending vs ranging vs volatile regime classifier. |
-| 14 | [🎭 Risk Reversals](pages/risk_reversal_tab.py) | Options-skew read on directional risk. |
-| 15 | [📰 News Filter](pages/news-filter.py) | Red-folder events in the next hours — wait or skip. |
-| 16 | [📅 Event Impact](pages/event_impact_tab.py) | Historical reaction sizing around scheduled events. |
-| 17 | [📅 Seasonality](pages/seasonality.py) | Day-of-week / month seasonality tendencies. |
-| 18 | [🔗 Correlations](pages/correlations.py) | Stacked-exposure check before adding correlated risk. |
-| 19 | [📊 ATR Volatility](pages/atr-volatility.py) | Is spread/ATR ≤5%? Is volatility tradeable today? |
+| 11 | [🌐 Macro Bias](pages/macro-bias.py) | Rate differentials, inflation, GDP per currency — the directional filter. |
+| 12 | [🌍 Forex Fundamentals](pages/forex_fundamentals_tab.py) | Priced-in analyzer + risk-sentiment regime (see [methodology](#appendix--forex-fundamentals-methodology)). |
+| 13 | [💵 DXY vs Gold](pages/dxy-gold.py) | Dollar vs Gold inverse — the cross-asset confirmation. |
+| 14 | [🌡️ Market Regime](pages/regime.py) | Trending vs ranging vs volatile regime classifier. |
+| 15 | [🎭 Risk Reversals](pages/risk_reversal_tab.py) | Options-skew read on directional risk. |
+| 16 | [📰 News Filter](pages/news-filter.py) | Red-folder events in the next hours — wait or skip. |
+| 17 | [📅 Event Impact](pages/event_impact_tab.py) | Historical reaction sizing around scheduled events. |
+| 18 | [📅 Seasonality](pages/seasonality.py) | Day-of-week / month seasonality tendencies. |
+| 19 | [🔗 Correlations](pages/correlations.py) | Stacked-exposure check before adding correlated risk. |
+| 20 | [📊 ATR Volatility](pages/atr-volatility.py) | Is spread/ATR ≤5%? Is volatility tradeable today? |
 
 ### 3 · Weekly bias
 | # | Page | What it's for |
 |---|------|---------------|
-| 20 | [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
-| 21 | [📡 Weekly RSI](pages/weekly-rsi.py) | Weekly RSI — room to run, or overextended? |
-| 22 | [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
+| 21 | [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
+| 22 | [📡 Weekly RSI](pages/weekly-rsi.py) | Weekly RSI — room to run, or overextended? |
+| 23 | [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
 
 ### 4 · Daily confirm
 | # | Page | What it's for |
 |---|------|---------------|
-| 23 | [📈 Daily Trend](pages/daily-trend.py) | Daily EMA20>50 confirms the weekly is intact. |
-| 24 | [📊 Daily MACD](pages/daily-macd.py) | Daily MACD momentum — building or fading. |
-| 25 | [🏗️ Market Structure](pages/market-structure.py) | HH/HL or LH/LL — is structure intact? |
+| 24 | [📈 Daily Trend](pages/daily-trend.py) | Daily EMA20>50 confirms the weekly is intact. |
+| 25 | [📊 Daily MACD](pages/daily-macd.py) | Daily MACD momentum — building or fading. |
+| 26 | [🏗️ Market Structure](pages/market-structure.py) | HH/HL or LH/LL — is structure intact? |
 
 ### 5 · 4H zone
 | # | Page | What it's for |
 |---|------|---------------|
-| 26 | [🎯 4H Confluence Zone](pages/4H-confluence-zone.py) | Fib + Pivot + EMA20 overlap = the execution zone. |
-| 27 | [🔀 2/3 Confluence Check](pages/confluence-checker.py) | Quick gate: do at least 2 of 3 confluences line up? |
+| 27 | [🎯 4H Confluence Zone](pages/4H-confluence-zone.py) | Fib + Pivot + EMA20 overlap = the execution zone. |
+| 28 | [🔀 2/3 Confluence Check](pages/confluence-checker.py) | Quick gate: do at least 2 of 3 confluences line up? |
 
 ### 6 · 15M trigger
 | # | Page | What it's for |
 |---|------|---------------|
-| 28 | [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Optional email alerts. |
-| 29 | [🎯 Double Zeros](pages/double_zeros.py) | Round-number (00/50) magnet levels for precise entries. |
+| 29 | [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Optional email alerts. |
+| 30 | [🎯 Double Zeros](pages/double_zeros.py) | Round-number (00/50) magnet levels for precise entries. |
 
 ### 7 · Risk & execute
 | # | Page | What it's for |
 |---|------|---------------|
-| 30 | [🛡️ Stop Structure](pages/stop-structure.py) | Is the stop behind a real structure level (≥1× ATR)? |
-| 31 | [⚖️ R:R Calculator](pages/rr-calculator.py) | Is R:R ≥ 2:1 to TP1? (the engine filters at 1.5:1). |
-| 32 | [💵 Account Risk](pages/account-risk.py) | Position size = (Account × Risk%) ÷ (SL pips × pip value). |
+| 31 | [🛡️ Stop Structure](pages/stop-structure.py) | Is the stop behind a real structure level (≥1× ATR)? |
+| 32 | [⚖️ R:R Calculator](pages/rr-calculator.py) | Is R:R ≥ 2:1 to TP1? (the engine filters at 1.5:1). |
+| 33 | [💵 Account Risk](pages/account-risk.py) | Position size = (Account × Risk%) ÷ (SL pips × pip value). |
 
 ### 8 · Review
 | # | Page | What it's for |
 |---|------|---------------|
-| 33 | [📓 Trade Journal](pages/trade-journal.py) | Equity curve, win rate vs 66% target, MT4 statement import. |
-| 34 | [🧪 Backtest Lab](pages/backtest-workflow.py) | Historical strategy testing. |
-| 35 | [🧪 Trading Lab](pages/trading_lab_tab.py) | Strategy experiment sandbox. |
+| 34 | [📓 Trade Journal](pages/trade-journal.py) | Equity curve, win rate vs 66% target, MT4 statement import. |
+| 35 | [🧪 Backtest Lab](pages/backtest-workflow.py) | Historical strategy testing. |
+| 36 | [🧪 Trading Lab](pages/trading_lab_tab.py) | Strategy experiment sandbox. |
 
 ### 9 · System
 | # | Page | What it's for |
 |---|------|---------------|
-| 36 | [📑 Reports](pages/reports.py) | Exportable performance/analytics reports. |
-| 37 | [🧾 System Logs](pages/system-logs.py) | Observability — runtime logs & diagnostics. |
+| 37 | [📑 Reports](pages/reports.py) | Exportable performance/analytics reports. |
+| 38 | [🧾 System Logs](pages/system-logs.py) | Observability — runtime logs & diagnostics. |
 
 ---
 
@@ -174,7 +175,7 @@ them top to bottom; most days you touch a handful and take one clean trade.
 The core principle is **confluence** — never trade a single signal. Each step
 narrows the universe until only high-probability setups remain.
 
-### Step 1 — Macro backdrop · [10 Macro Bias](pages/macro-bias.py) · [11 Forex Fundamentals](pages/forex_fundamentals_tab.py)
+### Step 1 — Macro backdrop · [11 Macro Bias](pages/macro-bias.py) · [12 Forex Fundamentals](pages/forex_fundamentals_tab.py)
 Before touching a chart, understand *why* a pair should move.
 
 | Factor | What to look for |
@@ -187,30 +188,30 @@ Before touching a chart, understand *why* a pair should move.
 **Output:** *"Fundamental bias for [pair] is [Long/Short/Neutral] because [reason]."*
 Only look for setups that align with it.
 
-### Step 2 — Weekly trend · [20 Weekly EMA](pages/weekly-ema.py) · [21 Weekly RSI](pages/weekly-rsi.py) · [22 Weekly Swing](pages/weekly-swing.py)
+### Step 2 — Weekly trend · [21 Weekly EMA](pages/weekly-ema.py) · [22 Weekly RSI](pages/weekly-rsi.py) · [23 Weekly Swing](pages/weekly-swing.py)
 - **EMA20 vs EMA50** — EMA20 above EMA50 with price above both = weekly uptrend.
 - **Price vs weekly pivot** — sustained above PP = buyers in control.
 - **RSI** — above 50 confirms bullish momentum; above 70, be cautious adding longs.
 
 > **Rule:** If the weekly trend is up, only look for longs on lower timeframes. Never fight the weekly.
 
-### Step 3 — Daily confirmation · [23 Daily Trend](pages/daily-trend.py) · [24 Daily MACD](pages/daily-macd.py) · [25 Market Structure](pages/market-structure.py)
+### Step 3 — Daily confirmation · [24 Daily Trend](pages/daily-trend.py) · [25 Daily MACD](pages/daily-macd.py) · [26 Market Structure](pages/market-structure.py)
 - **EMA alignment** — daily EMA20>50 should match the weekly bias. A bearish daily cross under a bullish weekly = a *pullback* (a buying opportunity), not a reversal.
 - **RSI 40–60 on a pullback** gives room to run; >70 = extended, wait for a reset.
 - **MACD histogram** turning from negative toward zero signals exhausting sell-side momentum.
 - **ATR** sets your minimum stop distance — anything tighter than 1× ATR is noise.
 
-### Step 4 — 4H zone · [26 4H Confluence Zone](pages/4H-confluence-zone.py) · [27 Confluence Check](pages/confluence-checker.py)
+### Step 4 — 4H zone · [27 4H Confluence Zone](pages/4H-confluence-zone.py) · [28 Confluence Check](pages/confluence-checker.py)
 The **confluence zone** = Fibonacci level (38.2 / 50 / 61.8%) + Pivot S/R + EMA20,
 all overlapping at one price. When two or three align there, that is where you execute.
 
-### Step 5 — Entry trigger · [28 15M Fib Entry](pages/15m-fib-entry.py) · [29 Double Zeros](pages/double_zeros.py)
+### Step 5 — Entry trigger · [29 15M Fib Entry](pages/15m-fib-entry.py) · [30 Double Zeros](pages/double_zeros.py)
 Wait for at least **two of three** within 1–2 candles: Stochastic cross below 25
 (longs), 15M RSI reset off 40, lower Bollinger-band touch curling back in.
 **Do not enter** if price is still slicing through the zone, the daily shows
 ⚠️ Conflicting, or the spread is abnormally wide ahead of news.
 
-### Step 6 — Risk definition · [30 Stop Structure](pages/stop-structure.py) · [31 R:R Calculator](pages/rr-calculator.py) · [32 Account Risk](pages/account-risk.py)
+### Step 6 — Risk definition · [31 Stop Structure](pages/stop-structure.py) · [32 R:R Calculator](pages/rr-calculator.py) · [33 Account Risk](pages/account-risk.py)
 - **Stop** below the structure that justifies the trade; SL = 1.5 × ATR14.
 - **Targets** TP1 = 2R, TP2 = 3R.
 - **Size** = (Account × Risk%) ÷ (SL pips × pip value). Risk 1–2% per trade.
@@ -257,34 +258,34 @@ You wake at the London Kill Zone open — the highest-probability window of the 
 | London Close | 15:00–17:00 | 17:00–19:00 | 🟡 Secondary |
 | Tokyo | 00:00–03:00 | 02:00–05:00 | 🔴 Avoid |
 
-**☕ 08:30–09:00 — Pre-market prep.** [02 Setup Ranker](pages/setup-ranker.py)
-(Both modes; 7+/10 = candidates) → [10 Macro Bias](pages/macro-bias.py) →
-[11 Forex Fundamentals](pages/forex_fundamentals_tab.py) (regime first!) →
-[15 News Filter](pages/news-filter.py) → [18 Correlations](pages/correlations.py)
-→ [20 Weekly EMA](pages/weekly-ema.py) / [21 Weekly RSI](pages/weekly-rsi.py) →
-[23 Daily Trend](pages/daily-trend.py) / [24 Daily MACD](pages/daily-macd.py).
+**☕ 08:30–09:00 — Pre-market prep.** [03 Setup Ranker](pages/setup-ranker.py)
+(Both modes; 7+/10 = candidates) → [11 Macro Bias](pages/macro-bias.py) →
+[12 Forex Fundamentals](pages/forex_fundamentals_tab.py) (regime first!) →
+[16 News Filter](pages/news-filter.py) → [19 Correlations](pages/correlations.py)
+→ [21 Weekly EMA](pages/weekly-ema.py) / [22 Weekly RSI](pages/weekly-rsi.py) →
+[24 Daily Trend](pages/daily-trend.py) / [25 Daily MACD](pages/daily-macd.py).
 **Output:** 1–2 pairs confirmed by score + macro, with direction set.
 
 **🔎 09:00–09:15 — Confirm the zone.**
-[26 4H Confluence Zone](pages/4H-confluence-zone.py) →
-[19 ATR Volatility](pages/atr-volatility.py) (spread/ATR ≤5%?) →
-[27 Confluence Check](pages/confluence-checker.py).
+[27 4H Confluence Zone](pages/4H-confluence-zone.py) →
+[20 ATR Volatility](pages/atr-volatility.py) (spread/ATR ≤5%?) →
+[28 Confluence Check](pages/confluence-checker.py).
 
 **⚡ 09:15–11:00 — Watch for the entry (London KZ).** Open
 [00 Daily Checklist](app.py) on your pair; tick checks from your pre-market work;
 watch the MTF alignment strip and the correlation-exposure warning. Wait for
-[28 15M Fib Entry](pages/15m-fib-entry.py) to fire. **Take it only at 16/18+ with
+[29 15M Fib Entry](pages/15m-fib-entry.py) to fire. **Take it only at 16/18+ with
 checks 11–16 ticked and the chip showing 🟢 GO.**
 
-**🛡️ Before you click.** [30 Stop Structure](pages/stop-structure.py) →
-[31 R:R Calculator](pages/rr-calculator.py) → daily-loss check (2 losses → stop).
+**🛡️ Before you click.** [31 Stop Structure](pages/stop-structure.py) →
+[32 R:R Calculator](pages/rr-calculator.py) → daily-loss check (2 losses → stop).
 Then **save** the trade in [00 Daily Checklist → Save Trade Setup](app.py).
 
 **🌇 14:00–16:00 — NY KZ (second chance).** If London gave no GO, re-run the zone
 pages for the NY open — price often re-tests the London level.
 
-**📓 19:00 — End-of-day review.** [33 Trade Journal](pages/trade-journal.py)
-(equity up? win rate toward 66%?) → [25 Market Structure](pages/market-structure.py)
+**📓 19:00 — End-of-day review.** [34 Trade Journal](pages/trade-journal.py)
+(equity up? win rate toward 66%?) → [26 Market Structure](pages/market-structure.py)
 → close open trades in [00 Daily Checklist → Close Trade](app.py).
 
 ---
@@ -304,7 +305,7 @@ that is the path to a 66% win rate.
 ## Appendix — Forex Fundamentals methodology
 
 Documents the two trickier engines on
-[11 · Forex Fundamentals](pages/forex_fundamentals_tab.py): the **Priced-In
+[12 · Forex Fundamentals](pages/forex_fundamentals_tab.py): the **Priced-In
 Analyzer** and the **Risk Sentiment** gauge.
 
 ### Part 1 · Priced-In Analyzer
