@@ -240,6 +240,52 @@ class TestSchema:
         assert "connection refused" in msg
 
 
+# ── app_state key/value store ─────────────────────────────────────────────────
+class TestAppState:
+    def test_init_schema_creates_app_state_table(self):
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        repo.init_schema()
+        statements = " ".join(sql for sql, _ in cur.executed)
+        assert "CREATE TABLE IF NOT EXISTS app_state" in statements
+
+    def test_get_state_returns_decoded_value(self):
+        # psycopg2 hands back the JSONB already decoded to a Python object;
+        # get_state reads column 0 of the row.
+        cur = FakeCursor(fetchone_row=({"balance": 12345.0, "source": "mt4"},))
+        repo, _ = _repo(cur)
+        val = repo.get_state("account_balance")
+        assert val == {"balance": 12345.0, "source": "mt4"}
+        sql, params = cur.executed[0]
+        assert "FROM app_state WHERE key" in sql
+        assert params == ("account_balance",)
+
+    def test_get_state_absent_returns_none(self):
+        cur = FakeCursor(fetchone_row=None)
+        repo, _ = _repo(cur)
+        assert repo.get_state("missing") is None
+
+    def test_set_state_upserts_json(self, monkeypatch):
+        captured = {}
+
+        class FakeJson:
+            def __init__(self, value):
+                captured["value"] = value
+
+        monkeypatch.setattr(
+            "src.db.trade_repository.psycopg2.extras.Json", FakeJson
+        )
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.set_state("account_balance", {"balance": 5000.0})
+        sql, params = cur.executed[0]
+        assert "INSERT INTO app_state" in sql
+        assert "ON CONFLICT (key) DO UPDATE" in sql
+        assert params[0] == "account_balance"
+        assert captured["value"] == {"balance": 5000.0}
+        assert conn.committed is True
+
+
 # ── reads ─────────────────────────────────────────────────────────────────────
 class TestReads:
     def test_load_setups_returns_dicts(self):

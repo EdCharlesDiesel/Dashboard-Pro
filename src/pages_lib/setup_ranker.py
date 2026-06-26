@@ -151,10 +151,12 @@ class SetupRankerPage(BloombergPage):
     """Bloomberg-styled multi-pair scoring scanner."""
 
     def configure(self) -> PageContext:
-        st.session_state.setdefault("sr_direction", "LONG")
+        # Scan both directions by default so every pair is evaluated long AND short.
+        st.session_state.setdefault("sr_direction", "Both")
         st.session_state.setdefault("sr_min_score", 5)
         st.session_state.setdefault("sr_rr_ratio", 2.0)
-        st.session_state.setdefault("sr_pairs", INSTRUMENTS.keys())
+        # Load the full instrument universe by default.
+        st.session_state.setdefault("sr_pairs", list(INSTRUMENTS.keys()))
         # Shared with the checklist so account settings carry across pages.
         # Default to the live balance from the Trade Journal (MT4 statement) when
         # one has been recorded, otherwise the historical $10k default.

@@ -53,6 +53,17 @@ class TradeRepository:
         "profit      FLOAT",
     )
 
+    # Small key/value store for app-level state that must survive restarts and
+    # be shared across devices — e.g. the live account balance the Trade Journal
+    # imports and the Setup Ranker sizes from. JSONB value keeps it flexible.
+    APP_STATE_SQL = """
+        CREATE TABLE IF NOT EXISTS app_state (
+            key        VARCHAR(64) PRIMARY KEY,
+            value      JSONB,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """
+
     CREATE_SQL = """
         CREATE TABLE IF NOT EXISTS trade_setups (
             id            SERIAL PRIMARY KEY,
@@ -114,10 +125,32 @@ class TradeRepository:
                     cur.execute(
                         f"ALTER TABLE trade_setups ADD COLUMN IF NOT EXISTS {col_def}"
                     )
+                cur.execute(self.APP_STATE_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
             return False, str(exc)
+
+    # ── app_state key/value store ───────────────────────────────────────────
+    def get_state(self, key: str) -> Optional[Any]:
+        """Return the JSON value stored under ``key`` (psycopg2 decodes JSONB to a
+        Python object), or ``None`` if the key is absent."""
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM app_state WHERE key = %s", (key,))
+            row = cur.fetchone()
+        return row[0] if row else None
+
+    def set_state(self, key: str, value: Any) -> None:
+        """Upsert a JSON ``value`` under ``key`` (last write wins)."""
+        sql = """
+            INSERT INTO app_state (key, value, updated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (key) DO UPDATE
+                SET value = EXCLUDED.value, updated_at = NOW()
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, (key, psycopg2.extras.Json(value)))
+            conn.commit()
 
     # ── writes ──────────────────────────────────────────────────────────────
     def save_setup(self, row: Dict[str, Any], source: Optional[str] = None) -> None:

@@ -178,6 +178,50 @@ class TestCacheAside:
         assert calls["n"] == 2  # no cache, so the loader runs each time
 
 
+class TestAppStateCache:
+    def test_cached_get_state_miss_then_hit(self, monkeypatch):
+        """First call misses → loader runs and stores; second hits Redis."""
+        fake = FakeRedis()
+        monkeypatch.setattr(cache, "_redis_client", lambda: fake)
+        calls = {"n": 0}
+
+        class Repo:
+            def get_state(self, key):
+                calls["n"] += 1
+                return {"balance": 100.0}
+
+        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
+        a = cache.cached_get_state("h", 5432, "trading", "u", "p", "account_balance")
+        b = cache.cached_get_state("h", 5432, "trading", "u", "p", "account_balance")
+        assert a == b == {"balance": 100.0}
+        assert calls["n"] == 1  # second call served from cache
+
+    def test_set_state_writes_through_and_primes_cache(self, monkeypatch):
+        fake = FakeRedis()
+        monkeypatch.setattr(cache, "_redis_client", lambda: fake)
+        written = {}
+
+        class Repo:
+            def set_state(self, key, value):
+                written["key"] = key
+                written["value"] = value
+
+        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
+        cache.set_state("h", 5432, "trading", "u", "p",
+                        "account_balance", {"balance": 777.0})
+        assert written == {"key": "account_balance", "value": {"balance": 777.0}}
+
+        # The write primed the cache, so the next read never queries the repo.
+        class BoomRepo:
+            def get_state(self, key):
+                raise AssertionError("should be served from primed cache")
+
+        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: BoomRepo())
+        assert cache.cached_get_state(
+            "h", 5432, "trading", "u", "p", "account_balance"
+        ) == {"balance": 777.0}
+
+
 class TestRedisSettings:
     def test_env_overrides_default(self, monkeypatch):
         monkeypatch.setenv("REDIS_HOST", "redis.internal")
