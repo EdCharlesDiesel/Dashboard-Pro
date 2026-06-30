@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches: ["Production"]
+  pull_request:
+    branches: ["Production"]
+  workflow_dispatch:
+
+# Cancel superseded runs for the same ref to save CI minutes.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Project targets Python 3.14 (avoids 3.12+-only syntax intentionally);
+        # 3.13 is tested too as a compatibility hedge.
+        python-version: ["3.13", "3.14"]
+
+    env:
+      # Pages print ◇/emoji glyphs; force UTF-8 so stdout never crashes on CI.
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Syntax-check (py_compile)
+        run: |
+          python -m py_compile app.py
+          python -m py_compile pages/*.py
+          find src -name '*.py' -print0 | xargs -0 python -m py_compile
