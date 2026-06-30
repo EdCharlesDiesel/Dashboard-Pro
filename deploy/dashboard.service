@@ -1,0 +1,19 @@
+[Unit]
+Description=Trading Dashboard (Streamlit)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/dashboard
+# Pages print ◇/emoji glyphs; force UTF-8 so stdout never crashes.
+Environment=PYTHONIOENCODING=utf-8
+ExecStart=/opt/dashboard/.venv/bin/streamlit run app.py \
+  --server.port 8501 \
+  --server.address 127.0.0.1 \
+  --server.headless true
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
