@@ -81,8 +81,8 @@ TYPICAL_SPREADS: Dict[str, float] = {
     "USD/JPY": 1.2, "USD/CHF": 2.0, "USD/CAD": 2.0, "EUR/GBP": 1.5,
     "EUR/JPY": 2.0, "GBP/JPY": 3.0, "AUD/JPY": 2.5, "EUR/AUD": 3.0,
     "GBP/AUD": 3.5, "EUR/CAD": 3.0, "GBP/CAD": 3.5, "USD/ZAR": 80.0,
-    "EUR/ZAR": 90.0, "GBP/ZAR": 90.0, "XAU/USD": 0.5, "XAG/USD": 0.03,
-    "XPT/USD": 1.0,
+    "EUR/ZAR": 90.0, "GBP/ZAR": 90.0, "XAU/USD": 3.0, "XAG/USD": 5.0,
+    "XPT/USD": 8.0,
 }
 
 

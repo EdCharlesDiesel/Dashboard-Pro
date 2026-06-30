@@ -6,14 +6,13 @@ it back.
 
 Two layers, both written on every update so the value is durable and shared:
 
-1. **Postgres (source of truth) + Redis cache** — via the ``app_state`` key/value
-   store (``src/db/cache.py``). This survives a restart, is visible across
-   devices, and is cache-aside so repeated reads in one render are cheap.
+1. **Postgres (source of truth)** — via the ``app_state`` key/value store
+   (``src/db/cache.py``). This survives a restart and is visible across devices.
 2. **Local JSON file** — a fallback that keeps the balance available when the DB
    is unconfigured or unreachable (the app must never hard-depend on Postgres).
 
-Reads prefer the cached DB value and fall back to the JSON file; writes update
-both. The module stays Streamlit-free — the DB target is resolved lazily and
+Reads prefer the DB value and fall back to the JSON file; writes update both.
+The module stays Streamlit-free — the DB target is resolved lazily and
 every DB call is best-effort, so importing/using this outside a Streamlit runtime
 (e.g. unit tests) degrades to the JSON file.
 """
@@ -88,7 +87,7 @@ def _json_write(payload: Dict) -> None:
 def get() -> Dict:
     """Return {balance, source, updated_at} or {} if nothing has been stored.
 
-    Prefers the cached DB value; falls back to the local JSON file.
+    Prefers the DB value; falls back to the local JSON file.
     """
     db = _db_read()
     if db and "balance" in db:
@@ -104,8 +103,8 @@ def get_balance(default: float = 10000.0) -> float:
 
 
 def set_balance(balance: float, source: str = "manual") -> None:
-    """Store the balance durably (Postgres + Redis cache) and to the local JSON
-    fallback, so it survives a restart and is visible across devices."""
+    """Store the balance durably (Postgres) and to the local JSON fallback, so it
+    survives a restart and is visible across devices."""
     payload = {
         "balance": float(balance),
         "source": source,

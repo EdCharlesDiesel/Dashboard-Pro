@@ -1,4 +1,4 @@
-"""Unit tests for src/db/cache.py — pooling proxy + read-cache invalidation."""
+"""Unit tests for src/db/cache.py — pooling proxy + direct (uncached) reads."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -92,40 +92,11 @@ class TestCfgHelper:
         assert cfg.password == "p"
 
 
-class FakeRedis:
-    """In-memory stand-in for the redis client contract cache.py uses:
-    get / setex / scan_iter / delete / ping."""
+class TestDirectReads:
+    """Reads go straight to Postgres through the pool — no intermediate cache, so
+    each call hits the repository."""
 
-    def __init__(self):
-        self.store: dict = {}
-
-    def ping(self):
-        return True
-
-    def get(self, key):
-        return self.store.get(key)
-
-    def setex(self, key, ttl, value):
-        self.store[key] = value
-        return True
-
-    def scan_iter(self, match="*"):
-        prefix = match.rstrip("*")
-        return [k for k in list(self.store) if k.startswith(prefix)]
-
-    def delete(self, *keys):
-        for k in keys:
-            self.store.pop(k, None)
-        return len(keys)
-
-
-class TestCacheAside:
-    def test_miss_then_hit(self, monkeypatch):
-        """First call misses (loader runs, value stored); second call hits Redis
-        and never touches the repository."""
-        fake = FakeRedis()
-        monkeypatch.setattr(cache, "_redis_client", lambda: fake)
-
+    def test_each_call_queries_the_repo(self, monkeypatch):
         calls = {"n": 0}
 
         class Repo:
@@ -139,13 +110,10 @@ class TestCacheAside:
         second = cache.cached_load_open("h", 5432, "trading", "u", "p")
 
         assert first == [{"id": 1}] == second
-        assert calls["n"] == 1  # loader ran exactly once; second call was a cache hit
+        assert calls["n"] == 2  # no cache — the loader runs on every call
 
-    def test_caches_none_result(self, monkeypatch):
-        """A legitimate None (no closed trades) is cached, not re-queried."""
-        fake = FakeRedis()
-        monkeypatch.setattr(cache, "_redis_client", lambda: fake)
-
+    def test_none_result_passes_through(self, monkeypatch):
+        """A legitimate None (no closed trades) is returned unchanged."""
         calls = {"n": 0}
 
         class Repo:
@@ -156,33 +124,11 @@ class TestCacheAside:
         monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
 
         assert cache.cached_performance_stats("h", 5432, "trading", "u", "p") is None
-        assert cache.cached_performance_stats("h", 5432, "trading", "u", "p") is None
-        assert calls["n"] == 1  # None was cached; loader did not run twice
-
-    def test_redis_down_falls_through_to_db(self, monkeypatch):
-        """When Redis is unavailable every call hits the repository (no caching),
-        but nothing errors."""
-        monkeypatch.setattr(cache, "_redis_client", lambda: None)
-
-        calls = {"n": 0}
-
-        class Repo:
-            def load_open(self):
-                calls["n"] += 1
-                return [{"id": 9}]
-
-        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
-
-        assert cache.cached_load_open("h", 5432, "trading", "u", "p") == [{"id": 9}]
-        assert cache.cached_load_open("h", 5432, "trading", "u", "p") == [{"id": 9}]
-        assert calls["n"] == 2  # no cache, so the loader runs each time
+        assert calls["n"] == 1
 
 
-class TestAppStateCache:
-    def test_cached_get_state_miss_then_hit(self, monkeypatch):
-        """First call misses → loader runs and stores; second hits Redis."""
-        fake = FakeRedis()
-        monkeypatch.setattr(cache, "_redis_client", lambda: fake)
+class TestAppState:
+    def test_get_state_queries_the_repo(self, monkeypatch):
         calls = {"n": 0}
 
         class Repo:
@@ -194,11 +140,9 @@ class TestAppStateCache:
         a = cache.cached_get_state("h", 5432, "trading", "u", "p", "account_balance")
         b = cache.cached_get_state("h", 5432, "trading", "u", "p", "account_balance")
         assert a == b == {"balance": 100.0}
-        assert calls["n"] == 1  # second call served from cache
+        assert calls["n"] == 2  # no cache — each read queries the repo
 
-    def test_set_state_writes_through_and_primes_cache(self, monkeypatch):
-        fake = FakeRedis()
-        monkeypatch.setattr(cache, "_redis_client", lambda: fake)
+    def test_set_state_writes_to_the_repo(self, monkeypatch):
         written = {}
 
         class Repo:
@@ -211,46 +155,10 @@ class TestAppStateCache:
                         "account_balance", {"balance": 777.0})
         assert written == {"key": "account_balance", "value": {"balance": 777.0}}
 
-        # The write primed the cache, so the next read never queries the repo.
-        class BoomRepo:
-            def get_state(self, key):
-                raise AssertionError("should be served from primed cache")
-
-        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: BoomRepo())
-        assert cache.cached_get_state(
-            "h", 5432, "trading", "u", "p", "account_balance"
-        ) == {"balance": 777.0}
-
-
-class TestRedisSettings:
-    def test_env_overrides_default(self, monkeypatch):
-        monkeypatch.setenv("REDIS_HOST", "redis.internal")
-        monkeypatch.setenv("REDIS_PORT", "6380")
-        # st.secrets access raises outside a Streamlit runtime; the helper must
-        # swallow that and fall back to env vars.
-        assert cache._redis_settings() == ("redis.internal", 6380)
-
-    def test_defaults_when_unset(self, monkeypatch):
-        monkeypatch.delenv("REDIS_HOST", raising=False)
-        monkeypatch.delenv("REDIS_PORT", raising=False)
-        assert cache._redis_settings() == ("localhost", 6379)
-
 
 class TestInvalidation:
-    def test_clear_read_caches_deletes_keys(self, monkeypatch):
-        fake = FakeRedis()
-        fake.store[cache._KEY_PREFIX + "load_open:h:5432:trading:u"] = b"x"
-        fake.store["unrelated:key"] = b"y"
-        monkeypatch.setattr(cache, "_redis_client", lambda: fake)
-
-        cache.clear_read_caches()
-
-        assert not any(k.startswith(cache._KEY_PREFIX) for k in fake.store)
-        assert "unrelated:key" in fake.store  # only our prefix is wiped
-
-    def test_clear_read_caches_no_redis_is_noop(self, monkeypatch):
-        monkeypatch.setattr(cache, "_redis_client", lambda: None)
-        cache.clear_read_caches()  # must not raise
+    def test_clear_read_caches_is_noop(self):
+        cache.clear_read_caches()  # retained for API compat; must not raise
 
     def test_read_cache_set_is_complete(self):
         names = {fn.__name__ for fn in cache._READ_CACHES}

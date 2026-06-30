@@ -101,7 +101,9 @@
       "Bash(grep -vE \"Chained|chained|copy_on_write|intermediate|never works|Try using|See the|ha\\\\[|^\\\\s*$|Such chained\")",
       "Bash(git checkout *)",
       "Bash(git stash *)",
-      "Bash(grep \"db/cache.py\\\\|db\\\\\\\\\\\\\\\\cache.py\")"
+      "Bash(grep \"db/cache.py\\\\|db\\\\\\\\\\\\\\\\cache.py\")",
+      "Bash(coverage *)",
+      "Bash(PYTHONIOENCODING=utf-8 coverage run -m pytest --no-cov)"
     ]
   }
 }

@@ -401,34 +401,33 @@ risk-off wave hits.
 - Tests live in `tests/`; the DB journal is unit-tested with a mocked connection,
   and `tests/test_pages_smoke.py` runs each page headlessly (gated behind
   `--runslow` because it hits live yfinance). See `CLAUDE.md` for details.
-# Trading data backbone — Redis cache + Postgres store + background worker
+# Trading data backbone — Postgres store + background worker
  
-A durable data layer for your Streamlit dashboard. Tabs read from a fast cache,
-fall back to a permanent database, and only hit yfinance/FRED when necessary.
+A durable data layer for your Streamlit dashboard. Tabs read from a permanent
+database and only hit yfinance/FRED when the stored data is missing or stale.
  
 ```
-Streamlit tab ─▶ data_access.get_ohlcv() ─▶ Redis ─▶ Postgres ─▶ yfinance/FRED
-                                              (warm)   (durable)   (source of truth)
+Streamlit tab ─▶ data_access.get_ohlcv() ─▶ Postgres ─▶ yfinance/FRED
+                                              (durable)   (source of truth)
  
-worker.py (APScheduler) ─▶ fetch on schedule ─▶ upsert Postgres ─▶ invalidate Redis
+worker.py (APScheduler) ─▶ fetch on schedule ─▶ upsert Postgres
 ```
  
 ## Files (package `src/data_backbone/`)
 - `config.py` — env-driven settings + the worker's watchlists.
 - `db.py` — SQLAlchemy tables and `INSERT ... ON CONFLICT DO UPDATE` upserts.
-- `cache.py` — Redis wrapper; degrades gracefully if Redis is down.
-- `data_access.py` — `get_ohlcv()` / `get_fred()`: the cache→db→api read path.
+- `data_access.py` — `get_ohlcv()` / `get_fred()`: the db→api read path.
 - `worker.py` — scheduled refresh service.
 - `app_demo.py` — minimal demo dashboard (the main app stays `app.py` at root).
-- `docker-compose.yml` / `Dockerfile` — postgres, redis, worker, app.
+- `docker-compose.yml` / `Dockerfile` — postgres, worker, app.
 ## Run it
 ```bash
 cp .env.example .env          # adjust if you like
-docker compose up --build     # starts postgres, redis, worker, app
+docker compose up --build     # starts postgres, worker, app
 # app on http://localhost:8501 ; worker warms the store then refreshes daily
 ```
  
-Run locally without docker (needs a local Postgres + Redis):
+Run locally without docker (needs a local Postgres):
 ```bash
 pip install -r requirements.txt
 python -m src.data_backbone.worker          # one process: warms + schedules refresh
@@ -450,8 +449,8 @@ And for FRED-based tabs (forex fundamentals), replace `_fetch_fred_csv(sid)` wit
 `da.get_fred(sid)`. The rest of each tab is unchanged.
  
 Keep `@st.cache_data` on the tab loaders too — it's a per-process layer in front
-of Redis. Order of speed: st.cache_data (in-process) → Redis (shared) → Postgres
-(durable) → API.
+of the database. Order of speed: st.cache_data (in-process) → Postgres (durable)
+→ API.
  
 ## Move the trade journal into Postgres
 The journal currently lives in a CSV. One-shot import:

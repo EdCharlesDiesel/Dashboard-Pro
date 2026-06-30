@@ -3,7 +3,7 @@ app_demo.py — minimal Streamlit demo of the data_backbone pipeline.
 
 Standalone entry point (kept out of the main multipage app, which is driven by
 ``DailyTradingPage`` via the root ``app.py``). Shows a ticker served through the
-Redis -> Postgres -> yfinance read path:
+Postgres -> yfinance read path:
 
     streamlit run src/data_backbone/app_demo.py
 """
@@ -34,9 +34,9 @@ ticker = st.text_input("Ticker", "SPY")
 if ticker:
     df = da.get_ohlcv(ticker)
     if df.empty:
-        st.warning("No data (cache miss, DB empty, and source unreachable).")
+        st.warning("No data (DB empty and source unreachable).")
     else:
-        st.caption(f"{len(df):,} bars — served from Redis → Postgres → yfinance.")
+        st.caption(f"{len(df):,} bars — served from Postgres → yfinance.")
         st.line_chart(df["Close"])
         st.dataframe(df.tail(10), use_container_width=True)
 
