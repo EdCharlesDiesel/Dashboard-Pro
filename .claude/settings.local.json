@@ -103,7 +103,11 @@
       "Bash(git stash *)",
       "Bash(grep \"db/cache.py\\\\|db\\\\\\\\\\\\\\\\cache.py\")",
       "Bash(coverage *)",
-      "Bash(PYTHONIOENCODING=utf-8 coverage run -m pytest --no-cov)"
+      "Bash(PYTHONIOENCODING=utf-8 coverage run -m pytest --no-cov)",
+      "Bash(git remote *)",
+      "Bash(chmod +x deploy/bootstrap.sh deploy/update.sh)",
+      "Bash(bash -n deploy/bootstrap.sh)",
+      "Bash(bash -n deploy/update.sh)"
     ]
   }
 }
