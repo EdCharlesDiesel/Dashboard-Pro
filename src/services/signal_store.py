@@ -20,8 +20,8 @@ The service owns all the cross-cutting concerns so pages don't repeat them:
   sidebar/secrets target the pages' market data already uses).
 - **Source tag** — every row is written with ``source=<page>`` so signals are
   attributable and filterable per page.
-- **Write + invalidate** — pooled write, then :func:`clear_read_caches` so the
-  journal / stats / open-trades / P&L re-query (and the Redis cache is busted).
+- **Write** — pooled write straight to Postgres (no caching layer). The
+  :func:`clear_read_caches` call is a retained no-op (reads are uncached now).
 - **Graceful no-op** — if the DB isn't configured (or anything fails), nothing is
   saved and the dedupe ledger is left untouched (so a later configured run still
   saves). Persistence must never break a page.
@@ -102,7 +102,7 @@ def persist_signals(
                 logger.warning("Signal save failed (%s/%s): %s", source, sig.get("pair"), exc)
         if saved:
             cache.save(seen)
-            clear_read_caches()  # journal / stats / open-trades / P&L must re-query
+            clear_read_caches()  # no-op kept for API compat; reads are uncached
             logger.info("Saved %d signal(s) from %s", saved, source)
         return saved
     except Exception as exc:

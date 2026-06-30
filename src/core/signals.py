@@ -6,6 +6,7 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from src.core.analyzer import TechnicalAnalyzer as analyzer
 from src.core.config import default_config as config
+from src.instruments.registry import INSTRUMENTS, TYPICAL_SPREADS
 
 
 def safe_get(row: pd.Series, col: str, default: float = 0.0) -> float:
@@ -93,11 +94,18 @@ class EntrySignalGenerator:
 class StopLossCalculator:
     @staticmethod
     def pip_size(pair: str) -> float:
+        # Explicit overrides that intentionally differ from the instrument
+        # registry — ZAR uses a 0.001 pip here (registry stores 0.0001) and BTC
+        # is not in the registry at all — plus a JPY safety net for any cross the
+        # registry doesn't enumerate.
         if "JPY" in pair:     return 0.01
-        if pair == "XAU/USD": return 0.10
         if pair == "BTC/USD": return 1.0
         if "ZAR" in pair:     return 0.001
-        return 0.0001
+        # Otherwise defer to the single source of truth, which carries the
+        # correct pip sizes for FX majors and metals (XAU 0.10, XAG 0.01,
+        # XPT 0.10) instead of falling back to a wrong 0.0001 for the metals.
+        inst = INSTRUMENTS.get(pair)
+        return inst.pip_size if inst is not None else 0.0001
 
     def price_to_pips(self, pair: str, distance: float) -> float:
         ps = self.pip_size(pair)
@@ -253,15 +261,12 @@ tp_calculator = TakeProfitCalculator()
 # data (and whether it already had indicator columns attached).
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Typical spreads (in pips) for the app's instrument universe. The Setup Ranker
-# page keeps its own wider list (incl. metals/crosses); both feed score_setup.
-TYPICAL_SPREADS: Dict[str, float] = {
-    "EUR/USD": 1.2, "GBP/USD": 1.5, "USD/JPY": 1.2, "USD/ZAR": 80.0,
-    "AUD/USD": 1.5, "NZD/USD": 2.0, "USD/CAD": 2.0, "USD/CHF": 2.0,
-    "XAU/USD": 3.0, "BTC/USD": 20.0,
-}
-
-
+# Typical spreads (in pips) come from the instrument registry — the single
+# source of truth shared with the Setup Ranker page (src/pages_lib/setup_ranker.py)
+# and the ATR Volatility page. Sourcing them here too means Trading Ideas and the
+# Setup Ranker now score the identical spread for a given pair. `TYPICAL_SPREADS`
+# is imported at module top; re-exported here for any legacy `signals.TYPICAL_SPREADS`
+# caller.
 def typical_spread(pair: str) -> float:
     return TYPICAL_SPREADS.get(pair, 0.0)
 
@@ -331,11 +336,15 @@ def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataF
     details: Dict[str, str] = {}
 
     # ── 1. Weekly EMA alignment ──────────────────────────────────────────────
+    # EMA20 above EMA50 with price above both = weekly uptrend (and the inverse
+    # for shorts). This matches the README's weekly-bias rule and is computable
+    # from the ~2y of weekly bars the app fetches — unlike a 200-week EMA, which
+    # needs ~4y of history to seed.
     if not df_w.empty and len(df_w) > 50:
+        e20_w = float(ema(df_w["Close"], 20).iloc[-1])
         e50_w = float(ema(df_w["Close"], 50).iloc[-1])
-        e200_w = float(ema(df_w["Close"], 200).iloc[-1])
         close_w = float(df_w["Close"].iloc[-1])
-        ok = close_w > e50_w > e200_w if direction == "LONG" else close_w < e50_w < e200_w
+        ok = close_w > e20_w > e50_w if direction == "LONG" else close_w < e20_w < e50_w
         scores["Weekly EMA"] = 1 if ok else 0
         details["Weekly EMA"] = "✅" if ok else "❌"
     else:
@@ -438,11 +447,18 @@ def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataF
         details["4H Structure"] = "—"
 
     # ── 10. Spread/ATR ratio ─────────────────────────────────────────────────
-    atr_pips = a14p if a14p > 0 else 1
-    spread_pct = spread_pips / atr_pips * 100
-    ok = spread_pct <= 5
-    scores["Spread/ATR"] = 1 if ok else 0
-    details["Spread/ATR"] = f"{'✅' if ok else '❌'} {spread_pct:.1f}%"
+    # The ratio is only meaningful with a real ATR (in pips). Without one it is
+    # undefined, so leave the criterion unscored ("—") rather than divide by a
+    # placeholder pip and report a misleading 0% pass.
+    if a14p > 0:
+        spread_pct = spread_pips / a14p * 100
+        ok = spread_pct <= 5
+        scores["Spread/ATR"] = 1 if ok else 0
+        details["Spread/ATR"] = f"{'✅' if ok else '❌'} {spread_pct:.1f}%"
+    else:
+        spread_pct = 0.0
+        scores["Spread/ATR"] = 0
+        details["Spread/ATR"] = "—"
 
     total = sum(scores.values())
     grade = "A" if total >= 8 else "B" if total >= 6 else "C" if total >= 4 else "D"
@@ -593,8 +609,6 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
     (lot/account/risk) are left ``None``; the full signal context is preserved in
     ``checks_detail`` JSON so nothing is lost.
     """
-    from src.instruments.registry import INSTRUMENTS
-
     pair = idea.get("pair", "")
     inst = INSTRUMENTS.get(pair)
     ticker = inst.ticker if inst else None

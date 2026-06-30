@@ -762,13 +762,14 @@ def render_macro_pro_tab(fred_key: str):
 def render_trading_ideas_tab():
     """Live, auto-refreshed trading ideas.
 
-    Decorated with @st.fragment(run_every=300) so Streamlit re-executes this
-    block automatically every 5 minutes without re-running the full page.
+    Decorated with @st.fragment(run_every=300, parallel=True) so Streamlit
+    re-executes this block automatically every 5 minutes without re-running the
+    full page, and runs the fragment concurrently for a more responsive UI.
     Reads data from session_state so each auto-run picks up the current dataset.
     """
     import streamlit as st
 
-    @st.fragment(run_every=300)
+    @st.fragment(run_every=300, parallel=True)
     def _fragment():
         st.subheader("🎯 Live Trading Ideas")
 

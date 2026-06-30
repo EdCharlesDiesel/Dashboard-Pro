@@ -6,8 +6,8 @@ same ones docker-compose already passes to the app/db services) with safe
 defaults, so the pipeline runs locally without any extra setup.
 
 This module holds no business logic — it only resolves connection strings and
-the watchlists that ``db``, ``cache``, ``data_access``, ``worker`` and
-``seed_history`` consume.
+the watchlists that ``db``, ``data_access``, ``worker`` and ``seed_history``
+consume.
 """
 from __future__ import annotations
 
@@ -28,16 +28,7 @@ DB_URL = os.getenv(
 )
 
 
-# ── Redis ─────────────────────────────────────────────────────────────────────
-REDIS = {
-    "host": os.getenv("REDIS_HOST", "localhost"),
-    "port": int(os.getenv("REDIS_PORT", "6379")),
-}
-
-
-# ── cache / staleness windows (seconds, except STALE_DAYS) ───────────────────
-TTL_PRICES = int(os.getenv("TTL_PRICES", str(60 * 60)))        # 1 hour
-TTL_FRED = int(os.getenv("TTL_FRED", str(6 * 60 * 60)))        # 6 hours
+# ── staleness window ─────────────────────────────────────────────────────────
 STALE_DAYS = int(os.getenv("STALE_DAYS", "1"))                 # refetch if older
 
 # Deepest daily history the worker keeps current.

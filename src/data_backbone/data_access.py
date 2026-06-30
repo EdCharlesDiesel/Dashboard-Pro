@@ -1,11 +1,11 @@
 """
 data_access.py — the read path your tabs call.
 
-    Redis (fast)  ->  Postgres (durable)  ->  yfinance / FRED (source of truth)
+    Postgres (durable)  ->  yfinance / FRED (source of truth)
 
 get_ohlcv() and get_fred() are drop-in replacements for the per-tab loaders:
-they serve from cache when warm, fall back to Postgres, and only hit the
-external API when the stored data is missing or stale (then write back to both).
+they serve from Postgres and only hit the external API when the stored data is
+missing or stale (then write it back to Postgres).
 """
 from __future__ import annotations
 
@@ -20,8 +20,7 @@ except Exception:
     yf = None
 
 from . import db
-from . import cache
-from .config import TTL_PRICES, TTL_FRED, STALE_DAYS
+from .config import STALE_DAYS
 
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (trading-dashboard)"}
@@ -49,14 +48,7 @@ def fetch_yf(ticker: str, period: str) -> pd.DataFrame:
     return d.dropna(how="all")
 
 
-def get_ohlcv(ticker: str, period: str = "5y", ttl: int = TTL_PRICES,
-              force: bool = False) -> pd.DataFrame:
-    key = f"bars:{ticker}:{period}"
-    if not force:
-        hit = cache.get(key)
-        if hit is not None:
-            return hit
-
+def get_ohlcv(ticker: str, period: str = "5y", force: bool = False) -> pd.DataFrame:
     df = db.read_price_bars(ticker)          # durable layer
     if force or df is None or df.empty or _stale(df.index.max() if not df.empty else None):
         fresh = fetch_yf(ticker, period)     # source of truth
@@ -64,10 +56,7 @@ def get_ohlcv(ticker: str, period: str = "5y", ttl: int = TTL_PRICES,
             db.upsert_price_bars(ticker, fresh)
             df = db.read_price_bars(ticker)
 
-    df = df if df is not None else pd.DataFrame()
-    if not df.empty:
-        cache.set(key, df, ttl)
-    return df
+    return df if df is not None else pd.DataFrame()
 
 
 # ---------- FRED ----------
@@ -84,13 +73,7 @@ def fetch_fred(series_id: str) -> pd.Series:
     return s
 
 
-def get_fred(series_id: str, ttl: int = TTL_FRED, force: bool = False) -> pd.Series:
-    key = f"fred:{series_id}"
-    if not force:
-        hit = cache.get(key)
-        if hit is not None:
-            return hit
-
+def get_fred(series_id: str, force: bool = False) -> pd.Series:
     s = db.read_fred(series_id)
     # macro series update slowly; allow a longer stale window (30d).
     if force or s is None or s.empty or _stale(s.index.max() if not s.empty else None, 30):
@@ -99,7 +82,4 @@ def get_fred(series_id: str, ttl: int = TTL_FRED, force: bool = False) -> pd.Ser
             db.upsert_fred(series_id, fresh)
             s = db.read_fred(series_id)
 
-    s = s if s is not None else pd.Series(dtype=float)
-    if not s.empty:
-        cache.set(key, s, ttl)
-    return s
+    return s if s is not None else pd.Series(dtype=float)

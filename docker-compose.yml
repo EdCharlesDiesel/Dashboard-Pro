@@ -38,20 +38,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redisdata:/data
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   app:
     build: .
     image: dashboard-pro:1.0.1
@@ -59,17 +45,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     ports:
       - "8501:8501"
     environment:
       # Database — points the app at the `db` service (not localhost).
       DB_HOST: db
       DB_PORT: 5432
-      # Redis cache used by the data_backbone pipeline.
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
       DB_NAME: ${POSTGRES_DB:-trading}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -99,18 +80,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: ${POSTGRES_DB:-trading}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
       FRED_API_KEY: ${FRED_API_KEY:-}
 
 volumes:
   pgdata:
-  redisdata:

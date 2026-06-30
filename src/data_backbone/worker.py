@@ -14,7 +14,6 @@ import logging
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from . import db
-from . import cache
 from . import data_access as da
 from .config import WATCH_TICKERS, WATCH_FRED, PRICE_PERIOD
 
@@ -29,7 +28,6 @@ def refresh_ticker(ticker: str) -> None:
         log.warning("no data for %s", ticker)
         return
     n = db.upsert_price_bars(ticker, df)
-    cache.delete(f"bars:{ticker}:{PRICE_PERIOD}")   # next read repopulates
     log.info("price %s: upserted %d bars", ticker, n)
 
 
@@ -39,7 +37,6 @@ def refresh_fred(series_id: str) -> None:
         log.warning("no data for FRED %s", series_id)
         return
     n = db.upsert_fred(series_id, s)
-    cache.delete(f"fred:{series_id}")
     log.info("fred %s: upserted %d points", series_id, n)
 
 
