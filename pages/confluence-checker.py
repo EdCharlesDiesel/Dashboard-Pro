@@ -1,6 +1,8 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -122,11 +124,11 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_4h(ticker: str, days: int = 90) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
         end   = datetime.now(pytz.utc)
         start = end - timedelta(days=days)
-        df    = yf.download(ticker, start=start, end=end,
-                            interval="1h", progress=False, auto_adjust=True)
+        df    = cached_ohlc(ticker, start=start, end=end, interval="1h", ttl=300)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
@@ -239,9 +241,9 @@ def evaluate_confluence(price, fib_res, pivot_res, ema_res, pdh_pdl_bonus=False)
 @st.cache_data(ttl=300, show_spinner=False)
 def get_pdh_pdl(ticker: str):
     """Return previous day High/Low from daily data."""
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period="5d", interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period="5d", interval="1d", ttl=300)
         if df.empty or len(df) < 2:
             return None
         if isinstance(df.columns, pd.MultiIndex):
@@ -275,8 +277,7 @@ def build_chart(df: pd.DataFrame, pair: str,
         x=plot.index,
         open=plot["Open"], high=plot["High"],
         low=plot["Low"],   close=plot["Close"],
-        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
-        increasing_fillcolor="rgba(63,185,80,0.20)", decreasing_fillcolor="rgba(248,81,73,0.20)",
+        **CANDLE_STYLE,
         name="4H Candles", showlegend=False,
     ), row=1, col=1)
 
@@ -498,6 +499,16 @@ with tab_scan:
             scan_results.append({"pair": pair_name, "ok": False})
 
     prog.empty()
+
+    # Persist confluence-met events (≥2/3 elements). Confluence is non-directional
+    # (price sitting at a key zone), so bias is recorded Neutral. source='confluence_checker'.
+    persist_signals("confluence_checker", [{
+        "pair": r["pair"],
+        "bias": "Neutral",
+        "entry": r["price"],
+        "conviction": r["verdict"],
+        "thesis": f"Confluence Checker — {r['verdict']} ({r.get('passed', 0)}/3 elements)",
+    } for r in scan_results if r.get("ok") and r.get("grade") in ("pass3", "pass2")])
 
     # ── Summary counts ──────────────────────────
     cnt_3 = sum(1 for r in scan_results if r.get("grade") == "pass3")

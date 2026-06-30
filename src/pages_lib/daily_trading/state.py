@@ -59,6 +59,10 @@ class SessionStateBootstrap:
         # generic defaults
         for k, v in StateDefaults().as_dict().items():
             st.session_state.setdefault(k, v)
+        # Auto-connect to PostgreSQL from secrets.toml on first load — no manual
+        # "Connect" click needed. Idempotent per session and never raises.
+        from src.db.connection import auto_connect
+        auto_connect()
 
     @staticmethod
     def reset_checks() -> None:

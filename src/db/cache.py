@@ -1,17 +1,17 @@
-"""Streamlit caching layer for the Postgres trade repository.
+"""Connection pooling for the Postgres trade repository.
 
-Keeps ``src/db/trade_repository.py`` free of Streamlit. Two independent layers:
+Keeps ``src/db/trade_repository.py`` free of Streamlit. Provides one layer:
 
-1. **Connection pooling** — one ``ThreadedConnectionPool`` per DB target, cached
-   with ``@st.cache_resource`` for the app's lifetime. Streamlit reruns the whole
-   script on every widget interaction; without a pool each query opens a fresh
-   Postgres socket. ``pooled_repository()`` hands the repository a connection
-   factory that borrows from the pool and returns the connection on ``close()``.
+**Connection pooling** — one ``ThreadedConnectionPool`` per DB target, cached
+with ``@st.cache_resource`` for the app's lifetime. Streamlit reruns the whole
+script on every widget interaction; without a pool each query opens a fresh
+Postgres socket. ``pooled_repository()`` hands the repository a connection
+factory that borrows from the pool and returns the connection on ``close()``.
 
-2. **Read caching** — query results cached with ``@st.cache_data(ttl=READ_TTL)``
-   so repeated reads inside the TTL don't hit Postgres. Writes (save/close/
-   delete) MUST call :func:`clear_read_caches` so the next read re-queries —
-   you never cache a write, you invalidate after one.
+Reads (``cached_*``) and writes go **straight to Postgres** through the pool —
+there is no intermediate cache. :func:`clear_read_caches` is retained as a no-op
+so callers that invalidate after a write don't need to change; with no read
+cache there is nothing to invalidate.
 """
 from __future__ import annotations
 
@@ -21,10 +21,6 @@ import psycopg2.pool
 import streamlit as st
 
 from src.db.trade_repository import DBConfig, TradeRepository
-
-# Reads are cached this long. Short enough that a second device's trades show up
-# quickly; long enough to absorb the burst of reruns a single interaction causes.
-READ_TTL = 60
 
 
 class _LeasedConnection:
@@ -93,46 +89,57 @@ def pooled_repository(cfg: DBConfig) -> TradeRepository:
     )
 
 
-# ── cached reads (keyed on connection params so a DB change invalidates) ──────
-# The bodies are thin pooled passthroughs to the repository (which is fully unit-
-# tested in tests/test_trade_repository.py) and need a live DB to execute, so
-# they are excluded from coverage; the wiring around them is tested.
-@st.cache_data(ttl=READ_TTL, show_spinner=False)
+# ── direct reads (straight to Postgres via the pool) ──────────────────────────
+# Thin pooled passthroughs to the repository (fully unit-tested in
+# tests/test_trade_repository.py); they need a live DB to execute, so the DB path
+# is excluded from coverage.
 def cached_load_setups(
     host: str, port: int, dbname: str, user: str, password: str, limit: int = 100
-) -> List[Dict[str, Any]]:  # pragma: no cover - needs live DB
-    return pooled_repository(_cfg(host, port, dbname, user, password)).load_setups(limit=limit)
+) -> List[Dict[str, Any]]:
+    return pooled_repository(_cfg(host, port, dbname, user, password)).load_setups(limit=limit)  # pragma: no cover - needs live DB
 
 
-@st.cache_data(ttl=READ_TTL, show_spinner=False)
 def cached_load_open(
     host: str, port: int, dbname: str, user: str, password: str
-) -> List[Dict[str, Any]]:  # pragma: no cover - needs live DB
-    return pooled_repository(_cfg(host, port, dbname, user, password)).load_open()
+) -> List[Dict[str, Any]]:
+    return pooled_repository(_cfg(host, port, dbname, user, password)).load_open()  # pragma: no cover - needs live DB
 
 
-@st.cache_data(ttl=READ_TTL, show_spinner=False)
 def cached_daily_losses(
     host: str, port: int, dbname: str, user: str, password: str, max_losses: int = 2
-) -> Dict[str, Any]:  # pragma: no cover - needs live DB
-    return pooled_repository(_cfg(host, port, dbname, user, password)).daily_losses(max_losses=max_losses)
+) -> Dict[str, Any]:
+    return pooled_repository(_cfg(host, port, dbname, user, password)).daily_losses(max_losses=max_losses)  # pragma: no cover - needs live DB
 
 
-@st.cache_data(ttl=READ_TTL, show_spinner=False)
 def cached_performance_stats(
     host: str, port: int, dbname: str, user: str, password: str, n: int = 20
-) -> Optional[Dict[str, Any]]:  # pragma: no cover - needs live DB
-    return pooled_repository(_cfg(host, port, dbname, user, password)).performance_stats(n=n)
+) -> Optional[Dict[str, Any]]:
+    return pooled_repository(_cfg(host, port, dbname, user, password)).performance_stats(n=n)  # pragma: no cover - needs live DB
 
 
-@st.cache_data(ttl=READ_TTL, show_spinner=False)
 def cached_realized_pnl(
     host: str, port: int, dbname: str, user: str, password: str
-) -> Dict[str, Any]:  # pragma: no cover - needs live DB
-    return pooled_repository(_cfg(host, port, dbname, user, password)).realized_pnl()
+) -> Dict[str, Any]:
+    return pooled_repository(_cfg(host, port, dbname, user, password)).realized_pnl()  # pragma: no cover - needs live DB
 
 
-# Every cached read function — kept in one place so invalidation can't drift.
+# ── app_state key/value (direct read + write to Postgres) ─────────────────────
+# Used for durable app-level state such as the live account balance.
+def cached_get_state(
+    host: str, port: int, dbname: str, user: str, password: str, state_key: str
+) -> Optional[Any]:
+    return pooled_repository(_cfg(host, port, dbname, user, password)).get_state(state_key)  # pragma: no cover - needs live DB
+
+
+def set_state(
+    host: str, port: int, dbname: str, user: str, password: str,
+    state_key: str, value: Any
+) -> None:
+    """Persist ``value`` to Postgres."""
+    pooled_repository(_cfg(host, port, dbname, user, password)).set_state(state_key, value)  # pragma: no cover - needs live DB
+
+
+# Every read function — kept in one place for documentation/tests.
 _READ_CACHES = (
     cached_load_setups,
     cached_load_open,
@@ -143,7 +150,10 @@ _READ_CACHES = (
 
 
 def clear_read_caches() -> None:
-    """Invalidate all cached reads. Call after any write so the journal, stats,
-    open-trades and P/L re-query Postgres on the next rerun."""
-    for fn in _READ_CACHES:
-        fn.clear()
+    """No-op retained for API compatibility.
+
+    Reads now go straight to Postgres, so there is no cache to invalidate after a
+    write. Callers (the signal store and the journal/stats pages) still call this
+    after a write; keeping it as a no-op means none of them need to change.
+    """
+    return None

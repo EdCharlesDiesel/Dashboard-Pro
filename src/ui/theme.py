@@ -102,6 +102,23 @@ section[data-testid="stSidebar"] {{
     background: {cls.BG_ELEV} !important;
     border-right: 1px solid {cls.BORDER};
 }}
+/* Application logo — rendered once at the very top of the sidebar (above every
+   page's own controls) via a ::before on the user-content container, so it is
+   uniform across every page from this single rule. The artwork mirrors
+   assets/logo.svg, inlined as a data URI so it renders without Streamlit static
+   file serving. */
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"]::before {{
+    content: "";
+    display: block;
+    height: 46px;
+    margin: 2px 0 12px 0;
+    padding-bottom: 12px;
+    border-bottom: 1px solid {cls.BORDER};
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: contain;
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='216' height='50' viewBox='0 0 216 50'><rect x='1' y='5' width='40' height='40' fill='%230f0f0f' stroke='%2300ff41' stroke-width='1.5'/><line x1='11' y1='14' x2='11' y2='40' stroke='%2300ff41' stroke-width='1'/><rect x='9' y='22' width='4' height='13' fill='%2300ff41'/><line x1='21' y1='10' x2='21' y2='40' stroke='%2300ff66' stroke-width='1'/><rect x='19' y='15' width='4' height='20' fill='%2300ff66'/><line x1='31' y1='18' x2='31' y2='40' stroke='%23ff3344' stroke-width='1'/><rect x='29' y='25' width='4' height='10' fill='%23ff3344'/><text x='51' y='25' font-family='JetBrains Mono,Consolas,monospace' font-size='16' font-weight='700' letter-spacing='1' fill='%23e6e6e6'>DASHBOARD<tspan fill='%2300ff41'> PRO</tspan></text><text x='52' y='40' font-family='JetBrains Mono,Consolas,monospace' font-size='8.5' letter-spacing='2.5' fill='%239a9a9a'>TRADING TERMINAL</text></svg>");
+}}
 /* Always-tappable toggle controls so the sidebar can be hidden AND reopened,
    even on touch (the arrow is normally hover-only) and on legacy pages that
    hide the header. Force terminal-green so the COLLAPSED-state expand control —

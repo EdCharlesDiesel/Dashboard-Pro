@@ -23,6 +23,11 @@ st.set_page_config(
 )
 BloombergTheme.apply()
 
+# Auto-connect to PostgreSQL from secrets.toml on first load — no manual
+# "Connect & Load" click needed. Idempotent per session and never raises.
+from src.db.connection import auto_connect
+auto_connect()
+
 st.markdown("""
 <style>
     /* Theme-adaptive layout vars */

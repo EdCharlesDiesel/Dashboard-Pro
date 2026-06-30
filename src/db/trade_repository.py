@@ -53,6 +53,17 @@ class TradeRepository:
         "profit      FLOAT",
     )
 
+    # Small key/value store for app-level state that must survive restarts and
+    # be shared across devices — e.g. the live account balance the Trade Journal
+    # imports and the Setup Ranker sizes from. JSONB value keeps it flexible.
+    APP_STATE_SQL = """
+        CREATE TABLE IF NOT EXISTS app_state (
+            key        VARCHAR(64) PRIMARY KEY,
+            value      JSONB,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """
+
     CREATE_SQL = """
         CREATE TABLE IF NOT EXISTS trade_setups (
             id            SERIAL PRIMARY KEY,
@@ -114,13 +125,38 @@ class TradeRepository:
                     cur.execute(
                         f"ALTER TABLE trade_setups ADD COLUMN IF NOT EXISTS {col_def}"
                     )
+                cur.execute(self.APP_STATE_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
             return False, str(exc)
 
+    # ── app_state key/value store ───────────────────────────────────────────
+    def get_state(self, key: str) -> Optional[Any]:
+        """Return the JSON value stored under ``key`` (psycopg2 decodes JSONB to a
+        Python object), or ``None`` if the key is absent."""
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM app_state WHERE key = %s", (key,))
+            row = cur.fetchone()
+        return row[0] if row else None
+
+    def set_state(self, key: str, value: Any) -> None:
+        """Upsert a JSON ``value`` under ``key`` (last write wins)."""
+        sql = """
+            INSERT INTO app_state (key, value, updated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (key) DO UPDATE
+                SET value = EXCLUDED.value, updated_at = NOW()
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, (key, psycopg2.extras.Json(value)))
+            conn.commit()
+
     # ── writes ──────────────────────────────────────────────────────────────
-    def save_setup(self, row: Dict[str, Any]) -> None:
+    def save_setup(self, row: Dict[str, Any], source: Optional[str] = None) -> None:
+        """Insert one setup row. ``source`` tags where the row came from (e.g.
+        ``"market_overview"`` for auto-saved scanner signals); when omitted the
+        ``source`` column keeps its ``'checklist'`` default."""
         sql = """
             INSERT INTO trade_setups (
                 logged_at, instrument, ticker, direction, session,
@@ -134,8 +170,19 @@ class TradeRepository:
                 %(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s
             )
         """
+        params: Dict[str, Any] = row
+        if source is not None:
+            # Add the source column without mutating the caller's row dict.
+            sql = sql.replace(
+                "checks_passed, checks_total, checks_detail, notes\n",
+                "checks_passed, checks_total, checks_detail, notes, source\n",
+            ).replace(
+                "%(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s\n",
+                "%(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s, %(source)s\n",
+            )
+            params = {**row, "source": source}
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
-            cur.execute(sql, row)
+            cur.execute(sql, params)
             conn.commit()
 
     def imported_tickets(self) -> set:

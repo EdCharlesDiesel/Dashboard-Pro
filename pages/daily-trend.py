@@ -1,6 +1,8 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -107,9 +109,9 @@ def crossover_bars_ago(e20: pd.Series, e50: pd.Series) -> int | None:
 # ── Fetch ──────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily_trend(ticker: str, pip_size: float, days: int = 300):
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period=f"{days}d", interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period=f"{days}d", interval="1d", ttl=300)
         if df.empty or len(df) < 55:
             return None
         if isinstance(df.columns, pd.MultiIndex):
@@ -298,6 +300,17 @@ intact   = [p for p, c in checks.items() if c["status"].startswith("✅")]
 weak     = [p for p, c in checks.items() if c["status"].startswith("⚠️")]
 broken   = [p for p, c in checks.items() if c["status"].startswith("❌")]
 failed   = [p for p in INSTRUMENTS if p not in loaded]
+
+# Persist confirmed (intact) daily trends as directional signals — deduped per
+# pair/direction/price, tagged source='daily_trend'.
+persist_signals("daily_trend", [{
+    "pair": p,
+    "bias": "Long" if loaded[p]["trend_bull"] else "Short",
+    "entry": loaded[p]["close"],
+    "conviction": "Trend Intact",
+    "thesis": (f"Daily Trend — EMA20 {'>' if loaded[p]['trend_bull'] else '<'} EMA50, "
+               f"gap {loaded[p]['gap_pips']}p"),
+} for p in intact])
 
 # ══════════════════════════════════════════════════════════════════
 # HERO
@@ -583,8 +596,7 @@ with right:
         fig.add_trace(go.Candlestick(
             x=hist.index, open=hist["Open"], high=hist["High"],
             low=hist["Low"], close=hist["Close"], name="Price",
-            increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
-            increasing_fillcolor="#0d2f1a",  decreasing_fillcolor="#2f0d0d",
+            **CANDLE_STYLE,
         ), row=1, col=1)
 
         # EMAs

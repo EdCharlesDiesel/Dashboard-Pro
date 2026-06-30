@@ -18,6 +18,7 @@ from src.core.signals import score_setup
 from src.instruments import INSTRUMENTS, TYPICAL_SPREADS
 from src.pages_lib.base import BloombergPage, PageContext
 from src.services import RiskService, alert_service, account_state
+from src.services.signal_store import persist_signals
 from src.ui.components import (
     CommandBar, MetricCell, Panel, ProgressBar, render_metric_row,
 )
@@ -88,13 +89,11 @@ class _SetupRankerDataFeed:
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def daily(ticker: str, days: int = 300) -> pd.DataFrame:
+        from src.db.market_cache import cached_ohlc
         try:
-            df = yf.download(ticker, period=f"{days}d", interval="1d",
-                             progress=False, auto_adjust=True)
+            df = cached_ohlc(ticker, period=f"{days}d", interval="1d", ttl=300)
             if df.empty:
                 return pd.DataFrame()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
             return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
         except Exception:
             return pd.DataFrame()
@@ -102,15 +101,13 @@ class _SetupRankerDataFeed:
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def four_hour(ticker: str) -> pd.DataFrame:
+        from src.db.market_cache import cached_ohlc
         try:
             end = datetime.now(pytz.utc)
             start = end - timedelta(days=90)
-            df = yf.download(ticker, start=start, end=end, interval="1h",
-                             progress=False, auto_adjust=True)
+            df = cached_ohlc(ticker, start=start, end=end, interval="1h", ttl=300)
             if df.empty:
                 return pd.DataFrame()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
             return df.resample("4h").agg({
                 "Open": "first", "High": "max", "Low": "min",
@@ -122,13 +119,11 @@ class _SetupRankerDataFeed:
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def weekly(ticker: str) -> pd.DataFrame:
+        from src.db.market_cache import cached_ohlc
         try:
-            df = yf.download(ticker, period="2y", interval="1d",
-                             progress=False, auto_adjust=True)
+            df = cached_ohlc(ticker, period="2y", interval="1d", ttl=300)
             if df.empty:
                 return pd.DataFrame()
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
             return df.resample("W").agg({
                 "Open": "first", "High": "max", "Low": "min",
@@ -156,10 +151,12 @@ class SetupRankerPage(BloombergPage):
     """Bloomberg-styled multi-pair scoring scanner."""
 
     def configure(self) -> PageContext:
-        st.session_state.setdefault("sr_direction", "LONG")
+        # Scan both directions by default so every pair is evaluated long AND short.
+        st.session_state.setdefault("sr_direction", "Both")
         st.session_state.setdefault("sr_min_score", 5)
         st.session_state.setdefault("sr_rr_ratio", 2.0)
-        st.session_state.setdefault("sr_pairs", INSTRUMENTS.keys())
+        # Load the full instrument universe by default.
+        st.session_state.setdefault("sr_pairs", list(INSTRUMENTS.keys()))
         # Shared with the checklist so account settings carry across pages.
         # Default to the live balance from the Trade Journal (MT4 statement) when
         # one has been recorded, otherwise the historical $10k default.
@@ -330,6 +327,9 @@ class SetupRankerPage(BloombergPage):
         directions = ["LONG", "SHORT"] if direction == "Both" else [direction]
         results = self._scan(pairs, directions, min_score)
 
+        # Auto-save Grade-A setups to the journal DB (deduped, source-tagged).
+        self._persist_signals(results, rr_ratio)
+
         # Fire email alerts for newly-appearing high-score setups (opt-in).
         if st.session_state.get("sr_email_on"):
             self._maybe_email_alerts(results, rr_ratio, account_bal, risk_pct)
@@ -394,6 +394,35 @@ class SetupRankerPage(BloombergPage):
         prog.empty()
         results.sort(key=lambda x: -x["score"])
         return results
+
+    # ── DB persistence ──────────────────────────────────────────────────────
+    @staticmethod
+    def _persist_signals(results, rr_ratio) -> None:
+        """Persist Grade-A setups (score ≥ 8) to trade_setups via the shared
+        signal store. Deduped per pair/direction/price, tagged source='setup_ranker',
+        silent no-op without a DB."""
+        signals = []
+        for r in results:
+            if r.get("score", 0) < 8:  # Grade A only — high-conviction
+                continue
+            inst = INSTRUMENTS.get(r["pair"])
+            pip_size = inst.pip_size if inst else None
+            lv = trade_levels(r["close"], r.get("sl_pips"), pip_size,
+                              r["direction"], rr_ratio)
+            passed = [k for k, v in r.get("scores", {}).items() if v]
+            signals.append({
+                "pair": r["pair"],
+                "bias": r["direction"],
+                "entry": r["close"],
+                "stop_loss": lv["sl_price"],
+                "stop_loss_pips": r.get("sl_pips"),
+                "take_profit_1": lv["tp_price"],
+                "strength_score": r.get("score"),
+                "conviction": f"Grade {r.get('grade')}",
+                "risk_reward_1": rr_ratio,
+                "thesis": "Setup Ranker — " + ", ".join(passed),
+            })
+        persist_signals("setup_ranker", signals)
 
     # ── Email alerts ──────────────────────────────────────────────────────
     @classmethod
