@@ -171,7 +171,8 @@ def load_pair_ohlc(ticker: str, period: str = "5y") -> pd.DataFrame:
     """Daily OHLC for any instrument ticker (e.g. EURUSD=X, GBPJPY=X, GC=F)."""
     if yf is None:
         return pd.DataFrame()
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
     if df is None or df.empty:
         return pd.DataFrame()
     # flatten possible multiindex columns

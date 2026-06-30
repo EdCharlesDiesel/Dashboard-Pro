@@ -512,7 +512,8 @@ def load_macro(series_id: str) -> pd.Series:
 def load_pair_price(ticker: str, period: str = "2y") -> pd.Series:
     if yf is None:
         return pd.Series(dtype=float)
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=900)
     if df is None or df.empty:
         return pd.Series(dtype=float)
     col = "Close" if "Close" in df.columns else df.columns[0]
@@ -528,8 +529,9 @@ def load_last_price(ticker: str) -> float | None:
     """Latest price for a futures/quote ticker via yfinance (e.g. ZQ=F)."""
     if yf is None:
         return None
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period="1mo", interval="1d", progress=False)
+        df = cached_ohlc(ticker, period="1mo", interval="1d", ttl=1800)
         if df is None or df.empty:
             return None
         col = "Close" if "Close" in df.columns else df.columns[0]
@@ -555,7 +557,8 @@ def load_yf_series(ticker: str, period: str = "3y") -> pd.Series:
     """Generic daily close series via yfinance."""
     if yf is None:
         return pd.Series(dtype=float)
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=1800)
     if df is None or df.empty:
         return pd.Series(dtype=float)
     col = "Close" if "Close" in df.columns else df.columns[0]

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 
 # Page configurations
 st.set_page_config(page_title="Forex Analytics Dashboard", layout="wide", page_icon="💱")
@@ -51,8 +52,8 @@ sma_period = st.sidebar.slider("SMA Period", min_value=5, max_value=100, value=2
 # --- FETCH DATA ---
 @st.cache_data(ttl=60)  # Cache data for 1 minute to avoid spamming the API
 def load_forex_data(ticker, p, i):
-    data = yf.download(tickers=ticker, period=p, interval=i)
-    return data
+    from src.db.market_cache import cached_ohlc
+    return cached_ohlc(ticker, period=p, interval=i, ttl=60)
 
 try:
     df = load_forex_data(ticker_symbol, period, interval)
@@ -75,6 +76,19 @@ try:
         col1.metric(label=f"Current {selected_pair_label} Rate", value=f"{latest_price:.4f}")
         col2.metric(label="Session Change", value=f"{price_change:+.4f}", delta=f"{pct_change:+.2f}%")
         col3.metric(label="Highest in Period", value=f"{df['High'].max():.4f}")
+
+        # Persist a price-vs-SMA directional read (source='predictive').
+        _sma_last = df['Close'].rolling(sma_period).mean().iloc[-1]
+        if pd.notna(_sma_last):
+            _bull = latest_price > _sma_last
+            persist_signals("predictive", [{
+                "pair": selected_pair_label,
+                "bias": "Long" if _bull else "Short",
+                "entry": float(latest_price),
+                "conviction": f"Price {'>' if _bull else '<'} {sma_period}SMA",
+                "thesis": (f"Analytics — price {latest_price:.4f} "
+                           f"{'>' if _bull else '<'} {sma_period}-SMA {_sma_last:.4f}"),
+            }])
 
         # --- TECHNICAL INDICATORS ---
         if show_sma:

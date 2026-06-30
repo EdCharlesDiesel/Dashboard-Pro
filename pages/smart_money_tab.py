@@ -168,7 +168,8 @@ def _cache(ttl):
 def load_ohlcv(ticker: str, period: str = "2y") -> pd.DataFrame:
     if yf is None:
         return pd.DataFrame()
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
     if df is None or df.empty:
         return pd.DataFrame()
     if isinstance(df.columns, pd.MultiIndex):
@@ -254,6 +255,21 @@ def render():
     # --- verdict ---
     cmf_last = float(cmf(high, low, close, vol, mf_win).dropna().iloc[-1])
     v = money_flow_verdict(cmf_last, obv(close, vol))
+
+    # Persist a directional money-flow read (Accumulation→Long, Distribution→Short;
+    # Mixed is skipped). source='smart_money'. Ticker is free-text (often a stock/ETF).
+    if v["label"].startswith(("Accumulation", "Distribution")):
+        try:
+            from src.services.signal_store import persist_signals
+            persist_signals("smart_money", [{
+                "pair": ticker,
+                "bias": "Long" if v["label"].startswith("Accumulation") else "Short",
+                "entry": float(close.iloc[-1]),
+                "conviction": "Money flow",
+                "thesis": f"Smart Money — {v['label']} (CMF {cmf_last:+.3f})",
+            }])
+        except Exception:
+            pass
     m = st.columns(3)
     m[0].metric("Net flow", f"{v['emoji']} {v['label'].split(' — ')[0]}")
     m[1].metric("Chaikin Money Flow", f"{cmf_last:+.3f}",

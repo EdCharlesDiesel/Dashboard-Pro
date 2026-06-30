@@ -75,12 +75,15 @@ default_config = AppConfig()
 # identical across the application.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Candlestick colours — dark fill with coloured wick/border
+# Candlestick colours — the single source of truth for every candle chart in the
+# app. Bright terminal green/red wicks & borders over dark bodies so candles read
+# clearly against the near-black plot background. (Also aliased as VISIBLE_CANDLE
+# in src/pages_lib/market_overview_lib.py.)
 CANDLE_STYLE = dict(
-    increasing_fillcolor="#1a4d2e",   # dark green body
-    increasing_line_color="#26a69a",  # teal wick/border
-    decreasing_fillcolor="#4d1a22",   # dark red body
-    decreasing_line_color="#ef5350",  # red wick/border
+    increasing_fillcolor="#0d2f1a",   # dark green body
+    increasing_line_color="#00ff66",  # bright green wick/border
+    decreasing_fillcolor="#2f0d0d",   # dark red body
+    decreasing_line_color="#ff3344",  # bright red wick/border
     line_width=1,
 )
 

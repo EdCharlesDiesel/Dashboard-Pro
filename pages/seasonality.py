@@ -62,9 +62,9 @@ DOW = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 # ══════════════════════════════════════════════════════════════════
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_history(ticker: str, period: str) -> pd.DataFrame | None:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period=period, interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
         if df.empty or len(df) < 60:
             return None
         if isinstance(df.columns, pd.MultiIndex):
@@ -168,6 +168,24 @@ elif cur_avg < -0.3 and cur_wr <= 40:
     band_color, band_txt = "#ff3344", f"🔴 BEARISH SEASON — {cur_month_name} avg {cur_avg:.2f}%, green {cur_wr:.0f}% of years"
 else:
     band_color, band_txt = "#ffcc00", f"🟡 NEUTRAL SEASON — {cur_month_name} avg {cur_avg:+.2f}%, green {cur_wr:.0f}% of years"
+
+# Persist a BULLISH/BEARISH seasonal bias for the current month (source='seasonality').
+# Neutral / no-data months are skipped. Dedupe (pair+bias+price) keeps it to once
+# per price level — a seasonal bias is a slow-moving tailwind, not a repeat trigger.
+if band_color in ("#00ff66", "#ff3344"):
+    try:
+        from src.services.signal_store import persist_signals
+        _entry = float(hist["Close"].iloc[-1]) if "Close" in getattr(hist, "columns", []) else None
+        persist_signals("seasonality", [{
+            "pair": selected_pair,
+            "bias": "Long" if band_color == "#00ff66" else "Short",
+            "entry": _entry,
+            "conviction": f"{cur_month_name} seasonal",
+            "thesis": (f"Seasonality — {cur_month_name} avg {cur_avg:+.2f}%, "
+                       f"green {cur_wr:.0f}% of {years_covered} years"),
+        }])
+    except Exception:
+        pass
 
 st.markdown(f"""
 <div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);

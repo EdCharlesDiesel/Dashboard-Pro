@@ -1,6 +1,8 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -128,9 +130,9 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily(ticker: str) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1d", period="1y",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1d", period="1y", ttl=300)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
@@ -314,8 +316,7 @@ def build_chart(m: dict, pair: str,
         x=df.index,
         open=df["Open"], high=df["High"],
         low=df["Low"],   close=df["Close"],
-        increasing_line_color="#00ff66", decreasing_line_color="#ff3344",
-        increasing_fillcolor="rgba(63,185,80,0.20)", decreasing_fillcolor="rgba(248,81,73,0.20)",
+        **CANDLE_STYLE,
         name="Daily", showlegend=False,
     ), row=1, col=1)
 
@@ -524,6 +525,16 @@ with tab_scan:
     bear_s      = [p for p, v in loaded_s.items() if v["verdict"] == "BEARISH"]
     flat_s      = [p for p, v in loaded_s.items() if v["verdict"] == "FLAT"]
     no_data_s   = [p for p in INSTRUMENTS if p not in loaded_s]
+
+    # Persist firm BULLISH/BEARISH MACD verdicts as directional signals
+    # (deduped per pair/direction/price, tagged source='daily_macd').
+    persist_signals("daily_macd", [{
+        "pair": p,
+        "bias": "Long" if loaded_s[p]["verdict"] == "BULLISH" else "Short",
+        "entry": loaded_s[p]["price"],
+        "conviction": loaded_s[p]["verdict"],
+        "thesis": f"Daily MACD — {loaded_s[p]['verdict']}, hist {loaded_s[p]['h_now']:.5f}",
+    } for p in (bull_s + bear_s)])
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     for col_, val_, lbl_, c_ in [

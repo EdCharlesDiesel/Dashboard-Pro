@@ -149,7 +149,8 @@ def _cache(ttl):
 def load_spot(ticker: str, period: str = "2y") -> pd.Series:
     if yf is None:
         return pd.Series(dtype=float)
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
     if df is None or df.empty:
         return pd.Series(dtype=float)
     if isinstance(df.columns, pd.MultiIndex):
@@ -258,6 +259,21 @@ def render():
     m[2].metric("Extreme bands", f"{bands['lower']:+.2f} / {bands['upper']:+.2f}")
     if proxy_note:
         st.caption(proxy_note)
+
+    # Persist the contrarian read — but NOT on synthetic demo data (data honesty).
+    # Overbought → contrarian SELL (Short); Oversold → contrarian BUY (Long).
+    if source != "Demo (synthetic)" and ("Overbought" in state or "Oversold" in state):
+        try:
+            from src.services.signal_store import persist_signals
+            persist_signals("risk_reversal", [{
+                "pair": pair,
+                "bias": "Short" if "Overbought" in state else "Long",
+                "entry": float(spot.iloc[-1]),
+                "conviction": "RR contrarian",
+                "thesis": f"Risk Reversal — {state} (RR {last:+.2f})",
+            }])
+        except Exception:
+            pass
 
     st.plotly_chart(_chart(spot, rr, bands, signals, pair), width="stretch")
     st.caption("Dashed RR (right axis) vs spot (left). Red/green dashed lines are "

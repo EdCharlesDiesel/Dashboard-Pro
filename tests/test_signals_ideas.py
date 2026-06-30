@@ -9,8 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import json
+
 from src.core.config import default_config as config
-from src.core.signals import generate_trading_ideas, generate_weekly_swing_ideas
+from src.core.signals import (
+    generate_trading_ideas,
+    generate_weekly_swing_ideas,
+    signal_to_setup_row,
+)
 
 _TF_BARS = {"Weekly": 120, "Daily": 200, "4 Hour": 200, "Hourly": 200, "15 Minute": 200}
 
@@ -74,3 +80,78 @@ class TestGenerateWeeklySwingIdeas:
         data = {"Weekly": {p: _frame(10, 1.0, 1.3) for p in config.assets},
                 "Daily": {p: _frame(120, 1.0, 1.3) for p in config.assets}}
         assert generate_weekly_swing_ideas(data) == []
+
+
+# Columns TradeRepository.save_setup writes — the row from signal_to_setup_row
+# must supply every one (a missing key would KeyError on the named INSERT).
+_SAVE_SETUP_COLUMNS = {
+    "logged_at", "instrument", "ticker", "direction", "session", "score",
+    "verdict", "atr14", "atr20", "sl_pips", "tp1_pips", "tp2_pips", "lot_size",
+    "risk_amount", "rr_tp1", "rr_tp2", "account_bal", "risk_pct",
+    "checks_passed", "checks_total", "checks_detail", "notes",
+}
+
+
+class TestSignalToSetupRow:
+    def _idea(self, **over):
+        idea = {
+            "pair": "EUR/USD", "bias": "Long", "conviction": "High",
+            "strength_score": 9, "confidence": 4, "thesis": "Strong MTF uptrend",
+            "entry": 1.10000, "take_profit_1": 1.10500, "take_profit_2": 1.11000,
+            "stop_loss": 1.09700, "stop_loss_method": "ATR", "stop_loss_pips": 30.0,
+            "risk_reward_1": 1.67, "risk_reward_2": 3.33, "atr": 0.0015,
+        }
+        idea.update(over)
+        return idea
+
+    def test_row_has_every_save_setup_column(self):
+        row = signal_to_setup_row(self._idea(), "NY Kill Zone")
+        assert _SAVE_SETUP_COLUMNS <= set(row)
+
+    def test_maps_registry_ticker_and_core_fields(self):
+        row = signal_to_setup_row(self._idea(), "NY Kill Zone")
+        assert row["instrument"] == "EUR/USD"
+        assert row["ticker"] == "EURUSD=X"      # resolved from the registry
+        assert row["direction"] == "Long"
+        assert row["session"] == "NY Kill Zone"
+        assert row["score"] == "9/10"
+        assert row["verdict"] == "High"
+        assert row["rr_tp1"] == 1.67
+
+    def test_targets_converted_to_pips(self):
+        # EUR/USD pip_size 0.0001 → 1.10500-1.10000 = 50 pips, 1.11000 = 100 pips.
+        row = signal_to_setup_row(self._idea(), "")
+        assert row["tp1_pips"] == 50.0
+        assert row["tp2_pips"] == 100.0
+        assert row["sl_pips"] == 30.0           # passed through from the idea
+
+    def test_sizing_fields_are_none(self):
+        row = signal_to_setup_row(self._idea(), "")
+        for col in ("lot_size", "risk_amount", "account_bal", "risk_pct"):
+            assert row[col] is None
+
+    def test_checks_detail_is_valid_json_with_context(self):
+        row = signal_to_setup_row(self._idea(), "")
+        detail = json.loads(row["checks_detail"])
+        assert detail["stop_loss"] == 1.09700
+        assert detail["thesis"] == "Strong MTF uptrend"
+        assert detail["strength_score"] == 9
+
+    def test_verdict_capped_at_db_column_width(self):
+        # verdict maps to a VARCHAR(20) column — a long conviction must be capped.
+        row = signal_to_setup_row(
+            self._idea(conviction="BUY XAU/USD — STRONG CONVICTION"), "")
+        assert len(row["verdict"]) <= 20
+
+    def test_unknown_pair_degrades_without_crashing(self):
+        row = signal_to_setup_row(self._idea(pair="ZZZ/ZZZ"), "")
+        assert row["instrument"] == "ZZZ/ZZZ"
+        assert row["ticker"] is None            # not in the registry
+        assert row["tp1_pips"] == 50.0          # default pip_size 0.0001 used
+
+    def test_real_idea_maps_cleanly(self, uptrend_universe):
+        ideas, _ = generate_trading_ideas(uptrend_universe)
+        assert ideas
+        row = signal_to_setup_row(ideas[0], "London Kill Zone")
+        assert _SAVE_SETUP_COLUMNS <= set(row)
+        json.loads(row["checks_detail"])        # serialisable

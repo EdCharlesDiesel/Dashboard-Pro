@@ -1,4 +1,4 @@
-"""Unit tests for src/db/cache.py — pooling proxy + read-cache invalidation."""
+"""Unit tests for src/db/cache.py — pooling proxy + direct (uncached) reads."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -92,14 +92,73 @@ class TestCfgHelper:
         assert cfg.password == "p"
 
 
-class TestInvalidation:
-    def test_all_reads_are_cache_wrapped(self):
-        for fn in cache._READ_CACHES:
-            assert hasattr(fn, "clear"), f"{fn} is not @st.cache_data wrapped"
+class TestDirectReads:
+    """Reads go straight to Postgres through the pool — no intermediate cache, so
+    each call hits the repository."""
 
-    def test_clear_read_caches_runs(self):
-        # Should clear every read cache without error.
-        cache.clear_read_caches()
+    def test_each_call_queries_the_repo(self, monkeypatch):
+        calls = {"n": 0}
+
+        class Repo:
+            def load_open(self):
+                calls["n"] += 1
+                return [{"id": 1}]
+
+        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
+
+        first = cache.cached_load_open("h", 5432, "trading", "u", "p")
+        second = cache.cached_load_open("h", 5432, "trading", "u", "p")
+
+        assert first == [{"id": 1}] == second
+        assert calls["n"] == 2  # no cache — the loader runs on every call
+
+    def test_none_result_passes_through(self, monkeypatch):
+        """A legitimate None (no closed trades) is returned unchanged."""
+        calls = {"n": 0}
+
+        class Repo:
+            def performance_stats(self, n=20):
+                calls["n"] += 1
+                return None
+
+        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
+
+        assert cache.cached_performance_stats("h", 5432, "trading", "u", "p") is None
+        assert calls["n"] == 1
+
+
+class TestAppState:
+    def test_get_state_queries_the_repo(self, monkeypatch):
+        calls = {"n": 0}
+
+        class Repo:
+            def get_state(self, key):
+                calls["n"] += 1
+                return {"balance": 100.0}
+
+        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
+        a = cache.cached_get_state("h", 5432, "trading", "u", "p", "account_balance")
+        b = cache.cached_get_state("h", 5432, "trading", "u", "p", "account_balance")
+        assert a == b == {"balance": 100.0}
+        assert calls["n"] == 2  # no cache — each read queries the repo
+
+    def test_set_state_writes_to_the_repo(self, monkeypatch):
+        written = {}
+
+        class Repo:
+            def set_state(self, key, value):
+                written["key"] = key
+                written["value"] = value
+
+        monkeypatch.setattr(cache, "pooled_repository", lambda cfg: Repo())
+        cache.set_state("h", 5432, "trading", "u", "p",
+                        "account_balance", {"balance": 777.0})
+        assert written == {"key": "account_balance", "value": {"balance": 777.0}}
+
+
+class TestInvalidation:
+    def test_clear_read_caches_is_noop(self):
+        cache.clear_read_caches()  # retained for API compat; must not raise
 
     def test_read_cache_set_is_complete(self):
         names = {fn.__name__ for fn in cache._READ_CACHES}

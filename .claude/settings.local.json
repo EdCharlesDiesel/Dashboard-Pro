@@ -98,7 +98,12 @@
       "Bash(grep -vE \"ChainedAssignment|chained assignment|copy_on_write|intermediate object|never works|Try using|See the doc|ha\\\\['Open'\\\\]|^\\\\s*$|Such chained\")",
       "Bash(grep -vE \"Chained|chained|copy_on_write|intermediate|never works|Try using|See the|ha\\\\[|^\\\\s*$|Such chained|warn\")",
       "Bash(grep -vE \"ChainedAssignment|chained assignment|copy_on_write|intermediate object|never works|Try using|See the doc|ha\\\\['Open'\\\\]|^\\\\s*$|Such chained|Docs:\")",
-      "Bash(grep -vE \"Chained|chained|copy_on_write|intermediate|never works|Try using|See the|ha\\\\[|^\\\\s*$|Such chained\")"
+      "Bash(grep -vE \"Chained|chained|copy_on_write|intermediate|never works|Try using|See the|ha\\\\[|^\\\\s*$|Such chained\")",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Bash(grep \"db/cache.py\\\\|db\\\\\\\\\\\\\\\\cache.py\")",
+      "Bash(coverage *)",
+      "Bash(PYTHONIOENCODING=utf-8 coverage run -m pytest --no-cov)"
     ]
   }
 }

@@ -14,6 +14,7 @@ import streamlit as st
 import yfinance as yf
 
 from src.pages_lib.base import BloombergPage, PageContext
+from src.services.signal_store import persist_signals
 from src.ui.components import CommandBar, MetricCell, Panel, render_metric_row
 from src.ui.theme import BloombergTheme as T
 
@@ -31,12 +32,12 @@ _LOOKBACKS = {
 @st.cache_data(ttl=600, show_spinner=False)
 def _fetch_closes(period: str) -> pd.DataFrame:
     """Daily closes for DXY and Gold, aligned on shared sessions."""
+    from src.db.market_cache import cached_closes
     try:
-        raw = yf.download([DXY_TICKER, GOLD_TICKER], period=period,
-                          interval="1d", progress=False, auto_adjust=True)
-        if raw is None or raw.empty:
+        close = cached_closes([DXY_TICKER, GOLD_TICKER], period=period,
+                              interval="1d", ttl=600)
+        if close is None or close.empty:
             return pd.DataFrame()
-        close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
         close = close.rename(columns={DXY_TICKER: "DXY", GOLD_TICKER: "XAU/USD"})
         return close[["DXY", "XAU/USD"]].dropna()
     except Exception:
@@ -109,6 +110,19 @@ class DxyGoldPage(BloombergPage):
 
         # Who's stronger + what to do about it
         sig = self._strength_signal(closes)
+
+        # Persist a directional XAU/USD read when there's a clear side
+        # (source='dxy_gold'); "NO CLEAR SIDE — WAIT" is not saved.
+        if sig["action"].startswith(("BUY", "SELL")):
+            persist_signals("dxy_gold", [{
+                "pair": "XAU/USD",
+                "bias": "Long" if sig["action"].startswith("BUY") else "Short",
+                "entry": xau_last,
+                "conviction": sig["action"],
+                "thesis": (f"DXY vs Gold — {sig['action']} (corr {current_corr:+.2f}) · "
+                           f"{sig['why'][:120]}"),
+            }])
+
         col_sig, col_regime = st.columns([3, 2], gap="medium")
         with col_sig:
             Panel("WHO'S STRONGER — TRADE SIGNAL", tag=sig["stronger"],

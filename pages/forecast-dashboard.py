@@ -31,6 +31,7 @@ from src.pages_lib.setup_ranker import fmt_price
 from src.services import backtest_service as bt
 from src.services.forecast_service import (
     run_forecast, run_statistical_forecast, backtest_forecast_accuracy)
+from src.services.signal_store import persist_signals
 
 warnings.filterwarnings("ignore")
 
@@ -89,7 +90,8 @@ def _dark(fig, height=360, **kw):
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def load_history(ticker: str, period: str, interval: str) -> pd.DataFrame:
-    df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval=interval, auto_adjust=False, ttl=1800)
     if df.empty:
         return df
     if isinstance(df.columns, pd.MultiIndex):
@@ -197,6 +199,21 @@ with tab_prob:
     · SL {fc.sl_dist/pip_sz:.0f}p / TP {fc.tp_dist/pip_sz:.0f}p</span><br>
   <span style="color:#9a9a9a;font-size:11px;">Close-touch estimates from 8,000 simulated paths; intraday wicks hit both levels slightly more often.</span>
 </div>""", unsafe_allow_html=True)
+
+    # Persist only when the Monte-Carlo model shows a real edge (source='forecast_dashboard').
+    if verdict == "EDGE":
+        _long = best_side == "LONG"
+        persist_signals("forecast_dashboard", [{
+            "pair": pair,
+            "bias": "Long" if _long else "Short",
+            "entry": float(fc.last),
+            "stop_loss": float(fc.last - fc.sl_dist if _long else fc.last + fc.sl_dist),
+            "take_profit_1": float(fc.last + fc.tp_dist if _long else fc.last - fc.tp_dist),
+            "stop_loss_pips": round(fc.sl_dist / pip_sz, 1),
+            "conviction": f"MC edge {best_edge*100:.0f}%",
+            "thesis": (f"Forecast Lab — {best_side} edge {best_edge*100:.0f}%, "
+                       f"P(up) {fc.p_up*100:.0f}% over {horizon}d"),
+        }])
 
     cc1, cc2 = st.columns([3, 2])
     hist_tail = close.iloc[-60:]

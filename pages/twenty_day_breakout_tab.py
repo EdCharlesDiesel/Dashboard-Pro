@@ -172,7 +172,8 @@ def _cache(ttl):
 def load_ohlcv(ticker: str, period: str = "2y") -> pd.DataFrame:
     if yf is None:
         return pd.DataFrame()
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc(ticker, period=period, interval="1d", ttl=3600)
     if df is None or df.empty:
         return pd.DataFrame()
     if isinstance(df.columns, pd.MultiIndex):
@@ -254,6 +255,26 @@ def render():
                 "side.")
         st.plotly_chart(_chart(df, [], None), width="stretch")
         return
+
+    # Persist currently-OPEN setups (unresolved → live signals) to the journal DB.
+    # Resolved (target/stop) setups are historical backtest outcomes and are not saved.
+    try:
+        from src.services.signal_store import persist_signals
+        from src.instruments import INSTRUMENTS
+        _name = next((n for n, i in INSTRUMENTS.items() if i.ticker == ticker), ticker)
+        persist_signals("twenty_day_breakout", [{
+            "pair": _name,
+            "bias": "Long" if s["side"] == "long" else "Short",
+            "entry": s["entry"],
+            "stop_loss": s["stop"],
+            "take_profit_1": s["target"],
+            "stop_loss_pips": s.get("risk_pips"),
+            "conviction": "20-day breakout",
+            "thesis": (f"20-Day Breakout failure-test ({s['side']}) — entry "
+                       f"{s['entry']:.4f}, stop {s['stop']:.4f}, +1R {s['target']:.4f}"),
+        } for s in setups if s.get("outcome") == "open"])
+    except Exception:
+        pass
 
     stats = setup_stats(setups)
     m = st.columns(4)

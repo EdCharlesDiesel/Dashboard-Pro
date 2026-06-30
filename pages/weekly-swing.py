@@ -1,6 +1,8 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -137,9 +139,9 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_weekly(ticker: str) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1wk", period="2y",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1wk", period="2y", ttl=600)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
@@ -151,9 +153,9 @@ def fetch_weekly(ticker: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily(ticker: str) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, interval="1d", period="6mo",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, interval="1d", period="6mo", ttl=300)
         if df.empty:
             return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
@@ -363,10 +365,7 @@ def build_weekly_chart(sw: dict, pair: str, show_n: int = 52) -> go.Figure:
         x=df.index,
         open=df["Open"], high=df["High"],
         low=df["Low"], close=df["Close"],
-        increasing_line_color="#00ff66",
-        decreasing_line_color="#ff3344",
-        increasing_fillcolor="rgba(63, 185, 80, 0.20)",
-        decreasing_fillcolor="rgba(248, 81, 73, 0.20)",
+        **CANDLE_STYLE,
         name="Weekly",
         showlegend=False,
     ), row=1, col=1)
@@ -457,10 +456,7 @@ def build_daily_chart(dt: dict, pair: str, fast: int, slow: int,
         x=df.index,
         open=df["Open"], high=df["High"],
         low=df["Low"], close=df["Close"],
-        increasing_line_color="#00ff66",
-        decreasing_line_color="#ff3344",
-        increasing_fillcolor="rgba(63, 185, 80, 0.20)",
-        decreasing_fillcolor="rgba(248, 81, 73, 0.20)",
+        **CANDLE_STYLE,
         name="Daily",
         showlegend=False,
     ), row=1, col=1)
@@ -637,6 +633,18 @@ with tab_scan:
     ranging  = [p for p, v in loaded_s.items() if v["aln"]["status"] == "RANGING"]
     unclear  = [p for p, v in loaded_s.items() if v["aln"]["status"] == "UNCLEAR"]
     no_data  = [p for p in INSTRUMENTS if p not in loaded_s]
+
+    # Persist ALIGNED pairs (weekly bias confirmed by daily trend) as directional
+    # signals — deduped per pair/direction/price, tagged source='weekly_swing'.
+    _aligned_signals = [{
+        "pair": p,
+        "bias": "Long" if loaded_s[p]["sw"]["bias"] == "BULLISH" else "Short",
+        "entry": loaded_s[p]["dt"]["price"],
+        "conviction": "Aligned",
+        "thesis": (f"Weekly Swing — weekly {loaded_s[p]['sw']['bias']} aligned with "
+                   f"daily {loaded_s[p]['dt']['trend']}"),
+    } for p in aligned]
+    persist_signals("weekly_swing", _aligned_signals)
 
     s1, s2, s3, s4, s5 = st.columns(5)
     for col_, val_, lbl_, c_ in [

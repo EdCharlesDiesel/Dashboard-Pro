@@ -70,5 +70,23 @@ services:
       start_period: 20s
       retries: 3
 
+  # data_backbone background refresher: warms the store on startup, then upserts
+  # every watched ticker/FRED series daily (see src/data_backbone/worker.py).
+  worker:
+    build: .
+    image: dashboard-pro:1.0.1
+    restart: unless-stopped
+    command: ["python", "-m", "src.data_backbone.worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-trading}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      FRED_API_KEY: ${FRED_API_KEY:-}
+
 volumes:
   pgdata:

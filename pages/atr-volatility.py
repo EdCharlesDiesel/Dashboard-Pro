@@ -91,15 +91,10 @@ INSTRUMENTS = {
     "XPT/USD":{"ticker": "PL=F",  "pip_size": 0.10,  "pip_label": "0.10"},
 }
 
-# Typical retail broker spreads in pips (used for Spread/ATR ratio check; >5% = caution)
-TYPICAL_SPREADS = {
-    "EUR/USD": 1.2, "GBP/USD": 1.5, "AUD/USD": 1.5, "NZD/USD": 2.0,
-    "USD/JPY": 1.2, "USD/CHF": 2.0, "USD/CAD": 2.0, "EUR/GBP": 1.5,
-    "EUR/JPY": 2.0, "GBP/JPY": 3.0, "AUD/JPY": 2.5, "EUR/AUD": 3.0,
-    "GBP/AUD": 3.5, "EUR/CAD": 3.0, "GBP/CAD": 3.5, "USD/ZAR": 80.0,
-    "EUR/ZAR": 90.0, "GBP/ZAR": 90.0,
-    "XAU/USD": 3.0, "XAG/USD": 5.0, "XPT/USD": 8.0,
-}
+# Typical retail broker spreads in pips (used for Spread/ATR ratio check; >5% =
+# caution). Sourced from the instrument registry — the single source of truth —
+# rather than a local copy, so every page shares the same values.
+from src.instruments.registry import TYPICAL_SPREADS
 
 # ── ATR Calculation ────────────────────────────────────────────────────────────
 def calc_atr(high, low, close, period):
@@ -112,9 +107,9 @@ def calc_atr(high, low, close, period):
 # ── Data Fetcher ───────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_instrument_data(ticker: str, pip_size: float, period: str = "60d", interval: str = "1d"):
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period=period, interval=interval,
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period=period, interval=interval, ttl=300)
         if df.empty or len(df) < 25:
             return None
 

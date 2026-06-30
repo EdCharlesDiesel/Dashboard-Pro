@@ -41,18 +41,11 @@ class TrendSignalEvaluator:
     def fetch(
         ticker: str, interval: str, period: str, resample: Optional[str]
     ) -> Optional[pd.DataFrame]:
-        """Pull OHLCV from yfinance + indicators. None if download failed."""
-        try:
-            df = yf.download(
-                ticker, interval=interval, period=period,
-                progress=False, auto_adjust=True,
-            )
-        except Exception:
-            return None
+        """Pull OHLCV (read-through Postgres cache) + indicators. None on failure."""
+        from src.db.market_cache import cached_ohlc
+        df = cached_ohlc(ticker, period=period, interval=interval, ttl=300)
         if df is None or df.empty:
             return None
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
         required_cols = ["Open", "High", "Low", "Close", "Volume"]
         if not all(col in df.columns for col in required_cols):
             return None

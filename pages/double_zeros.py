@@ -210,8 +210,9 @@ with st.sidebar:
 
 if run:
     with st.spinner("Downloading data..."):
+        from src.db.market_cache import cached_ohlc
         # Yahoo Finance limit: 15m data available for ~60 days
-        df = yf.download(pair, start=start_date, end=end_date, interval="15m")
+        df = cached_ohlc(pair, start=start_date, end=end_date, interval="15m", ttl=300)
         if df.empty:
             st.error("No data found. Try a different date range or pair.")
             st.stop()

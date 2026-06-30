@@ -1,6 +1,7 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -79,17 +80,11 @@ span[data-baseweb="tag"] svg{ fill:#000000 !important; }
 # ─────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_4h_data(ticker: str, days: int = 90) -> pd.DataFrame:
+    from src.db.market_cache import cached_ohlc
     end = datetime.now(pytz.utc)
     start = end - timedelta(days=days)
 
-    df = yf.download(
-        ticker,
-        start=start,
-        end=end,
-        interval="1h",
-        progress=False,
-        auto_adjust=True,
-    )
+    df = cached_ohlc(ticker, start=start, end=end, interval="1h", ttl=300)
 
     if df.empty:
         return df
@@ -240,9 +235,9 @@ def safe_rgba(hex_color: str, opacity: float) -> str:
 @st.cache_data(ttl=300, show_spinner=False)
 def get_pdh_pdl(ticker: str):
     """Return previous day High/Low from daily data."""
+    from src.db.market_cache import cached_ohlc
     try:
-        df = yf.download(ticker, period="5d", interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc(ticker, period="5d", interval="1d", ttl=300)
         if df.empty or len(df) < 2:
             return None
         if isinstance(df.columns, pd.MultiIndex):
@@ -394,6 +389,16 @@ with tab_scan:
             scan_results.append({"pair": pair_name, "ok": False})
 
     prog.empty()
+
+    # Persist pairs with a strong 4H confluence zone (non-directional → Neutral bias).
+    persist_signals("confluence_zone_4h", [{
+        "pair": r["pair"],
+        "bias": "Neutral",
+        "entry": r["current_price"],
+        "conviction": "Strong zone",
+        "thesis": (f"4H Confluence Zone — {r.get('strong', 0)} strong zone(s)"
+                   f"{' + key level' if r.get('has_key_level') else ''}"),
+    } for r in scan_results if r.get("ok") and r.get("strong", 0) > 0])
 
     # ── Summary counts ──────────────────────────
     cnt_strong   = sum(1 for r in scan_results if r.get("ok") and r.get("strong", 0) > 0)

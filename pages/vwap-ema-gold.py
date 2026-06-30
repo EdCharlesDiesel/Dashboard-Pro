@@ -31,7 +31,9 @@ from datetime import datetime
 import warnings
 
 from src.ui.theme import BloombergTheme
+from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 
 warnings.filterwarnings("ignore")
 
@@ -107,12 +109,11 @@ with st.sidebar:
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_gold_data(period_days: int, interval: str) -> pd.DataFrame:
     """Fetch XAU/USD (GC=F) OHLCV, robust to yfinance's MultiIndex columns."""
-    df = yf.download("GC=F", period=f"{period_days}d", interval=interval,
-                     progress=False, auto_adjust=True)
+    from src.db.market_cache import cached_ohlc
+    df = cached_ohlc("GC=F", period=f"{period_days}d", interval=interval, ttl=300)
     if df.empty:
         # Intraday windows are capped (~60d for <1h); fall back to daily.
-        df = yf.download("GC=F", period=f"{period_days}d", interval="1d",
-                         progress=False, auto_adjust=True)
+        df = cached_ohlc("GC=F", period=f"{period_days}d", interval="1d", ttl=300)
     if df.empty:
         return df
 
@@ -316,6 +317,19 @@ signals = identify_entry_signals(df)
 trades, equity_curve = backtest_strategy(df, signals)
 metrics, df_trades = calculate_metrics(trades, equity_curve)
 
+# Persist only a signal firing on the latest bar (a current, actionable read) —
+# the rest of `signals` are historical entries for the backtest. source='vwap_ema_gold'.
+if signals and signals[-1][1] >= len(df) - 2:
+    _side, _i, _px, _atr = signals[-1]
+    persist_signals("vwap_ema_gold", [{
+        "pair": "XAU/USD",
+        "bias": "Long" if _side == "LONG" else "Short",
+        "entry": float(_px),
+        "atr": float(_atr) if _atr else None,
+        "conviction": "VWAP+EMA pullback",
+        "thesis": f"VWAP-EMA Gold — {_side} rejection at VWAP/EMA pullback",
+    }])
+
 c1, c2, c3 = st.columns(3)
 c1.success(f"✅ {len(df)} bars loaded")
 c2.info(f"📊 {len(signals)} entry signals")
@@ -350,7 +364,7 @@ if metrics:
     )
     fig.add_trace(go.Candlestick(
         x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
-        name="Price", increasing_line_color=T.GREEN, decreasing_line_color=T.RED,
+        name="Price", **CANDLE_STYLE,
     ), row=1, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df["EMA_pull"], name=f"EMA {ema_pull}",
                              line=dict(color=T.YELLOW, width=1)), row=1, col=1)
