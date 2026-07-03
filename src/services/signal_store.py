@@ -92,19 +92,20 @@ def persist_signals(
     try:
         sess = session if session is not None else SessionService.current().get("window", "")
         repo = pooled_repository(cfg)
-        saved = 0
+        saved_keys: List[str] = []
         for sig, key in fresh:
             try:
                 repo.save_setup(signal_to_setup_row(sig, sess), source=source)
-                seen.add(key)  # mark seen only after a successful write
-                saved += 1
+                saved_keys.append(key)  # mark seen only after a successful write
             except Exception as exc:
                 logger.warning("Signal save failed (%s/%s): %s", source, sig.get("pair"), exc)
-        if saved:
-            cache.save(seen)
+        if saved_keys:
+            # Atomic merge (not overwrite) so a concurrent run's saved keys aren't
+            # lost — otherwise the same signal could be saved twice.
+            cache.add(saved_keys)
             clear_read_caches()  # no-op kept for API compat; reads are uncached
-            logger.info("Saved %d signal(s) from %s", saved, source)
-        return saved
+            logger.info("Saved %d signal(s) from %s", len(saved_keys), source)
+        return len(saved_keys)
     except Exception as exc:
         logger.warning("Signal persistence skipped (%s): %s", source, exc)
         return 0

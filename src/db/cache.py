@@ -60,12 +60,20 @@ class _LeasedConnection:
         self._pool.putconn(self._conn)
 
 
+# Sized to cover a scan page's parallel fetch fan-out (src/services/
+# parallel_fetch.py, DEFAULT_MAX_WORKERS=8) plus headroom for other
+# concurrent reads/writes (repository + market-data pools share this cache
+# per DB target, and both trade_repository and market_data_repository draw
+# from it at once during a scan).
+_POOL_MAXCONN = 12
+
+
 @st.cache_resource(show_spinner=False)
 def _get_pool(host: str, port: int, dbname: str, user: str, password: str):  # pragma: no cover - opens a live Postgres pool
     """One pool per distinct DB target, cached for the app's lifetime."""
     return psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
-        maxconn=5,
+        maxconn=_POOL_MAXCONN,
         host=host,
         port=int(port),
         dbname=dbname,

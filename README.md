@@ -3,8 +3,10 @@
 A professional **forex & metals day-trading terminal** built on Streamlit. It
 walks you top-down through a single trading decision — scan the market, filter
 the day, establish bias, confirm, find the zone, wait for the trigger, size the
-risk, execute, and review — across **38 purpose-built pages** that all share one
-analysis engine and one Bloomberg-style terminal theme.
+risk, execute, and review — across **25 active pages** that all share one
+analysis engine and one Bloomberg-style terminal theme. (Trimmed from 45 for a
+leaner daily forex workflow — the retired pages live in `archive/pages/`, not
+deleted; see [Archived pages](#archived-pages) below.)
 
 It trades the 21-pair forex universe **plus metals** — Gold (XAU/USD), Silver
 (XAG/USD) and Platinum (XPT/USD) — from one instrument registry, so every page
@@ -21,7 +23,7 @@ scans the identical universe with the identical tickers.
 ```
 Dashboard-Pro/
 ├── app.py                  # Entry point — the 18-point Daily Checklist (master page)
-├── pages/                  # 44 workflow pages (auto-register as Streamlit multipage)
+├── pages/                  # 24 active workflow pages (auto-register as Streamlit multipage)
 ├── src/
 │   ├── core/               # analyzer, signals, config — the shared analysis engine
 │   ├── indicators/         # EMA/RSI/MACD/ADX/ATR + the 6-condition trend scorer
@@ -31,7 +33,7 @@ Dashboard-Pro/
 │   ├── db/                 # Postgres journal (trade_repository) + cache/pool layer
 │   └── ui/                 # terminal theme & HTML components
 ├── tests/                  # pytest suite (logic + DB layer ~92% cov; page smoke tests)
-└── archive/                # legacy experiments — not imported, do not touch
+└── archive/                # legacy experiments + 21 retired pages (archive/pages/) — not imported, do not touch
 ```
 
 The sidebar navigation is defined in **one file**,
@@ -93,46 +95,32 @@ them top to bottom; most days you touch a handful and take one clean trade.
 | # | Page | What it's for |
 |---|------|---------------|
 | 00 | [📋 Daily Checklist](app.py) | **The cockpit.** The 18-point pre-trade gate; saves the trade and the journal. Everything else feeds this. |
-| 01 | [🛫 Daily Cockpit](pages/daily_cockpit_tab.py) | Pre-market routine on one screen — risk regime → rate bias → events → fresh setups, with the parts that agree flagged. |
-| 02 | [📊 Market Overview](pages/market-overview.py) | Morning snapshot — headline KPIs + price table across FX, metals, indices. Its analysis tabs are now the 02a–02f pages below. |
-| 02a | [🎯 Trading Ideas](pages/trading-ideas.py) | Live, auto-refreshing multi-timeframe setups; fires the email/sound/DB alerts. |
-| 02b | [🧭 MTF Matrix](pages/mtf-matrix.py) | Weekly/Daily/4H/Hourly sentiment alignment grid per pair. |
-| 02c | [📈 Technical Chart](pages/technical-chart.py) | Perfect-Order SMA stack (10>20>50>100>200) + ADX, with the entry plan. |
-| 02d | [🛒 Pivots & Fibonacci](pages/pivots-fibonacci.py) | Pivot points and Fibonacci levels on the anchor timeframe. |
-| 02e | [🔊 Volume Profile](pages/volume-profile.py) | Volume-by-price: Point of Control and value-area high/low. |
-| 02f | [🏛 FRED Macro Grid](pages/fred-macro-grid.py) | 8-series FRED macro dashboard + a quick macro-regime read. |
+| 01 | [🛫 Daily Cockpit](pages/daily_cockpit_tab.py) | Pre-market routine on one screen — risk regime → rate bias → events → fresh setups, with the parts that agree flagged. Covers the full 21-pair + metals registry. |
+| 02 | [📊 Market Overview](pages/market-overview.py) | Morning snapshot — headline KPIs + price table across FX, metals, indices. |
 
 ### 1 · Scan — build the shortlist
 | # | Page | What it's for |
 |---|------|---------------|
-| 03 | [🎰 Setup Ranker](pages/setup-ranker.py) | The 10-point multi-timeframe scorer. Run **Both** directions; pairs scoring 7+/10 are today's candidates. |
+| 03 | [🎰 Setup Ranker](pages/setup-ranker.py) | The 10-point multi-timeframe scorer. Auto-refreshes every 5 min; run **Both** directions; pairs scoring 7+/10 are today's candidates, 9-10 fire an email alert. |
 | 04 | [📊 AMD Scanner](pages/amd-scanner.py) | Accumulation / Manipulation / Distribution scanner (1H × 1 month). |
 | 05 | [📡 Trend Signals](pages/trend-signals.py) | The 6-condition trend-following scan (50/200 EMA, RSI, MACD, ADX). |
 | 06 | [🚀 20-Day Breakout](pages/twenty_day_breakout_tab.py) | Donchian-style 20-day breakout candidates. |
-| 07 | [🕵️ Smart Money](pages/smart_money_tab.py) | Order-block / liquidity (smart-money concepts) view. |
+| 07 | [📦 CME FX Futures](pages/cme-futures-volume.py) | Real, exchange-reported volume for FX via CME currency futures (6E=F, 6B=F, …) — OBV/CMF that actually mean something, unlike on zero-volume spot pairs. |
 | 08 | [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |
-| 09 | [📈 Forecast Lab](pages/forecast-dashboard.py) | Time-series forecasting sandbox. |
 | 10 | [🟡 VWAP-EMA Gold](pages/vwap-ema-gold.py) | A dedicated VWAP+EMA strategy view for Gold. |
 
 ### 2 · Filter the day — macro & risk backdrop
 | # | Page | What it's for |
 |---|------|---------------|
-| 11 | [🌐 Macro Bias](pages/macro-bias.py) | Rate differentials, inflation, GDP per currency — the directional filter. |
-| 12 | [🌍 Forex Fundamentals](pages/forex_fundamentals_tab.py) | Priced-in analyzer + risk-sentiment regime (see [methodology](#appendix--forex-fundamentals-methodology)). |
 | 13 | [💵 DXY vs Gold](pages/dxy-gold.py) | Dollar vs Gold inverse — the cross-asset confirmation. |
-| 14 | [🌡️ Market Regime](pages/regime.py) | Trending vs ranging vs volatile regime classifier. |
-| 15 | [🎭 Risk Reversals](pages/risk_reversal_tab.py) | Options-skew read on directional risk. |
+| 14 | [💪 Currency Strength](pages/currency-strength.py) | Ranks the 9 registry currencies strong → weak from average pair returns; surfaces the strongest-vs-weakest pair as the highest-probability trend trade. |
 | 16 | [📰 News Filter](pages/news-filter.py) | Red-folder events in the next hours — wait or skip. |
-| 17 | [📅 Event Impact](pages/event_impact_tab.py) | Historical reaction sizing around scheduled events. |
-| 18 | [📅 Seasonality](pages/seasonality.py) | Day-of-week / month seasonality tendencies. |
 | 19 | [🔗 Correlations](pages/correlations.py) | Stacked-exposure check before adding correlated risk. |
-| 20 | [📊 ATR Volatility](pages/atr-volatility.py) | Is spread/ATR ≤5%? Is volatility tradeable today? |
 
 ### 3 · Weekly bias
 | # | Page | What it's for |
 |---|------|---------------|
 | 21 | [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
-| 22 | [📡 Weekly RSI](pages/weekly-rsi.py) | Weekly RSI — room to run, or overextended? |
 | 23 | [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
 
 ### 4 · Daily confirm
@@ -152,7 +140,6 @@ them top to bottom; most days you touch a handful and take one clean trade.
 | # | Page | What it's for |
 |---|------|---------------|
 | 29 | [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Optional email alerts. |
-| 30 | [🎯 Double Zeros](pages/double_zeros.py) | Round-number (00/50) magnet levels for precise entries. |
 
 ### 7 · Risk & execute
 | # | Page | What it's for |
@@ -165,14 +152,36 @@ them top to bottom; most days you touch a handful and take one clean trade.
 | # | Page | What it's for |
 |---|------|---------------|
 | 34 | [📓 Trade Journal](pages/trade-journal.py) | Equity curve, win rate vs 66% target, MT4 statement import. |
-| 35 | [🧪 Backtest Lab](pages/backtest-workflow.py) | Historical strategy testing. |
-| 36 | [🧪 Trading Lab](pages/trading_lab_tab.py) | Strategy experiment sandbox. |
 
-### 9 · System
-| # | Page | What it's for |
-|---|------|---------------|
-| 37 | [📑 Reports](pages/reports.py) | Exportable performance/analytics reports. |
-| 38 | [🧾 System Logs](pages/system-logs.py) | Observability — runtime logs & diagnostics. |
+---
+
+## Archived pages
+
+21 pages were retired from the daily workflow (moved to `archive/pages/`, not
+deleted — full git history intact, code still imports/compiles) to keep the
+system focused on a lean, forex-daily-execution path. Two reasons:
+
+- **Not forex-usable**: Smart Money and Volume Profile both need real
+  exchange volume; spot FX (`=X` tickers) reports zero on yfinance, so
+  volume-based indicators on them are meaningless. [07 · CME FX
+  Futures](pages/cme-futures-volume.py) replaces the forex-relevant half of
+  Smart Money — CME currency futures (`6E=F`, `6B=F`, `6J=F`, …) carry real,
+  exchange-reported volume, so OBV/CMF on them are actually meaningful.
+- **Redundant or ambiguous**: several pages overlapped a kept page (Event
+  Impact vs News Filter, Weekly RSI vs Weekly EMA/Swing, Trading
+  Ideas/MTF Matrix/Technical Chart/Pivots & Fibonacci vs the pages that
+  already embed the same numbers), or were already flagged in this codebase
+  as a weak/ambiguous signal not wired to auto-save (Macro Bias, Forex
+  Fundamentals, Market Regime), or are periodic/research tools rather than
+  part of the daily loop (Backtest Lab, Trading Lab, Forecast Lab,
+  Seasonality, Reports, System Logs).
+
+Archived: Trading Ideas, MTF Matrix, Technical Chart, Pivots & Fibonacci,
+Volume Profile, FRED Macro Grid, Smart Money, Forecast Lab, Macro Bias, Forex
+Fundamentals, Market Regime, Risk Reversals, Event Impact, Seasonality, ATR
+Volatility, Weekly RSI, Double Zeros, Backtest Lab, Trading Lab, Reports,
+System Logs. To bring one back into the daily nav, move its file back to
+`pages/` and add its `NavEntry` back to `src/pages_lib/navigation.py`.
 
 ---
 
@@ -181,8 +190,11 @@ them top to bottom; most days you touch a handful and take one clean trade.
 The core principle is **confluence** — never trade a single signal. Each step
 narrows the universe until only high-probability setups remain.
 
-### Step 1 — Macro backdrop · [11 Macro Bias](pages/macro-bias.py) · [12 Forex Fundamentals](pages/forex_fundamentals_tab.py)
-Before touching a chart, understand *why* a pair should move.
+### Step 1 — Macro backdrop · [01 Daily Cockpit](pages/daily_cockpit_tab.py)
+Before touching a chart, understand *why* a pair should move. The Cockpit's
+rate-bias table (per-pair, full registry) and risk-regime read replace the
+old dedicated Macro Bias / Forex Fundamentals pages (archived — see
+[Archived pages](#archived-pages)) in one fused screen.
 
 | Factor | What to look for |
 |--------|-----------------|
@@ -194,7 +206,7 @@ Before touching a chart, understand *why* a pair should move.
 **Output:** *"Fundamental bias for [pair] is [Long/Short/Neutral] because [reason]."*
 Only look for setups that align with it.
 
-### Step 2 — Weekly trend · [21 Weekly EMA](pages/weekly-ema.py) · [22 Weekly RSI](pages/weekly-rsi.py) · [23 Weekly Swing](pages/weekly-swing.py)
+### Step 2 — Weekly trend · [21 Weekly EMA](pages/weekly-ema.py) · [23 Weekly Swing](pages/weekly-swing.py)
 - **EMA20 vs EMA50** — EMA20 above EMA50 with price above both = weekly uptrend.
 - **Price vs weekly pivot** — sustained above PP = buyers in control.
 - **RSI** — above 50 confirms bullish momentum; above 70, be cautious adding longs.
@@ -211,7 +223,7 @@ Only look for setups that align with it.
 The **confluence zone** = Fibonacci level (38.2 / 50 / 61.8%) + Pivot S/R + EMA20,
 all overlapping at one price. When two or three align there, that is where you execute.
 
-### Step 5 — Entry trigger · [29 15M Fib Entry](pages/15m-fib-entry.py) · [30 Double Zeros](pages/double_zeros.py)
+### Step 5 — Entry trigger · [29 15M Fib Entry](pages/15m-fib-entry.py)
 Wait for at least **two of three** within 1–2 candles: Stochastic cross below 25
 (longs), 15M RSI reset off 40, lower Bollinger-band touch curling back in.
 **Do not enter** if price is still slicing through the zone, the daily shows
@@ -264,17 +276,16 @@ You wake at the London Kill Zone open — the highest-probability window of the 
 | London Close | 15:00–17:00 | 17:00–19:00 | 🟡 Secondary |
 | Tokyo | 00:00–03:00 | 02:00–05:00 | 🔴 Avoid |
 
-**☕ 08:30–09:00 — Pre-market prep.** [03 Setup Ranker](pages/setup-ranker.py)
-(Both modes; 7+/10 = candidates) → [11 Macro Bias](pages/macro-bias.py) →
-[12 Forex Fundamentals](pages/forex_fundamentals_tab.py) (regime first!) →
-[16 News Filter](pages/news-filter.py) → [19 Correlations](pages/correlations.py)
-→ [21 Weekly EMA](pages/weekly-ema.py) / [22 Weekly RSI](pages/weekly-rsi.py) →
-[24 Daily Trend](pages/daily-trend.py) / [25 Daily MACD](pages/daily-macd.py).
+**☕ 08:30–09:00 — Pre-market prep.** [01 Daily Cockpit](pages/daily_cockpit_tab.py)
+(regime + rate bias + fresh setups, one screen) → [03 Setup Ranker](pages/setup-ranker.py)
+(Both modes; 7+/10 = candidates) → [16 News Filter](pages/news-filter.py) →
+[19 Correlations](pages/correlations.py) → [21 Weekly EMA](pages/weekly-ema.py) /
+[23 Weekly Swing](pages/weekly-swing.py) → [24 Daily Trend](pages/daily-trend.py) /
+[25 Daily MACD](pages/daily-macd.py).
 **Output:** 1–2 pairs confirmed by score + macro, with direction set.
 
 **🔎 09:00–09:15 — Confirm the zone.**
 [27 4H Confluence Zone](pages/4H-confluence-zone.py) →
-[20 ATR Volatility](pages/atr-volatility.py) (spread/ATR ≤5%?) →
 [28 Confluence Check](pages/confluence-checker.py).
 
 **⚡ 09:15–11:00 — Watch for the entry (London KZ).** Open
@@ -310,8 +321,12 @@ that is the path to a 66% win rate.
 
 ## Appendix — Forex Fundamentals methodology
 
+> **Forex Fundamentals is archived** (see [Archived pages](#archived-pages)) —
+> kept in `archive/pages/forex_fundamentals_tab.py`, not deleted. This section
+> documents its two engines for reference / in case it's restored.
+
 Documents the two trickier engines on
-[12 · Forex Fundamentals](pages/forex_fundamentals_tab.py): the **Priced-In
+[Forex Fundamentals](archive/pages/forex_fundamentals_tab.py): the **Priced-In
 Analyzer** and the **Risk Sentiment** gauge.
 
 ### Part 1 · Priced-In Analyzer
