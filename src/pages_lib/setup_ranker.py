@@ -18,6 +18,7 @@ from src.core.signals import score_setup
 from src.instruments import INSTRUMENTS, TYPICAL_SPREADS
 from src.pages_lib.base import BloombergPage, PageContext
 from src.services import RiskService, alert_service, account_state
+from src.services.parallel_fetch import run_parallel
 from src.services.signal_store import persist_signals
 from src.ui.components import (
     CommandBar, MetricCell, Panel, ProgressBar, render_metric_row,
@@ -164,9 +165,12 @@ class SetupRankerPage(BloombergPage):
         st.session_state.setdefault("risk_pct", 1.0)
         # Use the Trade Journal's live balance by default when it's available.
         st.session_state.setdefault("sr_use_live_bal", bool(account_state.get()))
-        # Email alerts (opt-in).
+        # Email alerts (opt-in — toggle it on in the sidebar to activate).
+        # Threshold default 9: only the top tier (9-10/10, not all of Grade A
+        # 8+) is worth an interruption; 8s still auto-save to the journal DB
+        # via _persist_signals regardless of this toggle.
         st.session_state.setdefault("sr_email_on", False)
-        st.session_state.setdefault("sr_email_min", 8)
+        st.session_state.setdefault("sr_email_min", 9)
         # User's house rule: every signal is taken as 2 trades.
         st.session_state.setdefault("sr_trades_per_signal", 2)
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
@@ -325,72 +329,111 @@ class SetupRankerPage(BloombergPage):
         ]).show()
 
         directions = ["LONG", "SHORT"] if direction == "Both" else [direction]
-        results = self._scan(pairs, directions, min_score)
 
-        # Auto-save Grade-A setups to the journal DB (deduped, source-tagged).
-        self._persist_signals(results, rr_ratio)
+        # Auto-refreshing fragment: re-scans, re-persists, and re-checks email
+        # alerts every 5 min on its own (matching the underlying data's cache
+        # TTL) without a manual "RESCAN ALL PAIRS" click or full-page rerun —
+        # same pattern as market_overview_lib's live trading-ideas fragment.
+        # Persistence + email dedupe are keyed per pair/direction/price, so an
+        # unattended tick that finds nothing new is a safe no-op.
+        @st.fragment(run_every=300, parallel=True)
+        def _scan_and_render():
+            results = self._scan(pairs, directions, min_score)
 
-        # Fire email alerts for newly-appearing high-score setups (opt-in).
-        if st.session_state.get("sr_email_on"):
-            self._maybe_email_alerts(results, rr_ratio, account_bal, risk_pct)
+            # Auto-save Grade-A setups to the journal DB (deduped, source-tagged).
+            self._persist_signals(results, rr_ratio)
 
-        # KPI strip
-        grade_counts = {
-            g: sum(1 for r in results if r["grade"] == g)
-            for g in ("A", "B", "C", "D")
-        }
-        # Projected profit if every Grade-A setup hit TP (one risk-unit each).
-        grade_a_win = 0.0
-        for r in results:
-            if r["grade"] != "A":
-                continue
-            inst = INSTRUMENTS.get(r["pair"])
-            mb = money_breakdown(r.get("sl_pips"), inst.pip if inst else None,
-                                 account_bal, risk_pct, rr_ratio)
-            if mb["win"] is not None:
-                grade_a_win += mb["win"]
-        render_metric_row([
-            MetricCell("Grade A (8–10)", str(grade_counts["A"]), "green"),
-            MetricCell("Grade B (6–7)",  str(grade_counts["B"]), "cyan"),
-            MetricCell("Grade C (4–5)",  str(grade_counts["C"]), "yellow"),
-            MetricCell("Grade D (<4)",   str(grade_counts["D"]), "red"),
-            MetricCell("Grade-A Win $",  f"+${grade_a_win:,.0f}", "green"),
-        ])
+            # Fire email alerts for newly-appearing high-score setups (opt-in).
+            if st.session_state.get("sr_email_on"):
+                self._maybe_email_alerts(results, rr_ratio, account_bal, risk_pct)
 
-        if not results:
-            st.info(f"◇ No pairs scored ≥{min_score}. Lower threshold or change direction.")
-            return
+            st.caption(f"◷ Auto-refreshes every 5 min · last scan "
+                      f"{datetime.now().strftime('%H:%M:%S')}")
 
-        st.markdown(
-            f'<div style="color:#9a9a9a;font-family:\'JetBrains Mono\',monospace;'
-            f'font-size:10px;margin:8px 0;">Entry ≈ current close · Stop from scorer\'s '
-            f'structural SL · TP = stop × {rr_ratio:.1f}R · WIN/RISK $ at '
-            f'{risk_pct:.2f}% of ${account_bal:,.0f}. Confirm on 15M before trading.</div>',
-            unsafe_allow_html=True,
-        )
+            # KPI strip
+            grade_counts = {
+                g: sum(1 for r in results if r["grade"] == g)
+                for g in ("A", "B", "C", "D")
+            }
+            # Projected profit if every Grade-A setup hit TP (one risk-unit each).
+            grade_a_win = 0.0
+            for r in results:
+                if r["grade"] != "A":
+                    continue
+                inst = INSTRUMENTS.get(r["pair"])
+                mb = money_breakdown(r.get("sl_pips"), inst.pip if inst else None,
+                                     account_bal, risk_pct, rr_ratio)
+                if mb["win"] is not None:
+                    grade_a_win += mb["win"]
+            render_metric_row([
+                MetricCell("Grade A (8–10)", str(grade_counts["A"]), "green"),
+                MetricCell("Grade B (6–7)",  str(grade_counts["B"]), "cyan"),
+                MetricCell("Grade C (4–5)",  str(grade_counts["C"]), "yellow"),
+                MetricCell("Grade D (<4)",   str(grade_counts["D"]), "red"),
+                MetricCell("Grade-A Win $",  f"+${grade_a_win:,.0f}", "green"),
+            ])
 
-        tab_cards, tab_table, tab_chart = st.tabs(["◆ RANKED", "▤ TABLE", "▦ CHART"])
-        with tab_cards: self._render_cards(results, rr_ratio, account_bal, risk_pct)
-        with tab_table: self._render_table(results, rr_ratio, account_bal, risk_pct)
-        with tab_chart: self._render_chart(results)
+            if not results:
+                st.info(f"◇ No pairs scored ≥{min_score}. Lower threshold or change direction.")
+                return
+
+            st.markdown(
+                f'<div style="color:#9a9a9a;font-family:\'JetBrains Mono\',monospace;'
+                f'font-size:10px;margin:8px 0;">Entry ≈ current close · Stop from scorer\'s '
+                f'structural SL · TP = stop × {rr_ratio:.1f}R · WIN/RISK $ at '
+                f'{risk_pct:.2f}% of ${account_bal:,.0f}. Confirm on 15M before trading.</div>',
+                unsafe_allow_html=True,
+            )
+
+            tab_cards, tab_table, tab_chart = st.tabs(["◆ RANKED", "▤ TABLE", "▦ CHART"])
+            with tab_cards: self._render_cards(results, rr_ratio, account_bal, risk_pct)
+            with tab_table: self._render_table(results, rr_ratio, account_bal, risk_pct)
+            with tab_chart: self._render_chart(results)
+
+        _scan_and_render()
 
     @staticmethod
     def _scan(pairs, directions, min_score) -> list:
+        """Score every pair × direction, fanned out one worker per pair.
+
+        Each pair's weekly/daily/4H fetch is I/O-bound (yfinance/Postgres), so
+        parallelizing across pairs turns the scan's wall-clock time from a sum
+        of ~N round-trips into a max over a few concurrent waves. Both
+        directions for a pair run in the same worker (fetched data is shared,
+        scoring itself is cheap CPU), preserving the original per-direction
+        exception isolation.
+        """
         results = []
         pairs_list = [(p, INSTRUMENTS[p]) for p in pairs if p in INSTRUMENTS]
-        total = len(pairs_list) * len(directions)
+        total = len(pairs_list)
         done = 0
         prog = st.progress(0, text="Scoring pairs…")
-        for pair_name, info in pairs_list:
+
+        def _score_pair(item):
+            pair_name, info = item
+            scored = []
             for d in directions:
-                done += 1
-                prog.progress(done / total, text=f"Scoring {pair_name} {d}…")
                 try:
-                    r = _SetupRankerDataFeed.score(pair_name, info, d)
-                    if r["score"] >= min_score:
-                        results.append(r)
+                    scored.append(_SetupRankerDataFeed.score(pair_name, info, d))
                 except Exception:
                     pass
+            return scored
+
+        def _on_progress(item):
+            nonlocal done
+            done += 1
+            prog.progress(done / total, text=f"Scoring {item[0]}…")
+
+        def _on_result(item, scored):
+            _on_progress(item)
+            for r in scored:
+                if r["score"] >= min_score:
+                    results.append(r)
+
+        def _on_error(item, exc):
+            _on_progress(item)
+
+        run_parallel(_score_pair, pairs_list, on_result=_on_result, on_error=_on_error)
         prog.empty()
         results.sort(key=lambda x: -x["score"])
         return results
@@ -430,7 +473,7 @@ class SetupRankerPage(BloombergPage):
         """Email setups scoring ≥ threshold that we haven't alerted on yet. The
         'seen' memory is only updated after a successful send, so a transient
         SMTP failure retries on the next scan instead of silently dropping."""
-        threshold = int(st.session_state.get("sr_email_min", 8))
+        threshold = int(st.session_state.get("sr_email_min", 9))
         qualifying = [r for r in results if r.get("score", 0) >= threshold]
         if not qualifying:
             return

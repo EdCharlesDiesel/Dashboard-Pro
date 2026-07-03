@@ -19,6 +19,8 @@ import logging
 import os
 import smtplib
 import ssl
+import tempfile
+import threading
 from email.message import EmailMessage
 from typing import Iterable, List, Optional, Tuple
 
@@ -77,11 +79,34 @@ def send_email(subject: str, html_body: str,
 # DEDUPE
 # ══════════════════════════════════════════════════════════════════
 
+# One lock per cache file, shared across every NotifyCache instance that points
+# at it. Streamlit serves each browser session on its own thread inside a single
+# process, so two sessions (or the alert + auto-save paths) can hit the same
+# namespace concurrently. The lock serializes each load→mutate→write so updates
+# merge instead of clobbering one another.
+_LOCKS: dict = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(path: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        lock = _LOCKS.get(path)
+        if lock is None:
+            lock = _LOCKS[path] = threading.Lock()
+        return lock
+
+
 class NotifyCache:
-    """File-backed set of already-alerted keys, namespaced per page."""
+    """File-backed set of already-alerted keys, namespaced per page.
+
+    Concurrency-safe: every read-modify-write is serialized by a per-file lock,
+    and the file itself is written atomically (temp file + ``os.replace``) so a
+    concurrent reader never sees a truncated/half-written JSON.
+    """
 
     def __init__(self, namespace: str) -> None:
         self.path = os.path.join(os.getcwd(), f"{namespace}_notify_cache.json")
+        self._lock = _lock_for(self.path)
 
     def load(self) -> set:
         try:
@@ -93,29 +118,57 @@ class NotifyCache:
         return set()
 
     def _save(self, keys: set) -> None:
+        """Atomically overwrite the file. Writes to a sibling temp file then
+        ``os.replace``s it into place, so a concurrent reader sees either the old
+        or the new file — never a partial one — and a crash mid-write can't
+        corrupt the ledger."""
         try:
-            with open(self.path, "w") as fh:
-                json.dump({"keys": sorted(keys)}, fh)
+            dir_ = os.path.dirname(self.path) or "."
+            fd, tmp = tempfile.mkstemp(dir=dir_, prefix=".notify_", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as fh:
+                    json.dump({"keys": sorted(keys)}, fh)
+                os.replace(tmp, self.path)  # atomic on the same filesystem
+            except Exception:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+                raise
         except Exception:
             pass
 
     def save(self, keys: Iterable[str]) -> None:
         """Overwrite the persisted set (for callers that manage the set in
         session state and just need it durable)."""
-        self._save(set(keys))
+        with self._lock:
+            self._save(set(keys))
+
+    def add(self, keys: Iterable[str]) -> set:
+        """Atomically merge ``keys`` into the persisted set; return the result.
+
+        Unlike :meth:`save`, this unions with whatever is already on disk under
+        the lock, so concurrent callers accumulate keys instead of overwriting
+        each other with a stale in-memory snapshot."""
+        with self._lock:
+            merged = self.load() | set(keys)
+            self._save(merged)
+            return merged
 
     def filter_new(self, keys: Iterable[str]) -> List[str]:
         """Return only keys not seen before, and record them as seen."""
-        seen = self.load()
-        new = [k for k in dict.fromkeys(keys) if k not in seen]  # de-dup + preserve order
-        if new:
-            seen.update(new)
-            self._save(seen)
-        return new
+        with self._lock:
+            seen = self.load()
+            new = [k for k in dict.fromkeys(keys) if k not in seen]  # de-dup + preserve order
+            if new:
+                seen.update(new)
+                self._save(seen)
+            return new
 
     def reset(self) -> None:
-        try:
-            if os.path.exists(self.path):
-                os.remove(self.path)
-        except Exception:
-            pass
+        with self._lock:
+            try:
+                if os.path.exists(self.path):
+                    os.remove(self.path)
+            except Exception:
+                pass

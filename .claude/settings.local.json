@@ -107,7 +107,15 @@
       "Bash(git remote *)",
       "Bash(chmod +x deploy/bootstrap.sh deploy/update.sh)",
       "Bash(bash -n deploy/bootstrap.sh)",
-      "Bash(bash -n deploy/update.sh)"
+      "Bash(bash -n deploy/update.sh)",
+      "Bash(gh repo *)",
+      "Bash(curl -s -A \"check\" https://api.github.com/repos/EdCharlesDiesel/Dashboard-Pro)",
+      "Bash(sleep 8)",
+      "Bash(curl -sf http://localhost:8501/_stcore/health)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 120 python -)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 150 python -)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 90 python -)",
+      "Bash(xargs grep -l \"st.set_page_config\")"
     ]
   }
 }
