@@ -128,7 +128,8 @@
       "Bash(taskkill //F //PID 657)",
       "Bash(powershell -Command \"Stop-Process -Id 657 -Force\")",
       "Bash(:)",
-      "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"ProcessId=4234856 or ProcessId=4230616\\\\\" | Select-Object ProcessId, CommandLine | Format-List\")"
+      "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"ProcessId=4234856 or ProcessId=4230616\\\\\" | Select-Object ProcessId, CommandLine | Format-List\")",
+      "Bash(git *)"
     ]
   }
 }
