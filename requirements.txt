@@ -14,6 +14,7 @@ pytz==2026.2
 psycopg2-binary==2.9.12
 pandas_datareader==0.10.0
 statsmodels==0.14.6
+cot_reports==0.1.3  # CFTC Commitment of Traders reports (src/services/cot_fetcher.py)
 # data_backbone pipeline (src/data_backbone): SQLAlchemy store, APScheduler
 # worker. psycopg2-binary is already pinned above.
 SQLAlchemy>=2.0
