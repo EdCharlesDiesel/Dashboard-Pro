@@ -49,7 +49,9 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("BGDX", "15. Bonds → Gold → DXY",   "🏦", "pages/bonds_gold_dxy_app.py"),
         NavEntry("NEWS", "16. News Filter",          "📰", "pages/news-filter.py"),
         NavEntry("COT",  "17. COT Positioning",      "🏛️", "pages/cot_tab.py"),
+        NavEntry("COTS", "18. COT Signals",          "🧭", "pages/cot_signals.py"),
         NavEntry("CORR", "19. Correlations",         "🔗", "pages/correlations.py"),
+        NavEntry("COTO", "20. COT Open Interest",    "🧮", "pages/cot_open_interest.py"),
     ]),
     ("3 · WEEKLY BIAS", [
         NavEntry("WEMA", "21. Weekly EMA",           "📉", "pages/weekly-ema.py"),
