@@ -129,7 +129,8 @@
       "Bash(powershell -Command \"Stop-Process -Id 657 -Force\")",
       "Bash(:)",
       "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"ProcessId=4234856 or ProcessId=4230616\\\\\" | Select-Object ProcessId, CommandLine | Format-List\")",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 100 python -)"
     ]
   }
 }
