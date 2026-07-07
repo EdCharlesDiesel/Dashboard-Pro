@@ -77,6 +77,16 @@ NAV_SECTIONS: List[tuple] = [
     ("8 · REVIEW", [
         NavEntry("JRNL", "34. Trade Journal",        "📓", "pages/trade-journal.py"),
     ]),
+    # Not a sequential workflow step -- a combined/meta signal layered on top of
+    # 17/18/20 plus its walk-forward validation tool. Numbered to sort after the
+    # 8-step workflow (34) rather than wedged into "2 · Filter the day" (which
+    # is already numbered contiguously 17-20 with 21 already claimed by the next
+    # section), so the sidebar's number sequence stays strictly increasing top
+    # to bottom.
+    ("9 · SIGNAL LAB", [
+        NavEntry("COTX", "35. COT Composite Signal",   "🧩", "pages/cot_composite_trade_signal.py"),
+        NavEntry("COTB", "36. COT Composite Backtest", "🧪", "pages/cot_trade_signal_walk_forward_backtest_harness.py"),
+    ]),
 ]
 
 # Archived (moved to archive/pages/ — not deleted, just off the daily nav):
