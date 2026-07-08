@@ -3,10 +3,11 @@
 A professional **forex & metals day-trading terminal** built on Streamlit. It
 walks you top-down through a single trading decision — scan the market, filter
 the day, establish bias, confirm, find the zone, wait for the trigger, size the
-risk, execute, and review — across **25 active pages** that all share one
-analysis engine and one Bloomberg-style terminal theme. (Trimmed from 45 for a
-leaner daily forex workflow — the retired pages live in `archive/pages/`, not
-deleted; see [Archived pages](#archived-pages) below.)
+risk, execute, and review — across **31 active pages** (plus a signal-lab pair
+for validating the COT composite read) that all share one analysis engine and
+one Bloomberg-style terminal theme. (Trimmed from 52 for a leaner daily forex
+workflow — the retired pages live in `archive/pages/`, not deleted; see
+[Archived pages](#archived-pages) below.)
 
 It trades the 21-pair forex universe **plus metals** — Gold (XAU/USD), Silver
 (XAG/USD) and Platinum (XPT/USD) — from one instrument registry, so every page
@@ -23,7 +24,7 @@ scans the identical universe with the identical tickers.
 ```
 Dashboard-Pro/
 ├── app.py                  # Entry point — the 18-point Daily Checklist (master page)
-├── pages/                  # 24 active workflow pages (auto-register as Streamlit multipage)
+├── pages/                  # 31 active workflow pages (auto-register as Streamlit multipage)
 ├── src/
 │   ├── core/               # analyzer, signals, config — the shared analysis engine
 │   ├── indicators/         # EMA/RSI/MACD/ADX/ATR + the 6-condition trend scorer
@@ -86,10 +87,14 @@ python -m pytest --runslow --no-cov tests/test_pages_smoke.py   # page smoke tes
 
 ---
 
-## How the system works — the 8-step workflow
+## How the system works — the 8-step workflow (+ a weekly signal lab)
 
 The pages are grouped and numbered the way you actually trade a session. Work
 them top to bottom; most days you touch a handful and take one clean trade.
+The one exception is section 9 (Signal lab) — it's a weekly check, not part of
+the daily top-to-bottom pass. This table mirrors
+[`src/pages_lib/navigation.py`](src/pages_lib/navigation.py) exactly — that
+file is the single source of truth; if the two ever disagree, the code wins.
 
 ### 0 · Start here
 | # | Page | What it's for |
@@ -114,8 +119,15 @@ them top to bottom; most days you touch a handful and take one clean trade.
 |---|------|---------------|
 | 13 | [💵 DXY vs Gold](pages/dxy-gold.py) | Dollar vs Gold inverse — the cross-asset confirmation. |
 | 14 | [💪 Currency Strength](pages/currency-strength.py) | Ranks the 9 registry currencies strong → weak from average pair returns; surfaces the strongest-vs-weakest pair as the highest-probability trend trade. |
+| 15 | [🏦 Bonds → Gold → DXY](pages/bonds_gold_dxy_app.py) | Treasury-yield ⇄ gold ⇄ dollar seesaw, explained then tested against live data — cross-asset context, educational. |
 | 16 | [📰 News Filter](pages/news-filter.py) | Red-folder events in the next hours — wait or skip. |
+| 17 | [🏛️ COT Positioning](pages/cot_tab.py) | Weekly CFTC institutional/speculative positioning for majors, gold, DXY. Updates weekly (Friday, for the week ending the prior Tuesday) — a crowdedness read, not a trade trigger on its own. |
+| 18 | [🧭 COT Signals](pages/cot_signals.py) | Extreme-positioning + price/positioning divergence on top of 17, plus a composite squeeze-watch flag. |
 | 19 | [🔗 Correlations](pages/correlations.py) | Stacked-exposure check before adding correlated risk. |
+| 20 | [🧮 COT Open Interest](pages/cot_open_interest.py) | Position-change + open-interest-change context — is a move fresh conviction or an unwind? |
+
+> **Cadence note:** 17/18/20 (and 35/36 below) run off weekly CFTC data — check
+> them once a week (Monday morning is a good habit), not every session.
 
 ### 3 · Weekly bias
 | # | Page | What it's for |
@@ -152,6 +164,17 @@ them top to bottom; most days you touch a handful and take one clean trade.
 | # | Page | What it's for |
 |---|------|---------------|
 | 34 | [📓 Trade Journal](pages/trade-journal.py) | Equity curve, win rate vs 66% target, MT4 statement import. |
+
+### 9 · Signal lab (not a sequential step)
+A combined signal layered on top of 17/18/20, plus its own validation tool.
+Numbered after the 8-step workflow rather than squeezed into "Filter the day"
+so the sidebar's numbers stay strictly increasing top to bottom — check it
+weekly alongside the COT pages above, not every session.
+
+| # | Page | What it's for |
+|---|------|---------------|
+| 35 | [🧩 COT Composite Signal](pages/cot_composite_trade_signal.py) | Combines 17/18/20 into one scored STRONG_BUY…STRONG_SELL read plus a collapse-watch flag; auto-saves actionable, non-neutral, higher-confidence reads to the journal. **Rules-based heuristic, not a validated edge** — backtest it (36) per instrument before trusting it. |
+| 36 | [🧪 COT Composite Backtest](pages/cot_trade_signal_walk_forward_backtest_harness.py) | No-lookahead walk-forward validation of 35 — win rate / avg return by signal state and horizon, plus a naive equity curve. A research tool; it saves nothing to the journal. |
 
 ---
 
@@ -205,6 +228,13 @@ old dedicated Macro Bias / Forex Fundamentals pages (archived — see
 
 **Output:** *"Fundamental bias for [pair] is [Long/Short/Neutral] because [reason]."*
 Only look for setups that align with it.
+
+**Weekly add-on — positioning context:** [17 COT Positioning](pages/cot_tab.py) /
+[18 COT Signals](pages/cot_signals.py) / [20 COT Open Interest](pages/cot_open_interest.py) /
+[35 COT Composite Signal](pages/cot_composite_trade_signal.py) show what leveraged
+funds are actually positioned for, and whether that positioning is crowded, diverging
+from price, or actively unwinding. It's a crowdedness/contrarian read on top of the
+fundamental bias above, not a replacement for it — and it only refreshes weekly.
 
 ### Step 2 — Weekly trend · [21 Weekly EMA](pages/weekly-ema.py) · [23 Weekly Swing](pages/weekly-swing.py)
 - **EMA20 vs EMA50** — EMA20 above EMA50 with price above both = weekly uptrend.
@@ -283,6 +313,15 @@ You wake at the London Kill Zone open — the highest-probability window of the 
 [23 Weekly Swing](pages/weekly-swing.py) → [24 Daily Trend](pages/daily-trend.py) /
 [25 Daily MACD](pages/daily-macd.py).
 **Output:** 1–2 pairs confirmed by score + macro, with direction set.
+
+**📅 Monday morning (weekly, not daily) — positioning & cross-asset context.**
+[15 Bonds → Gold → DXY](pages/bonds_gold_dxy_app.py) → [17 COT Positioning](pages/cot_tab.py) /
+[18 COT Signals](pages/cot_signals.py) / [20 COT Open Interest](pages/cot_open_interest.py) →
+[35 COT Composite Signal](pages/cot_composite_trade_signal.py) for any pair you're
+already watching. CFTC data only updates weekly, so re-checking this intraday is
+wasted effort — fold whatever bias it gives into that week's macro read from
+[01 Daily Cockpit](pages/daily_cockpit_tab.py). Run [36 COT Composite Backtest](pages/cot_trade_signal_walk_forward_backtest_harness.py)
+occasionally (not daily) to sanity-check 35 still has edge on the instrument you trade.
 
 **🔎 09:00–09:15 — Confirm the zone.**
 [27 4H Confluence Zone](pages/4H-confluence-zone.py) →
@@ -416,74 +455,87 @@ risk-off wave hits.
 - Tests live in `tests/`; the DB journal is unit-tested with a mocked connection,
   and `tests/test_pages_smoke.py` runs each page headlessly (gated behind
   `--runslow` because it hits live yfinance). See `CLAUDE.md` for details.
-# Trading data backbone — Postgres store + background worker
- 
-A durable data layer for your Streamlit dashboard. Tabs read from a permanent
+
+---
+
+## Appendix — `src/data_backbone/` (optional, experimental, not part of the daily app)
+
+A separate, standalone Postgres-backed data layer that **no active page imports
+today** — `app.py` and every page in `pages/` read live via `src/db/` and
+yfinance/FRED directly (see "Data layer" in `CLAUDE.md`). This appendix
+documents it for whoever picks it up next; skip it for day-to-day trading.
+
+> The commands below reference `docker-compose.yml` / `Dockerfile` /
+> `.env.example` files that **don't exist in this repo yet** — write them
+> first, or run the "without docker" path.
+
+A durable data layer for a Streamlit dashboard: tabs read from a permanent
 database and only hit yfinance/FRED when the stored data is missing or stale.
- 
+
 ```
 Streamlit tab ─▶ data_access.get_ohlcv() ─▶ Postgres ─▶ yfinance/FRED
                                               (durable)   (source of truth)
- 
+
 worker.py (APScheduler) ─▶ fetch on schedule ─▶ upsert Postgres
 ```
- 
-## Files (package `src/data_backbone/`)
+
+### Files (package `src/data_backbone/`)
 - `config.py` — env-driven settings + the worker's watchlists.
 - `db.py` — SQLAlchemy tables and `INSERT ... ON CONFLICT DO UPDATE` upserts.
 - `data_access.py` — `get_ohlcv()` / `get_fred()`: the db→api read path.
 - `worker.py` — scheduled refresh service.
 - `app_demo.py` — minimal demo dashboard (the main app stays `app.py` at root).
-- `docker-compose.yml` / `Dockerfile` — postgres, worker, app.
-## Run it
+- `docker-compose.yml` / `Dockerfile` — postgres, worker, app (not yet added — see note above).
+
+### Run it
 ```bash
-cp .env.example .env          # adjust if you like
+cp .env.example .env          # adjust if you like — you'll need to create this file
 docker compose up --build     # starts postgres, worker, app
 # app on http://localhost:8501 ; worker warms the store then refreshes daily
 ```
- 
+
 Run locally without docker (needs a local Postgres):
 ```bash
 pip install -r requirements.txt
 python -m src.data_backbone.worker          # one process: warms + schedules refresh
 streamlit run src/data_backbone/app_demo.py # another process: the demo dashboard
 ```
- 
-## Wire your existing tabs (one line each)
-In any tab, swap its loader for the backbone. For example in `trading_lab_tab.py`:
- 
+
+### Wire an existing page to it (one line each)
+Swap a page's loader for the backbone, e.g.:
 ```python
 from src.data_backbone import data_access as da
- 
+
 @_cache(ttl=3600)
 def load_ohlcv(ticker, period="5y"):
     return da.get_ohlcv(ticker, period)   # was: yf.download(...)
 ```
- 
-And for FRED-based tabs (forex fundamentals), replace `_fetch_fred_csv(sid)` with
-`da.get_fred(sid)`. The rest of each tab is unchanged.
- 
-Keep `@st.cache_data` on the tab loaders too — it's a per-process layer in front
-of the database. Order of speed: st.cache_data (in-process) → Postgres (durable)
-→ API.
- 
-## Move the trade journal into Postgres
-The journal currently lives in a CSV. One-shot import:
+And for FRED-based reads, replace the direct FRED fetch with `da.get_fred(sid)`.
+
+Keep `@st.cache_data` on the page's own loader too — it's a per-process layer in
+front of the database. Order of speed: `st.cache_data` (in-process) → Postgres
+(durable) → API.
+
+### Move the trade journal into this backbone's Postgres
+The live app's journal already persists to Postgres via `src/db/trade_repository.py`
+(see "Data layer" in `CLAUDE.md`) — this is a separate, alternate path if you
+consolidate onto `data_backbone` instead:
 ```python
 from src.data_backbone import db
 db.init_db()
 db.migrate_journal_csv("trade_journal.csv")
 ```
-Then point the journal tab's load/save at `db.read_trades()` / `db.save_trade()`.
- 
-## Notes
+Then point the journal page's load/save at `db.read_trades()` / `db.save_trade()`.
+
+### Notes
 - Add watched tickers/series in `src/data_backbone/config.py` (`WATCH_TICKERS`, `WATCH_FRED`).
 - The worker refreshes weekdays at 22:00 UTC (after the US close); change the
   cron in `src/data_backbone/worker.py`.
 - Stale thresholds: prices refetch if the latest stored bar is older than
   `STALE_DAYS`; FRED uses a 30-day window. Tune in `config.py` / `data_access.py`.
 - Real upserts mean re-running is always safe — no duplicate rows.
-## Seed deep history (one-shot)
+
+### Seed deep history (one-shot)
 Backfill the deepest history yfinance gives and see your real coverage:
 ```bash
 python -m src.data_backbone.seed_history                # whole watchlist, period="max" -> Postgres

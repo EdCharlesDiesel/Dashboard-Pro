@@ -21,6 +21,9 @@ account_state.json
 # DB dumps — contain real data, never commit
 backups/
 
+# CFTC COT report CSVs — refetchable, don't bloat the repo
+src/services/cot_cache/
+
 # Editor atomic-write temp files (accidentally committed before)
 *.py.tmp.*
 *.tmp.*
