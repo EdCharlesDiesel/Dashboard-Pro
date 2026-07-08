@@ -6,13 +6,9 @@
 #
 # Configuration is passed via environment variables (the app reads every secret
 # through src/core/secrets.py, which falls back to env vars — so no secrets.toml
-# is baked into or mounted in the image). Put your API keys in a gitignored .env
-# file next to this one; Compose loads it automatically:
-#
-#   FRED_API_KEY=...
-#   FINNHUB_API_KEY=...
-#   ANTHROPIC_API_KEY=...
-#   POSTGRES_PASSWORD=change-me
+# is baked into or mounted in the image). Values below are hardcoded per project
+# decision (this repo's owner does not consider them sensitive) — no .env file
+# is needed; `docker compose up` works standalone.
 #
 # The Trade Journal's DB sidebar pre-fills from these env vars, so you just click
 # "Connect & Load".
@@ -22,9 +18,10 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-trading}
+      POSTGRES_USER: postgres
+      # $$ escapes the literal $ so Compose doesn't treat it as variable interpolation.
+      POSTGRES_PASSWORD: "$$ta99Ath0"
+      POSTGRES_DB: dashboardprov1
     volumes:
       # postgres:18+ stores data under /var/lib/postgresql (version subdir),
       # not /var/lib/postgresql/data as in 16 and earlier.
@@ -33,7 +30,7 @@ services:
       # Exposed on the host for inspection (psql/GUI). Remove to keep DB internal.
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-trading}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dashboardprov1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,18 +48,18 @@ services:
       # Database — points the app at the `db` service (not localhost).
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB:-trading}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      # API keys — supplied from your .env (blank/optional if unset).
-      FRED_API_KEY: ${FRED_API_KEY:-}
-      FMP_API_KEY: ${FMP_API_KEY:-}
-      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # Gmail SMTP (AMD scanner / market-overview alerts) — optional.
-      GMAIL_SENDER: ${GMAIL_SENDER:-}
-      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
-      GMAIL_RECIPIENT: ${GMAIL_RECIPIENT:-}
+      DB_NAME: dashboardprov1
+      DB_USER: postgres
+      DB_PASSWORD: "$$ta99Ath0"
+      # API keys — real values, optional (app degrades gracefully without them).
+      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
+      FMP_API_KEY: "BDIqvTLAhhi04dVyNeGG9xzSGQc5yDLQ"
+      FINNHUB_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      # Gmail SMTP (AMD scanner / market-overview alerts) — optional, unset.
+      GMAIL_SENDER: ""
+      GMAIL_APP_PASSWORD: ""
+      GMAIL_RECIPIENT: ""
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
       interval: 30s
@@ -83,10 +80,10 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB:-trading}
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      FRED_API_KEY: ${FRED_API_KEY:-}
+      DB_NAME: dashboardprov1
+      DB_USER: postgres
+      DB_PASSWORD: "$$ta99Ath0"
+      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
 
 volumes:
   pgdata:

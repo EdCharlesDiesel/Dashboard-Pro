@@ -185,8 +185,16 @@ def render():
         st.error("This page needs plotly — install it with `pip install plotly`.")
         return
 
+    from src.instruments import INSTRUMENTS
+
     c1, c2, c3 = st.columns(3)
-    ticker = c1.text_input("Ticker", value="EURUSD=X")
+    inst_names = INSTRUMENTS.keys()
+    default_name = st.session_state.get("selected_instrument", "EUR/USD")
+    if default_name not in inst_names:
+        default_name = inst_names[0]
+    inst_name = c1.selectbox("Ticker", inst_names,
+                             index=inst_names.index(default_name))
+    ticker = INSTRUMENTS.get(inst_name).ticker
     period = c2.selectbox("History", ["1y", "2y", "5y"], index=1)
     method = c3.selectbox("Detector", ["Efficiency Ratio", "ADX"])
 

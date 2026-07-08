@@ -242,18 +242,18 @@ class ChecklistController:
         sections = [
             ("2 · FILTER THE DAY", [
                 (1, "Macro bias confirmed",
-                 "Rates, GDP, inflation favour direction" + link("macro-bias")),
+                 "Rates, GDP, inflation favour direction"),
                 (2, "No red-folder news",
                  "No high-impact news within 1 hour" + link("news-filter")),
                 (3, "Correlated markets align",
                  f"Expected: {inst['corr']}" + link("correlations")),
-                (4, "ATR above 20-period avg", atr_hint + link("atr-volatility")),
+                (4, "ATR above 20-period avg", atr_hint),
             ]),
             ("3 · WEEKLY BIAS", [
                 (5, "Weekly EMA aligned",
                  "Weekly EMA direction matches trade direction" + link("weekly-ema")),
                 (6, "Weekly RSI has room",
-                 "Not yet OB (>70) or OS (<30)" + link("weekly-rsi")),
+                 "Not yet OB (>70) or OS (<30)"),
                 (7, "Weekly Swing aligned",
                  "Daily confirmation shows aligned" + link("weekly-swing")),
             ]),
