@@ -33,6 +33,7 @@ from src.core.config import (
     RSI_LINE, RSI_OB, RSI_OS,
 )
 from src.core.data_provider import fetch_data, fetch_fred_series
+from src.services.parallel_fetch import run_parallel
 from src.core.signals import generate_trading_ideas
 from src.pages_lib.navigation import render_sidebar_nav
 from src.services import alert_service
@@ -281,15 +282,30 @@ def load_all_market_data() -> Dict:
 
     @st.cache_data(ttl=config.cache_ttl, show_spinner=False)
     def _load() -> Dict:
+        # Every (timeframe, pair) pull is an independent I/O-bound fetch —
+        # fan them out across a thread pool instead of a serial double loop
+        # (5 timeframes × ~24 pairs = ~120 round-trips serially).
         data = {tf: {} for tf in config.timeframes}
-        for tf_name, tf_cfg in config.timeframes.items():
-            for pair_name, symbol in config.assets.items():
-                try:
-                    df = fetch_data(symbol, tf_cfg["interval"], tf_cfg["period"])
-                    if not df.empty:
-                        data[tf_name][pair_name] = df
-                except Exception as e:
-                    logger.warning(f"Failed {pair_name} ({tf_name}): {e}")
+        work = [
+            (tf_name, tf_cfg, pair_name, symbol)
+            for tf_name, tf_cfg in config.timeframes.items()
+            for pair_name, symbol in config.assets.items()
+        ]
+
+        def _fetch(item):
+            _tf_name, tf_cfg, _pair_name, symbol = item
+            return fetch_data(symbol, tf_cfg["interval"], tf_cfg["period"])
+
+        def _on_result(item, df):
+            tf_name, _tf_cfg, pair_name, _symbol = item
+            if df is not None and not df.empty:
+                data[tf_name][pair_name] = df
+
+        def _on_error(item, exc):
+            tf_name, _tf_cfg, pair_name, _symbol = item
+            logger.warning(f"Failed {pair_name} ({tf_name}): {exc}")
+
+        run_parallel(_fetch, work, on_result=_on_result, on_error=_on_error)
         return data
 
     return _load()

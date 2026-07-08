@@ -33,21 +33,34 @@ try:
 except Exception:
     yf = None
 
+from src.instruments import INSTRUMENTS
+from src.services.parallel_fetch import run_parallel
+
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
 HEADERS = {"User-Agent": "Mozilla/5.0 (cockpit)"}
 
-# pair -> (base, quote, yfinance ticker)
+# pair -> (base, quote, yfinance ticker) — every forex pair in the registry (18
+# pairs; was 5 hardcoded majors). Metals have no base-currency rate concept,
+# so they're kept separate (METALS below) and only feed the breakout scanner,
+# not the rate-bias table.
 PAIRS = {
-    "EUR/USD": ("EUR", "USD", "EURUSD=X"),
-    "GBP/USD": ("GBP", "USD", "GBPUSD=X"),
-    "USD/JPY": ("USD", "JPY", "JPY=X"),
-    "AUD/USD": ("AUD", "USD", "AUDUSD=X"),
-    "USD/CAD": ("USD", "CAD", "CAD=X"),
+    name: (*name.split("/"), INSTRUMENTS[name]["ticker"])
+    for name in INSTRUMENTS.forex_pairs()
 }
+# name -> yfinance ticker, for the breakout scanner only (src/instruments has
+# no per-metal "base currency" — XAU/XAG/XPT aren't in SHORT_RATE below).
+METALS = {name: INSTRUMENTS[name]["ticker"] for name in INSTRUMENTS.commodities()}
+
 SHORT_RATE = {  # 3-month interbank (FRED, monthly), a policy-stance proxy
     "USD": "IR3TIB01USM156N", "EUR": "IR3TIB01EZM156N", "JPY": "IR3TIB01JPM156N",
     "GBP": "IR3TIB01GBM156N", "CAD": "IR3TIB01CAM156N", "AUD": "IR3TIB01AUM156N",
+    "CHF": "IR3TIB01CHM156N", "NZD": "IR3TIB01NZM156N", "ZAR": "IR3TIB01ZAM156N",
 }
+# Breakout scanner universe: forex pairs + metals, uniform (base, quote,
+# ticker) shape. Metals get "" for base/quote (no rate-differential concept),
+# so is_aligned() naturally always reads them as not rate-aligned — they still
+# surface as fresh setups, just never as an "aligned idea".
+SCAN_UNIVERSE = {**PAIRS, **{name: ("", "", ticker) for name, ticker in METALS.items()}}
 RISK_SIGNALS = {  # oriented so + = risk-on
     "S&P 500":   {"t": "^GSPC",  "src": "yf",    "kind": "mom",   "o": +1},
     "VIX":       {"t": "^VIX",   "src": "yf",    "kind": "level", "o": -1},
@@ -200,7 +213,11 @@ def _cache(ttl):
 
 @_cache(ttl=3600)
 def load_fred(sid):
-    r = requests.get(FRED_CSV.format(sid=sid), headers=HEADERS, timeout=20)
+    # A tighter timeout than the yfinance loaders: this hits fredgraph's public
+    # CSV-export endpoint (not the authenticated FRED API), which is more
+    # prone to silently stalling — fail fast so one bad series doesn't cap the
+    # whole parallel batch at a long timeout.
+    r = requests.get(FRED_CSV.format(sid=sid), headers=HEADERS, timeout=8)
     r.raise_for_status()
     d = pd.read_csv(io.StringIO(r.text))
     dc, vc = d.columns[0], d.columns[1]
@@ -230,7 +247,13 @@ def load_risk_signal(cfg):
     if cfg["src"] == "fred":
         return load_fred(cfg["t"])
     if cfg["src"] == "ratio":
-        cu, au = load_yf("HG=F"), load_yf("GC=F")
+        leg = {}
+        run_parallel(
+            load_yf, ["HG=F", "GC=F"],
+            on_result=lambda ticker, series: leg.__setitem__(ticker, series),
+            on_error=lambda ticker, exc: leg.__setitem__(ticker, pd.Series(dtype=float)),
+        )
+        cu, au = leg.get("HG=F", pd.Series(dtype=float)), leg.get("GC=F", pd.Series(dtype=float))
         df = pd.concat([cu.rename("cu"), au.rename("au")], axis=1).dropna()
         return (df["cu"] / df["au"]).dropna() if not df.empty else pd.Series(dtype=float)
     return pd.Series(dtype=float)
@@ -247,12 +270,19 @@ def render():
                "aid, not trading advice.")
 
     # ---- 1. Risk regime ----
+    # 5 independent network pulls (yfinance ×3, FRED, a 2-leg ratio) — fan them
+    # out instead of paying for each round-trip in sequence.
     comps = {}
-    for name, cfg in RISK_SIGNALS.items():
-        try:
-            comps[name] = oriented_z(load_risk_signal(cfg), cfg["kind"], cfg["o"])
-        except Exception:
-            comps[name] = None
+
+    def _fetch_component(item):
+        _name, cfg = item
+        return oriented_z(load_risk_signal(cfg), cfg["kind"], cfg["o"])
+
+    run_parallel(
+        _fetch_component, list(RISK_SIGNALS.items()),
+        on_result=lambda item, z: comps.__setitem__(item[0], z),
+        on_error=lambda item, exc: comps.__setitem__(item[0], None),
+    )
     rc = risk_composite(comps)
     emoji = {"Risk-On": "🟢", "Risk-Off": "🔴", "Neutral": "🟡", "Unknown": "⚪"}[rc["label"]]
     a, b = st.columns([1, 2])
@@ -262,15 +292,18 @@ def render():
 
     # ---- 2. Per-pair rate bias ----
     st.markdown("#### Rate bias by pair")
+    # Fetch each *currency's* rate series once in parallel (5 pairs share only
+    # 6 distinct currencies), then build the per-pair rows from the cache.
+    unique_ccy = sorted({c for base, quote, _ in PAIRS.values() for c in (base, quote)})
     rate_cache = {}
+    run_parallel(
+        lambda ccy: load_fred(SHORT_RATE[ccy]), unique_ccy,
+        on_result=lambda ccy, series: rate_cache.__setitem__(ccy, series),
+        on_error=lambda ccy, exc: rate_cache.__setitem__(ccy, pd.Series(dtype=float)),
+    )
 
     def rate(ccy):
-        if ccy not in rate_cache:
-            try:
-                rate_cache[ccy] = load_fred(SHORT_RATE[ccy])
-            except Exception:
-                rate_cache[ccy] = pd.Series(dtype=float)
-        return rate_cache[ccy]
+        return rate_cache.get(ccy, pd.Series(dtype=float))
 
     rows, biases = [], {}
     for name, (base, quote, _) in PAIRS.items():
@@ -298,11 +331,24 @@ def render():
 
     # ---- 4. Fresh setups + alignment ----
     st.markdown("#### Fresh 20-day breakout setups")
+    # Fetch every instrument's 1y OHLC in parallel (forex pairs + metals); the
+    # breakout scan itself is pure CPU on an already-fetched frame, so it
+    # stays a plain serial loop.
+    ohlc_cache = {}
+    run_parallel(
+        lambda item: load_yf(item[1][2], "1y", ohlc=True), list(SCAN_UNIVERSE.items()),
+        on_result=lambda item, df: ohlc_cache.__setitem__(item[0], df),
+        on_error=lambda item, exc: ohlc_cache.__setitem__(item[0], pd.DataFrame()),
+    )
+
     setup_rows, ideas = [], []
-    for name, (base, quote, ticker) in PAIRS.items():
+    for name, (base, quote, ticker) in SCAN_UNIVERSE.items():
         try:
-            ohlc = load_yf(ticker, "1y", ohlc=True)
-            setups = find_recent_setups(ohlc)
+            # pip size varies by instrument (0.0001 majors, 0.01 JPY crosses,
+            # 0.10 XAU/XPT) — registry-sourced so risk_pips isn't off by
+            # 100-1000x for the pairs beyond the original 5 majors.
+            pip_size = INSTRUMENTS[name]["pip_size"]
+            setups = find_recent_setups(ohlc_cache.get(name, pd.DataFrame()), pip=pip_size)
         except Exception:
             setups = []
         for s in setups:
