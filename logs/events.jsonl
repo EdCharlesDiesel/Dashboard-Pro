@@ -11225,3 +11225,18 @@
 {"ts": "2026-07-07T09:04:39.065687+00:00", "session_id": "2f375b84cbb8", "page": "cot_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
 {"ts": "2026-07-07T09:04:54.601437+00:00", "session_id": "1c6d64360e2a", "page": "cot_signals", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
 {"ts": "2026-07-07T10:02:59.261153+00:00", "session_id": "2432af59e11b", "page": "app", "event_type": "page_view", "level": "INFO", "message": "", "data": {"selected_instrument": "EUR/USD", "trend_timeframe": "4 Hours", "trade_direction": "LONG", "session": "London"}}
+{"ts": "2026-07-07T10:51:12.816539+00:00", "session_id": "2432af59e11b", "page": "15m-fib-entry", "event_type": "page_view", "level": "INFO", "message": "", "data": {"selected_instrument": "EUR/USD", "trend_timeframe": "4 Hours", "trade_direction": "LONG", "session": "London"}}
+{"ts": "2026-07-07T11:30:05.530069+00:00", "session_id": "44304e854ed1", "page": "15m-fib-entry", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T11:30:35.310784+00:00", "session_id": "44304e854ed1", "page": "15m-fib-entry", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T11:30:37.193090+00:00", "session_id": "44304e854ed1", "page": "15m-fib-entry", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T12:09:20.514581+00:00", "session_id": "44304e854ed1", "page": "cot_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T12:09:26.556665+00:00", "session_id": "44304e854ed1", "page": "cot_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:22:20.423270+00:00", "session_id": "1b0726c87eba", "page": "cot_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:25:05.196647+00:00", "session_id": "1b0726c87eba", "page": "cot_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:25:11.341600+00:00", "session_id": "1b0726c87eba", "page": "cot_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:27:04.528417+00:00", "session_id": "1b0726c87eba", "page": "setup-ranker", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:28:10.049942+00:00", "session_id": "6a6a1a5a4d9e", "page": "cot_composite_trade_signal", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:28:19.181238+00:00", "session_id": "6a6a1a5a4d9e", "page": "cot_composite_trade_signal", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:29:21.610509+00:00", "session_id": "6a6a1a5a4d9e", "page": "cot_composite_trade_signal", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:29:55.671807+00:00", "session_id": "6a6a1a5a4d9e", "page": "cot_composite_trade_signal", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-07T14:30:13.985387+00:00", "session_id": "0d94b5e67c36", "page": "cot_composite_trade_signal", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
