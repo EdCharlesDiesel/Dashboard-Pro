@@ -6,10 +6,13 @@ across 22 files.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import List
 
 import streamlit as st
+
+logger = logging.getLogger("ForexDashboard")
 
 
 @dataclass(frozen=True)
@@ -43,8 +46,12 @@ NAV_SECTIONS: List[tuple] = [
     ("2 · FILTER THE DAY", [
         NavEntry("DXAU", "13. DXY vs Gold",          "💵", "pages/dxy-gold.py"),
         NavEntry("CCYS", "14. Currency Strength",    "💪", "pages/currency-strength.py"),
+        NavEntry("BGDX", "15. Bonds → Gold → DXY",   "🏦", "pages/bonds_gold_dxy_app.py"),
         NavEntry("NEWS", "16. News Filter",          "📰", "pages/news-filter.py"),
+        NavEntry("COT",  "17. COT Positioning",      "🏛️", "pages/cot_tab.py"),
+        NavEntry("COTS", "18. COT Signals",          "🧭", "pages/cot_signals.py"),
         NavEntry("CORR", "19. Correlations",         "🔗", "pages/correlations.py"),
+        NavEntry("COTO", "20. COT Open Interest",    "🧮", "pages/cot_open_interest.py"),
     ]),
     ("3 · WEEKLY BIAS", [
         NavEntry("WEMA", "21. Weekly EMA",           "📉", "pages/weekly-ema.py"),
@@ -70,6 +77,16 @@ NAV_SECTIONS: List[tuple] = [
     ("8 · REVIEW", [
         NavEntry("JRNL", "34. Trade Journal",        "📓", "pages/trade-journal.py"),
     ]),
+    # Not a sequential workflow step -- a combined/meta signal layered on top of
+    # 17/18/20 plus its walk-forward validation tool. Numbered to sort after the
+    # 8-step workflow (34) rather than wedged into "2 · Filter the day" (which
+    # is already numbered contiguously 17-20 with 21 already claimed by the next
+    # section), so the sidebar's number sequence stays strictly increasing top
+    # to bottom.
+    ("9 · SIGNAL LAB", [
+        NavEntry("COTX", "35. COT Composite Signal",   "🧩", "pages/cot_composite_trade_signal.py"),
+        NavEntry("COTB", "36. COT Composite Backtest", "🧪", "pages/cot_trade_signal_walk_forward_backtest_harness.py"),
+    ]),
 ]
 
 # Archived (moved to archive/pages/ — not deleted, just off the daily nav):
@@ -94,8 +111,12 @@ def render_sidebar_nav() -> None:
         for e in entries:
             try:
                 st.page_link(e.path, label=e.label, icon=e.icon)
-            except Exception:
+            except Exception as exc:
                 # st.page_link needs the multipage registry (absent in bare/test
-                # runs) and raises if a page file was renamed — skip the entry
-                # rather than crash the whole page.
+                # runs) and raises if a page file was renamed/missing — skip the
+                # entry rather than crash the whole page, but log it: a silent
+                # `continue` here previously made a bad entry indistinguishable
+                # from "the dev server just needs a restart."
+                logger.warning("[nav] page_link failed for %s (%s): %s",
+                               e.code, e.path, exc)
                 continue

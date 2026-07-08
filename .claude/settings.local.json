@@ -115,7 +115,22 @@
       "Bash(PYTHONIOENCODING=utf-8 timeout 120 python -)",
       "Bash(PYTHONIOENCODING=utf-8 timeout 150 python -)",
       "Bash(PYTHONIOENCODING=utf-8 timeout 90 python -)",
-      "Bash(xargs grep -l \"st.set_page_config\")"
+      "Bash(xargs grep -l \"st.set_page_config\")",
+      "Bash(awk '/def cached_closes/,/^def [a-z_]+\\\\\\(/' src/db/market_cache.py)",
+      "Bash(pip show *)",
+      "Bash(pip index *)",
+      "Bash(pip install *)",
+      "Bash(find .claude/skills -maxdepth 2 -iname \"SKILL.md\")",
+      "Bash(ls .claude/skills)",
+      "Bash(pkill -f \"streamlit run app.py\")",
+      "Bash(rm -f /tmp/streamlit_out.log)",
+      "Bash(ps -o pid,lstart,cmd -p 657)",
+      "Bash(taskkill //F //PID 657)",
+      "Bash(powershell -Command \"Stop-Process -Id 657 -Force\")",
+      "Bash(:)",
+      "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"ProcessId=4234856 or ProcessId=4230616\\\\\" | Select-Object ProcessId, CommandLine | Format-List\")",
+      "Bash(git *)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 100 python -)"
     ]
   }
 }
