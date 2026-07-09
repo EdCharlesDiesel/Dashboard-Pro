@@ -2,9 +2,10 @@
 
 Once a ten-tab monolith, this page is now a lean landing: headline KPIs, a price
 table, and the background alert engine. Each unique analysis tab it used to host
-now lives on its own sidebar page (Trading Ideas, MTF Matrix, Technical Chart,
-Pivots & Fibonacci, Volume Profile, FRED Macro Grid). All the shared logic lives
-in ``src/pages_lib/market_overview_lib.py`` so those pages stay thin.
+was broken out (Trading Ideas, MTF Matrix, Technical Chart, Pivots & Fibonacci,
+Volume Profile, FRED Macro Grid); only MTF Matrix is still on the live sidebar
+nav (see pages/mtf-matrix.py) — the rest were later archived. All the shared
+logic lives in ``src/pages_lib/market_overview_lib.py`` so those pages stay thin.
 """
 import logging
 import traceback
@@ -65,10 +66,10 @@ def main():
     mol.render_overview_tab(daily_data)
 
     st.caption(
-        "This is the market snapshot. The analysis tools that used to live here "
-        "as tabs are now their own pages — see the sidebar: 🎯 Trading Ideas, "
-        "🧭 MTF Matrix, 📈 Technical Chart, 🛒 Pivots & Fibonacci, 🔊 Volume "
-        "Profile, 🏛 FRED Macro Grid."
+        "This is the market snapshot. The MTF Matrix that used to live here as "
+        "a tab is now its own page — see the sidebar: 🧭 MTF Matrix. The other "
+        "former tabs (Trading Ideas, Technical Chart, Pivots & Fibonacci, "
+        "Volume Profile, FRED Macro Grid) were archived."
     )
 
 

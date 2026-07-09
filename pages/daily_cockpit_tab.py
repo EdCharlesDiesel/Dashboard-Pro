@@ -11,14 +11,13 @@ the cockpit assembles the key reads and tells you where they AGREE:
   5. Today's ideas      — pairs where regime + bias + a fresh setup all line up
 
 Self-contained (re-implements light versions of the other tabs' logic so it runs
-on its own; FRED no-key + yfinance). Process aid, not trading advice.
+on its own; FRED (authenticated API) + yfinance). Process aid, not trading advice.
 
 Entry point: render()
 Standalone:  streamlit run daily_cockpit_tab.py
 """
 from __future__ import annotations
 
-import io
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -33,11 +32,11 @@ try:
 except Exception:
     yf = None
 
+from src.core.secrets import fred_api_key
 from src.instruments import INSTRUMENTS
 from src.services.parallel_fetch import run_parallel
 
-FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
-HEADERS = {"User-Agent": "Mozilla/5.0 (cockpit)"}
+FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 # pair -> (base, quote, yfinance ticker) — every forex pair in the registry (18
 # pairs; was 5 hardcoded majors). Metals have no base-currency rate concept,
@@ -213,17 +212,24 @@ def _cache(ttl):
 
 @_cache(ttl=3600)
 def load_fred(sid):
-    # A tighter timeout than the yfinance loaders: this hits fredgraph's public
-    # CSV-export endpoint (not the authenticated FRED API), which is more
-    # prone to silently stalling — fail fast so one bad series doesn't cap the
-    # whole parallel batch at a long timeout.
-    r = requests.get(FRED_CSV.format(sid=sid), headers=HEADERS, timeout=8)
+    # A tighter timeout than the yfinance loaders: fail fast so one bad series
+    # doesn't cap the whole parallel batch at a long timeout.
+    key = fred_api_key()
+    if not key:
+        return pd.Series(dtype=float)
+    params = {
+        "series_id": sid, "api_key": key, "file_type": "json",
+        "sort_order": "asc", "limit": 100000,
+    }
+    r = requests.get(FRED_OBS_URL, params=params, timeout=8)
     r.raise_for_status()
-    d = pd.read_csv(io.StringIO(r.text))
-    dc, vc = d.columns[0], d.columns[1]
-    d[dc] = pd.to_datetime(d[dc], errors="coerce")
-    d[vc] = pd.to_numeric(d[vc], errors="coerce")
-    return d.dropna(subset=[dc]).set_index(dc)[vc].dropna()
+    obs = r.json().get("observations", [])
+    d = pd.DataFrame(obs)
+    if d.empty:
+        return pd.Series(dtype=float)
+    d["date"] = pd.to_datetime(d["date"], errors="coerce")
+    d["value"] = pd.to_numeric(d["value"], errors="coerce")
+    return d.dropna(subset=["date"]).set_index("date")["value"].dropna()
 
 
 @_cache(ttl=1800)

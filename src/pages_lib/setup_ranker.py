@@ -17,7 +17,7 @@ import yfinance as yf
 from src.core.signals import score_setup
 from src.instruments import INSTRUMENTS, TYPICAL_SPREADS
 from src.pages_lib.base import BloombergPage, PageContext
-from src.services import RiskService, alert_service, account_state
+from src.services import RiskService, alert_service, account_state, score_history
 from src.services.parallel_fetch import run_parallel
 from src.services.signal_store import persist_signals
 from src.ui.components import (
@@ -171,6 +171,8 @@ class SetupRankerPage(BloombergPage):
         # via _persist_signals regardless of this toggle.
         st.session_state.setdefault("sr_email_on", False)
         st.session_state.setdefault("sr_email_min", 9)
+        # Separate opt-in: email when a Grade-A setup drops out of grade.
+        st.session_state.setdefault("sr_email_stale_on", False)
         # User's house rule: every signal is taken as 2 trades.
         st.session_state.setdefault("sr_trades_per_signal", 2)
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
@@ -287,6 +289,14 @@ class SetupRankerPage(BloombergPage):
             help="Position sizing and projected account growth in the alert are "
                  "multiplied by this. Defaults to 2 (your house rule).",
         )
+        st.session_state.sr_email_stale_on = st.toggle(
+            "⚠ Email invalidated (Grade A → lower) setups",
+            value=st.session_state.sr_email_stale_on,
+            help="On each scan, email any setup that was Grade A on the previous "
+                 "scan and has since dropped below it. Each specific transition "
+                 "(e.g. 90%→50%) fires once; if it recovers to A and drops again, "
+                 "that fires again.",
+        )
         if alert_service.email_configured():
             st.caption(f"✅ Alerts → {alert_service.email_recipient()}")
         else:
@@ -303,8 +313,10 @@ class SetupRankerPage(BloombergPage):
                 (st.success if ok else st.error)(msg)
         with c_reset:
             if st.button("↺ Reset", width="stretch",
-                         help="Clear the 'already-alerted' memory so current setups can re-fire."):
+                         help="Clear the 'already-alerted' memory (new-setup AND "
+                              "invalidation alerts) so current setups can re-fire."):
                 alert_service.NotifyCache("setup_ranker").reset()
+                alert_service.NotifyCache("setup_ranker_stale").reset()
                 st.toast("Alert memory cleared.")
 
     def body(self, ctx: PageContext) -> None:
@@ -338,7 +350,13 @@ class SetupRankerPage(BloombergPage):
         # unattended tick that finds nothing new is a safe no-op.
         @st.fragment(run_every=300, parallel=True)
         def _scan_and_render():
-            results = self._scan(pairs, directions, min_score)
+            all_results = self._scan(pairs, directions)
+
+            # Diff every scored pair/direction against its last-seen score so a
+            # setup that was Grade A and no longer is gets flagged rather than
+            # silently vanishing from the ranked list on the next scan.
+            stale = self._track_score_history(all_results)
+            results = [r for r in all_results if r["score"] >= min_score]
 
             # Auto-save Grade-A setups to the journal DB (deduped, source-tagged).
             self._persist_signals(results, rr_ratio)
@@ -346,6 +364,10 @@ class SetupRankerPage(BloombergPage):
             # Fire email alerts for newly-appearing high-score setups (opt-in).
             if st.session_state.get("sr_email_on"):
                 self._maybe_email_alerts(results, rr_ratio, account_bal, risk_pct)
+
+            # Fire email alerts for setups that just dropped out of Grade A (opt-in).
+            if st.session_state.get("sr_email_stale_on"):
+                self._maybe_email_stale_alerts(stale)
 
             st.caption(f"◷ Auto-refreshes every 5 min · last scan "
                       f"{datetime.now().strftime('%H:%M:%S')}")
@@ -371,7 +393,10 @@ class SetupRankerPage(BloombergPage):
                 MetricCell("Grade C (4–5)",  str(grade_counts["C"]), "yellow"),
                 MetricCell("Grade D (<4)",   str(grade_counts["D"]), "red"),
                 MetricCell("Grade-A Win $",  f"+${grade_a_win:,.0f}", "green"),
+                MetricCell("Invalidated",    str(len(stale)), "red" if stale else "white"),
             ])
+
+            self._render_stale_panel(stale)
 
             if not results:
                 st.info(f"◇ No pairs scored ≥{min_score}. Lower threshold or change direction.")
@@ -393,7 +418,7 @@ class SetupRankerPage(BloombergPage):
         _scan_and_render()
 
     @staticmethod
-    def _scan(pairs, directions, min_score) -> list:
+    def _scan(pairs, directions) -> list:
         """Score every pair × direction, fanned out one worker per pair.
 
         Each pair's weekly/daily/4H fetch is I/O-bound (yfinance/Postgres), so
@@ -402,6 +427,11 @@ class SetupRankerPage(BloombergPage):
         directions for a pair run in the same worker (fetched data is shared,
         scoring itself is cheap CPU), preserving the original per-direction
         exception isolation.
+
+        Returns EVERY scored pair/direction, unfiltered by score — the min-score
+        cutoff is applied by the caller for display. Scanning unfiltered lets
+        ``_track_score_history`` see a setup that fell below the threshold (and
+        flag it stale) instead of it silently disappearing mid-scan.
         """
         results = []
         pairs_list = [(p, INSTRUMENTS[p]) for p in pairs if p in INSTRUMENTS]
@@ -426,9 +456,7 @@ class SetupRankerPage(BloombergPage):
 
         def _on_result(item, scored):
             _on_progress(item)
-            for r in scored:
-                if r["score"] >= min_score:
-                    results.append(r)
+            results.extend(scored)
 
         def _on_error(item, exc):
             _on_progress(item)
@@ -437,6 +465,81 @@ class SetupRankerPage(BloombergPage):
         prog.empty()
         results.sort(key=lambda x: -x["score"])
         return results
+
+    # ── Score-history tracking (validity/state) ───────────────────────────────
+    @classmethod
+    def _track_score_history(cls, all_results: list) -> list:
+        """Diff every scored pair/direction against its last-seen score,
+        annotate each result in place with ``pct``/``delta_pct``/``prev_grade``/
+        ``signal_state``, persist the fresh scores for the next scan, and return
+        the subset that just fell out of Grade A (``STALE`` — a setup that used
+        to justify a trade and no longer does).
+
+        ``signal_state`` is one of NEW (first time seen this pair/direction),
+        STALE (was Grade A, isn't anymore), UP/DOWN (score moved, still not a
+        grade-A dropout) or UNCHANGED. History survives restarts via
+        ``score_history`` (Postgres ``app_state`` + local JSON fallback).
+        """
+        prev = score_history.load()
+        now_iso = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        next_state = dict(prev)
+        stale = []
+        for r in all_results:
+            key = f"{r['pair']}|{r['direction']}"
+            pct = int(round(r["score"] / 10 * 100))
+            r["pct"] = pct
+            p = prev.get(key)
+            if p is None:
+                r["delta_pct"] = None
+                r["prev_grade"] = None
+                r["prev_pct"] = None
+                r["signal_state"] = "NEW"
+            else:
+                r["delta_pct"] = pct - p.get("pct", pct)
+                r["prev_grade"] = p.get("grade")
+                r["prev_pct"] = p.get("pct")
+                if p.get("grade") == "A" and r["grade"] != "A":
+                    r["signal_state"] = "STALE"
+                    stale.append(r)
+                elif r["delta_pct"] > 0:
+                    r["signal_state"] = "UP"
+                elif r["delta_pct"] < 0:
+                    r["signal_state"] = "DOWN"
+                else:
+                    r["signal_state"] = "UNCHANGED"
+            next_state[key] = {"score": r["score"], "grade": r["grade"],
+                               "pct": pct, "ts": now_iso}
+        score_history.save(next_state)
+        return stale
+
+    @staticmethod
+    def _render_stale_panel(stale: list) -> None:
+        """A pair/direction that was Grade A on the last scan and isn't now —
+        the closest thing this page has to 'this signal is invalid.'"""
+        if not stale:
+            return
+        rows_html = ""
+        for r in stale:
+            d_color = T.GREEN if r["direction"] == "LONG" else T.RED
+            prev_pct = r.get("prev_pct")
+            prev_pct_txt = f"{prev_pct}%" if prev_pct is not None else "—"
+            rows_html += (
+                f'<div style="display:flex;justify-content:space-between;'
+                f'flex-wrap:wrap;gap:6px;padding:6px 0;border-bottom:1px solid {T.BORDER};'
+                f'font-family:\'JetBrains Mono\',monospace;font-size:11px;">'
+                f'<span><span style="color:{T.WHITE};font-weight:700;">{r["pair"]}</span> '
+                f'<span style="color:{d_color};">{r["direction"]}</span></span>'
+                f'<span style="color:{T.GREY};">was <span style="color:{T.GREEN};">'
+                f'Grade A</span> ({prev_pct_txt}) &rarr; now <span style="color:{T.RED};">'
+                f'Grade {r["grade"]}</span> ({r["pct"]}%) '
+                f'<span style="color:{T.RED};font-weight:700;">{r["delta_pct"]:+d}%</span></span>'
+                f'</div>'
+            )
+        Panel(
+            title="⚠ INVALIDATED SINCE LAST SCAN",
+            tag=f"{len(stale)}",
+            body_html=rows_html,
+        ).show()
 
     # ── DB persistence ──────────────────────────────────────────────────────
     @staticmethod
@@ -606,6 +709,90 @@ class SetupRankerPage(BloombergPage):
                  + "\n".join(plain_lines) + "\n" + summary_plain)
         return html, plain
 
+    # ── Invalidation email alerts ─────────────────────────────────────────
+    @classmethod
+    def _maybe_email_stale_alerts(cls, stale: list) -> None:
+        """Email setups that just dropped out of Grade A (opt-in, separate
+        toggle/dedupe ledger from the new-setup alert). Dedup key includes the
+        specific prev%→now% transition, so the same drop doesn't re-fire every
+        5 min, but a setup that recovers to Grade A and drops again does. The
+        'seen' memory is only updated after a successful send, matching
+        ``_maybe_email_alerts``."""
+        if not stale:
+            return
+
+        keys = [f"{r['pair']}|{r['direction']}|{r.get('prev_pct')}->{r['pct']}"
+                for r in stale]
+        cache = alert_service.NotifyCache("setup_ranker_stale")
+        seen = cache.load()
+        fresh = [(r, k) for r, k in zip(stale, keys) if k not in seen]
+        if not fresh:
+            return
+
+        setups = [r for r, _ in fresh]
+        html, plain = cls._build_stale_email(setups)
+        subject = (
+            f"⚠ {len(setups)} setup{'s' if len(setups) != 1 else ''} invalidated — "
+            f"{', '.join(r['pair'] for r in setups[:3])}{'…' if len(setups) > 3 else ''}"
+        )
+        ok, msg = alert_service.send_email(subject, html, plain)
+        if ok:
+            cache.filter_new([k for _, k in fresh])  # mark as alerted only now
+            st.toast(f"📧 Emailed {len(setups)} invalidated setup(s) to "
+                     f"{alert_service.email_recipient()}", icon="⚠️")
+        else:
+            st.toast(f"⚠ Invalidation alert email failed: {msg}", icon="⚠️")
+
+    @staticmethod
+    def _build_stale_email(stale: list):
+        """Render (html, plain) bodies for a batch of just-invalidated setups."""
+        rows_html, plain_lines = "", []
+        for r in stale:
+            d_color = "#26a69a" if r["direction"] == "LONG" else "#ef5350"
+            arrow = "📈 LONG" if r["direction"] == "LONG" else "📉 SHORT"
+            prev_pct = r.get("prev_pct")
+            prev_pct_txt = f"{prev_pct}%" if prev_pct is not None else "—"
+            rows_html += f"""
+            <tr style="border-bottom:1px solid #2d3148;">
+              <td style="padding:9px 12px;font-weight:700;color:#e0e0e0;">{r['pair']}</td>
+              <td style="padding:9px 12px;color:{d_color};font-weight:700;">{arrow}</td>
+              <td style="padding:9px 12px;color:#26a69a;">Grade A
+                  <span style="color:#8b8fa8;font-size:11px;">({prev_pct_txt})</span></td>
+              <td style="padding:9px 12px;color:#ef5350;font-weight:700;">Grade {r['grade']}
+                  <span style="color:#8b8fa8;font-size:11px;">({r['pct']}%)</span></td>
+              <td style="padding:9px 12px;color:#ef5350;font-weight:700;">{r['delta_pct']:+d}%</td>
+            </tr>"""
+            plain_lines.append(
+                f"{r['pair']} {r['direction']}  |  was Grade A ({prev_pct_txt})  ->  "
+                f"now Grade {r['grade']} ({r['pct']}%)  |  {r['delta_pct']:+d}%"
+            )
+
+        html = f"""<!DOCTYPE html><html><body style="background:#0e1117;
+          font-family:'Courier New',monospace;color:#c0c0c0;margin:0;padding:20px;">
+          <div style="max-width:820px;margin:0 auto;">
+            <h2 style="color:#ff5252;border-bottom:1px solid #2d3148;padding-bottom:10px;">
+              ⚠ Setup Ranker — {len(stale)} Setup{'s' if len(stale) != 1 else ''} Invalidated
+            </h2>
+            <p style="color:#8b8fa8;font-size:13px;">
+              These were Grade A on the previous scan and have since dropped out, as of
+              {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Re-evaluate before acting on them.
+            </p>
+            <table style="width:100%;border-collapse:collapse;background:#1a1d27;border-radius:8px;overflow:hidden;">
+              <thead><tr style="background:#000000;">
+                {''.join(f'<th style="padding:9px 12px;text-align:left;color:#8b8fa8;font-size:11px;letter-spacing:1px;">{h}</th>' for h in ('PAIR', 'DIR', 'WAS', 'NOW', 'Δ'))}
+              </tr></thead>
+              <tbody>{rows_html}</tbody>
+            </table>
+            <p style="color:#8b8fa8;font-size:11px;margin-top:22px;border-top:1px solid #2d3148;padding-top:12px;">
+              If you already took one of these, tighten or exit per your plan — it no longer
+              clears the Grade-A bar.
+            </p>
+          </div></body></html>"""
+        plain = (f"SETUP RANKER — {len(stale)} setup(s) invalidated "
+                 f"({datetime.now().strftime('%Y-%m-%d %H:%M')})\n\n"
+                 + "\n".join(plain_lines))
+        return html, plain
+
     @staticmethod
     def _render_cards(results, rr_ratio, account_bal, risk_pct) -> None:
         grade_color = {
@@ -656,6 +843,20 @@ class SetupRankerPage(BloombergPage):
                     f'font-family:\'JetBrains Mono\',monospace;">⚠ SPREAD '
                     f'{r["spread_pct"]:.1f}%</span>'
                 )
+            state = r.get("signal_state")
+            delta = r.get("delta_pct")
+            state_badge = ""
+            if state == "NEW":
+                state_badge = (f'<span style="color:{T.CYAN};font-size:9px;'
+                               f'margin-left:6px;">NEW</span>')
+            elif state == "STALE":
+                state_badge = (f'<span style="color:{T.RED};font-size:9px;'
+                               f'margin-left:6px;">⚠ WAS GRADE A</span>')
+            elif delta:
+                dcolor = T.GREEN if delta > 0 else T.RED
+                arrow = "▲" if delta > 0 else "▼"
+                state_badge = (f'<span style="color:{dcolor};font-size:9px;'
+                               f'margin-left:6px;">{arrow}{delta:+d}%</span>')
 
             body = (
                 f'<div style="display:flex;justify-content:space-between;'
@@ -671,7 +872,7 @@ class SetupRankerPage(BloombergPage):
                 f'<span style="color:{color};font-size:14px;font-weight:700;'
                 f'font-family:\'JetBrains Mono\',monospace;">{r["score"]}/10</span> '
                 f'<span style="color:{color};font-size:10px;letter-spacing:0.1em;">'
-                f'{icon} {label}</span>'
+                f'{icon} {label}</span>{state_badge}'
                 f'</div></div>'
                 f'<div style="margin:8px 0 6px 0;">{dots}</div>'
                 f'<div style="font-family:\'JetBrains Mono\',monospace;'
@@ -716,6 +917,9 @@ class SetupRankerPage(BloombergPage):
                 "Dir": r["direction"],
                 "Score": f"{r['score']}/10",
                 "Grade": r["grade"],
+                "State": r.get("signal_state", "—"),
+                "Δ%": (f"{r['delta_pct']:+d}%"
+                       if r.get("delta_pct") is not None else "—"),
                 "Price": (f"{r['close']:.5f}" if r["close"] < 100
                           else f"{r['close']:.3f}"),
                 "SL Price": fmt_price(lv["sl_price"]),
