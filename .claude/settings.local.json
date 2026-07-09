@@ -130,7 +130,14 @@
       "Bash(:)",
       "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"ProcessId=4234856 or ProcessId=4230616\\\\\" | Select-Object ProcessId, CommandLine | Format-List\")",
       "Bash(git *)",
-      "Bash(PYTHONIOENCODING=utf-8 timeout 100 python -)"
+      "Bash(PYTHONIOENCODING=utf-8 timeout 100 python -)",
+      "Bash(curl *)",
+      "Bash(grep -v -E \"from src|from streamlit|import streamlit|import pandas|import numpy|import plotly|import yfinance|from plotly|import requests|import datetime|import calendar|from datetime|import os|import logging|import json|import re$|import math|import time|from dataclasses|from typing|import io\")",
+      "Bash(mkdir -p src/services)",
+      "Bash(mv pages/cot_disaggregated.py src/services/cot_disaggregated.py)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 90 python -m pytest -q)",
+      "Bash(grep -E \"\\\\.json$\")",
+      "Bash(grep -v \"^\\\\./pages/holding_period_tab.py$\")"
     ]
   }
 }

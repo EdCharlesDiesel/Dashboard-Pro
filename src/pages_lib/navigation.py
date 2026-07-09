@@ -38,6 +38,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("RANK", "03. Setup Ranker",         "🎰", "pages/setup-ranker.py"),
         NavEntry("AMD",  "04. AMD Scanner",          "📊", "pages/amd-scanner.py"),
         NavEntry("TSIG", "05. Trend Signals",        "📡", "pages/trend-signals.py"),
+        NavEntry("MTFX", "05a. MTF Matrix",          "🧭", "pages/mtf-matrix.py"),
         NavEntry("20DB", "06. 20-Day Breakout",      "🚀", "pages/twenty_day_breakout_tab.py"),
         NavEntry("CMEF", "07. CME FX Futures",       "📦", "pages/cme-futures-volume.py"),
         NavEntry("PRED", "08. Predictive Analytics", "💱", "pages/predictive.py"),
@@ -52,6 +53,8 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("COTS", "18. COT Signals",          "🧭", "pages/cot_signals.py"),
         NavEntry("CORR", "19. Correlations",         "🔗", "pages/correlations.py"),
         NavEntry("COTO", "20. COT Open Interest",    "🧮", "pages/cot_open_interest.py"),
+        NavEntry("GCOT", "20a. Gold COT",            "🥇", "pages/gold_cot_tab.py"),
+        NavEntry("OCOT", "20b. Oil COT",             "🛢️", "pages/oil_cot_tab.py"),
     ]),
     ("3 · WEEKLY BIAS", [
         NavEntry("WEMA", "21. Weekly EMA",           "📉", "pages/weekly-ema.py"),
@@ -86,15 +89,19 @@ NAV_SECTIONS: List[tuple] = [
     ("9 · SIGNAL LAB", [
         NavEntry("COTX", "35. COT Composite Signal",   "🧩", "pages/cot_composite_trade_signal.py"),
         NavEntry("COTB", "36. COT Composite Backtest", "🧪", "pages/cot_trade_signal_walk_forward_backtest_harness.py"),
+        NavEntry("EWKV", "37. Busy-Week Anatomy",      "📅", "pages/event_week_vol_tab.py"),
+        NavEntry("DISC", "38. Disconnect Monitor",     "🔌", "pages/disconnect_monitor_tab.py"),
+        NavEntry("ONDR", "39. Overnight Drift",        "🌙", "pages/overnight_drift_tab.py"),
+        NavEntry("HOLD", "40. Optimal Holding Period",  "⏱️", "pages/holding_period_tab.py"),
     ]),
 ]
 
 # Archived (moved to archive/pages/ — not deleted, just off the daily nav):
-# Trading Ideas, MTF Matrix, Technical Chart, Pivots & Fibonacci, Volume
-# Profile, FRED Macro Grid, Smart Money, Forecast Lab, Macro Bias, Forex
-# Fundamentals, Market Regime, Risk Reversals, Event Impact, Seasonality,
-# ATR Volatility, Weekly RSI, Double Zeros, Backtest Lab, Trading Lab,
-# Reports, System Logs.
+# Trading Ideas, Technical Chart, Pivots & Fibonacci, Volume Profile, FRED
+# Macro Grid, Smart Money, Forecast Lab, Macro Bias, Forex Fundamentals,
+# Market Regime, Risk Reversals, Event Impact, Seasonality, ATR Volatility,
+# Weekly RSI, Double Zeros, Backtest Lab, Trading Lab, Reports, System Logs.
+# (MTF Matrix was restored to the live nav above — see MTFX.)
 
 # Flat list kept for any caller that doesn't care about grouping.
 NAV_ENTRIES: List[NavEntry] = [e for _, entries in NAV_SECTIONS for e in entries]

@@ -2,6 +2,8 @@ import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.alert_service import NotifyCache
+from src.services.tool_log import log_tool_usage
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -641,6 +643,22 @@ with tab_detail:
                                pip_size=pip_size, pip_val=pip_val,
                                account_bal=account_bal, risk_pct=risk_pct,
                                struct=struct, atr_period=int(atr_period))
+
+        # Log this stop-structure read to Postgres (audit trail). Deduped on
+        # the pair + settings shape via NotifyCache — every widget touch
+        # reruns this tab, so without dedupe an unrelated tweak would re-log
+        # an unchanged read.
+        _ss_key = (f"{selected_pair}|{direction}|{atr_mult}|{atr_period}|"
+                  f"{pivot_lb}|{calc['sl_pips']:.1f}")
+        if NotifyCache("stop_structure_log").filter_new([_ss_key]):
+            log_tool_usage("stop_structure", {
+                "pair": selected_pair, "direction": direction,
+                "atr_mult": atr_mult, "atr_period": atr_period,
+                "pivot_lb": pivot_lb, "price": calc["price"],
+                "atr14": calc["atr14"], "sl_pips": calc["sl_pips"],
+                "tp1_pips": calc["tp1_pips"], "tp2_pips": calc["tp2_pips"],
+                "risk_amount": calc["risk_amount"],
+            })
 
         # ── KPI strip ────────────────────────────────
         k1, k2, k3, k4, k5, k6 = st.columns(6)

@@ -64,6 +64,19 @@ class TradeRepository:
         )
     """
 
+    # Lightweight audit trail for the interactive tool pages (R:R calculator,
+    # Account Risk, Correlations, News Filter, Stop Structure) that don't
+    # produce a directional trade_setups row. One row per meaningful
+    # computation; JSONB payload keeps each tool's shape flexible.
+    TOOL_USAGE_SQL = """
+        CREATE TABLE IF NOT EXISTS tool_usage_log (
+            id        SERIAL PRIMARY KEY,
+            logged_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            tool      VARCHAR(30) NOT NULL,
+            payload   JSONB
+        )
+    """
+
     CREATE_SQL = """
         CREATE TABLE IF NOT EXISTS trade_setups (
             id            SERIAL PRIMARY KEY,
@@ -126,6 +139,7 @@ class TradeRepository:
                         f"ALTER TABLE trade_setups ADD COLUMN IF NOT EXISTS {col_def}"
                     )
                 cur.execute(self.APP_STATE_SQL)
+                cur.execute(self.TOOL_USAGE_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
@@ -150,6 +164,16 @@ class TradeRepository:
         """
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
             cur.execute(sql, (key, psycopg2.extras.Json(value)))
+            conn.commit()
+
+    # ── tool usage log ─────────────────────────────────────────────────────
+    def log_tool_usage(self, tool: str, payload: Dict[str, Any]) -> None:
+        """Insert one tool-interaction row. ``tool`` names the page (e.g.
+        ``'rr_calculator'``); ``payload`` is whatever inputs/outputs that tool
+        wants recorded, stored as-is in JSONB."""
+        sql = "INSERT INTO tool_usage_log (tool, payload) VALUES (%s, %s)"
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, (tool, psycopg2.extras.Json(payload)))
             conn.commit()
 
     # ── writes ──────────────────────────────────────────────────────────────
