@@ -47,7 +47,7 @@ class AppConfig:
         "EUR/GBP": 1.5, "EUR/JPY": 1.5, "GBP/JPY": 1.8, "AUD/JPY": 1.6,
         "EUR/AUD": 1.6, "GBP/AUD": 1.8, "EUR/CAD": 1.6, "GBP/CAD": 1.8,
         "USD/ZAR": 2.5, "EUR/ZAR": 2.5, "GBP/ZAR": 2.5,
-        "XAU/USD": 2.0, "XAG/USD": 2.0, "XPT/USD": 2.0,
+        "XAU/USD": 2.0, "XAG/USD": 2.0, "XPT/USD": 2.0, "WTI/USD": 2.0,
     })
 
     # Minimum stop distance in price terms — scaled to each instrument's pip
@@ -58,7 +58,7 @@ class AppConfig:
         "EUR/GBP": 0.0010, "EUR/JPY": 0.10, "GBP/JPY": 0.15, "AUD/JPY": 0.10,
         "EUR/AUD": 0.0015, "GBP/AUD": 0.0015, "EUR/CAD": 0.0015, "GBP/CAD": 0.0015,
         "USD/ZAR": 0.05, "EUR/ZAR": 0.05, "GBP/ZAR": 0.05,
-        "XAU/USD": 2.00, "XAG/USD": 0.05, "XPT/USD": 2.00,
+        "XAU/USD": 2.00, "XAG/USD": 0.05, "XPT/USD": 2.00, "WTI/USD": 0.20,
     })
 
     dxy_symbol: str = "DX-Y.NYB"

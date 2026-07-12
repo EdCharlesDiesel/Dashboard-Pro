@@ -56,10 +56,11 @@ _INSTRUMENT_TABLE: Tuple[Tuple[str, str, float, float, str], ...] = (
     ("XAU/USD", "GC=F",  10.0, 0.10, "DXY inverse, VIX"),
     ("XAG/USD", "SI=F",  10.0, 0.01, "Gold correlation"),
     ("XPT/USD", "PL=F",  10.0, 0.10, "Industrial demand"),
+    ("WTI/USD", "CL=F",  10.0, 0.01, "USD/CAD inverse, risk sentiment"),
 )
 
 
-TREND_COMMODITIES: FrozenSet[str] = frozenset({"XAU/USD", "XAG/USD", "XPT/USD"})
+TREND_COMMODITIES: FrozenSet[str] = frozenset({"XAU/USD", "XAG/USD", "XPT/USD", "WTI/USD"})
 
 TREND_TIMEFRAMES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "1 Hour":  ("60m", "59d", "1h"),
@@ -82,7 +83,7 @@ TYPICAL_SPREADS: Dict[str, float] = {
     "EUR/JPY": 2.0, "GBP/JPY": 3.0, "AUD/JPY": 2.5, "EUR/AUD": 3.0,
     "GBP/AUD": 3.5, "EUR/CAD": 3.0, "GBP/CAD": 3.5, "USD/ZAR": 80.0,
     "EUR/ZAR": 90.0, "GBP/ZAR": 90.0, "XAU/USD": 3.0, "XAG/USD": 5.0,
-    "XPT/USD": 8.0,
+    "XPT/USD": 8.0, "WTI/USD": 4.0,
 }
 
 

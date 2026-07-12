@@ -18,12 +18,14 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.alert_service import NotifyCache
 from src.services.cot_fetcher import (
     INSTRUMENTS,
     compute_extremeness,
     get_all_snapshot,
     get_instrument_series,
 )
+from src.services.tool_log import log_tool_usage
 from src.ui.theme import BloombergTheme
 
 st.set_page_config(
@@ -143,6 +145,20 @@ except Exception as e:
 
 ext = compute_extremeness(series)
 price_df = _price_series(PRICE_TICKERS[instrument], years_back)
+
+# Log this positioning read to Postgres (audit trail, not trade_setups — this
+# is a crowdedness read, not a directional pair+bias trade signal; see the
+# module docstring). Deduped per instrument+week via NotifyCache, since the
+# CFTC data only updates weekly — no point logging the same read every rerun.
+_latest_date = series["date"].iloc[-1] if not series.empty else None
+_cot_key = f"{instrument}|{_latest_date}"
+if NotifyCache("cot_tab_log").filter_new([_cot_key]):
+    log_tool_usage("cot_tab", {
+        "instrument": instrument, "week": str(_latest_date),
+        "latest_net": ext.get("latest_net"), "percentile": ext.get("percentile"),
+        "z_score": ext.get("z_score"), "label": ext.get("label"),
+        "net_change_wow": float(series["net_change_wow"].iloc[-1]) if not series.empty else None,
+    })
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Latest Net Position", f"{ext.get('latest_net', 0):,.0f}")

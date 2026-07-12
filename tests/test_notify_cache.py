@@ -64,6 +64,48 @@ class TestMergeSemantics:
         assert cache.add(["b"]) == {"a", "b"}
 
 
+class TestDBMirror:
+    """The DB layer is monkeypatched (instance methods) — no live Postgres.
+    Verifies load() merges local+DB and writes mirror to both sides."""
+
+    def test_load_merges_local_and_db(self, cache, monkeypatch):
+        cache.save(["a"])
+        monkeypatch.setattr(cache, "_db_read", lambda: {"b", "c"})
+        assert cache.load() == {"a", "b", "c"}
+
+    def test_load_falls_back_to_local_when_db_unset(self, cache, monkeypatch):
+        cache.save(["a"])
+        monkeypatch.setattr(cache, "_db_read", lambda: None)
+        assert cache.load() == {"a"}
+
+    def test_save_mirrors_to_db(self, cache, monkeypatch):
+        mirrored = {}
+        monkeypatch.setattr(cache, "_db_write", lambda keys: mirrored.update(keys=keys))
+        cache.save(["a", "b"])
+        assert mirrored["keys"] == {"a", "b"}
+
+    def test_filter_new_mirrors_merged_set_to_db(self, cache, monkeypatch):
+        mirrored = {}
+        monkeypatch.setattr(cache, "_db_write", lambda keys: mirrored.update(keys=keys))
+        cache.filter_new(["a", "b"])
+        assert mirrored["keys"] == {"a", "b"}
+
+    def test_reset_clears_db_too(self, cache, monkeypatch):
+        cache.save(["a"])
+        reset_called = []
+        monkeypatch.setattr(cache, "_db_reset", lambda: reset_called.append(True))
+        cache.reset()
+        assert reset_called == [True]
+        assert cache.load() == set()
+
+    def test_db_helpers_degrade_gracefully_without_a_configured_db(self, cache):
+        # No monkeypatching — _resolve_cfg() has no live DB target in tests, so
+        # every DB helper must no-op/return None rather than raise.
+        assert cache._db_read() is None
+        cache._db_write({"a"})   # must not raise
+        cache._db_reset()        # must not raise
+
+
 class TestConcurrency:
     def test_concurrent_add_loses_no_keys(self, cache):
         """Many threads each add a distinct key; the lock + atomic write must
