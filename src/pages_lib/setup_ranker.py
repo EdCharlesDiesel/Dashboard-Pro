@@ -133,6 +133,26 @@ class _SetupRankerDataFeed:
         except Exception:
             return pd.DataFrame()
 
+    @staticmethod
+    def currency_strength_diff(pair: str) -> Optional[float]:
+        """(base 20d % return − quote 20d % return), or None for commodities /
+        when currency-strength data isn't available. Same 20-day window and
+        source as Instrument Predictor's Currency Strength component, so a
+        pair's fundamental read agrees across both pages."""
+        if INSTRUMENTS[pair].instrument.is_commodity:
+            return None
+        from src.pages_lib.currency_strength import _currency_returns, _fetch_pair_closes
+        closes = _fetch_pair_closes()
+        if closes.empty:
+            return None
+        strength = _currency_returns(closes)
+        base, quote = pair.split("/")
+        base_s = strength.get(base, {}).get(20)
+        quote_s = strength.get(quote, {}).get(20)
+        if base_s is None or quote_s is None:
+            return None
+        return base_s - quote_s
+
     @classmethod
     def score(cls, pair: str, info: dict, direction: str) -> dict:
         ticker = info["ticker"]
@@ -141,7 +161,9 @@ class _SetupRankerDataFeed:
         df_d = cls.daily(ticker)
         df_4h = cls.four_hour(ticker)
         spread = TYPICAL_SPREADS.get(pair, 0.0)
-        result = score_setup(df_w, df_d, df_4h, direction, pip_size, spread)
+        ccy_diff = cls.currency_strength_diff(pair)
+        result = score_setup(df_w, df_d, df_4h, direction, pip_size, spread,
+                             currency_strength_diff=ccy_diff)
         result["pair"] = pair
         return result
 
@@ -213,7 +235,7 @@ class SetupRankerPage(BloombergPage):
                 ]
         with col3:
             if st.button("Metals", width="stretch"):
-                st.session_state.sr_pairs = ["XAU/USD", "XAG/USD", "XPT/USD"]
+                st.session_state.sr_pairs = ["XAU/USD", "XAG/USD", "XPT/USD", "WTI/USD"]
         st.session_state.sr_pairs = st.multiselect(
             "Instruments", INSTRUMENTS.keys(),
             default=[p for p in st.session_state.sr_pairs if p in INSTRUMENTS],
@@ -224,6 +246,9 @@ class SetupRankerPage(BloombergPage):
         )
         st.session_state.sr_min_score = st.slider(
             "Min score", 0, 10, st.session_state.sr_min_score,
+            help="Out of 10 — applied as a percentage, since FX pairs score "
+                 "out of 11 (10 technical + Currency Strength) while "
+                 "commodities score out of 10 (no single driving currency).",
         )
         st.session_state.sr_rr_ratio = st.select_slider(
             "TP R:R", options=[1.0, 1.5, 2.0, 2.5, 3.0],
@@ -282,6 +307,8 @@ class SetupRankerPage(BloombergPage):
         )
         st.session_state.sr_email_min = st.slider(
             "Alert when score ≥", 6, 10, int(st.session_state.sr_email_min),
+            help="Out of 10, applied as a percentage — same normalization as "
+                 "the Min score filter above.",
         )
         st.session_state.sr_trades_per_signal = st.number_input(
             "Trades per signal", min_value=1, max_value=10,
@@ -356,7 +383,12 @@ class SetupRankerPage(BloombergPage):
             # setup that was Grade A and no longer is gets flagged rather than
             # silently vanishing from the ranked list on the next scan.
             stale = self._track_score_history(all_results)
-            results = [r for r in all_results if r["score"] >= min_score]
+            # Compare on percentage, not raw score — FX pairs carry an 11th
+            # (Currency Strength) criterion that commodities don't, so their
+            # raw scores aren't on the same scale. min_score is still entered
+            # as an out-of-10 figure for UI familiarity.
+            min_pct = min_score / 10 * 100
+            results = [r for r in all_results if r["pct"] >= min_pct]
 
             # Auto-save Grade-A setups to the journal DB (deduped, source-tagged).
             self._persist_signals(results, rr_ratio)
@@ -388,10 +420,14 @@ class SetupRankerPage(BloombergPage):
                 if mb["win"] is not None:
                     grade_a_win += mb["win"]
             render_metric_row([
-                MetricCell("Grade A (8–10)", str(grade_counts["A"]), "green"),
-                MetricCell("Grade B (6–7)",  str(grade_counts["B"]), "cyan"),
-                MetricCell("Grade C (4–5)",  str(grade_counts["C"]), "yellow"),
-                MetricCell("Grade D (<4)",   str(grade_counts["D"]), "red"),
+                # Grade bands are percentage cutoffs (A>=80%, B>=60%, C>=40%),
+                # not fixed score ranges — FX pairs score /11 (with Currency
+                # Strength) while commodities score /10, so a raw range like
+                # "8-10" would be inaccurate for FX pairs.
+                MetricCell("Grade A (≥80%)", str(grade_counts["A"]), "green"),
+                MetricCell("Grade B (60-79%)",  str(grade_counts["B"]), "cyan"),
+                MetricCell("Grade C (40-59%)",  str(grade_counts["C"]), "yellow"),
+                MetricCell("Grade D (<40%)",   str(grade_counts["D"]), "red"),
                 MetricCell("Grade-A Win $",  f"+${grade_a_win:,.0f}", "green"),
                 MetricCell("Invalidated",    str(len(stale)), "red" if stale else "white"),
             ])
@@ -486,8 +522,10 @@ class SetupRankerPage(BloombergPage):
         stale = []
         for r in all_results:
             key = f"{r['pair']}|{r['direction']}"
-            pct = int(round(r["score"] / 10 * 100))
-            r["pct"] = pct
+            # pct is already computed correctly by score_setup (which knows
+            # whether this pair scored /10 or /11) — reuse it rather than
+            # recomputing against a hardcoded denominator.
+            pct = r["pct"]
             p = prev.get(key)
             if p is None:
                 r["delta_pct"] = None
@@ -549,7 +587,7 @@ class SetupRankerPage(BloombergPage):
         silent no-op without a DB."""
         signals = []
         for r in results:
-            if r.get("score", 0) < 8:  # Grade A only — high-conviction
+            if r.get("grade") != "A":  # Grade A only — high-conviction
                 continue
             inst = INSTRUMENTS.get(r["pair"])
             pip_size = inst.pip_size if inst else None
@@ -577,7 +615,8 @@ class SetupRankerPage(BloombergPage):
         'seen' memory is only updated after a successful send, so a transient
         SMTP failure retries on the next scan instead of silently dropping."""
         threshold = int(st.session_state.get("sr_email_min", 9))
-        qualifying = [r for r in results if r.get("score", 0) >= threshold]
+        threshold_pct = threshold / 10 * 100
+        qualifying = [r for r in results if r.get("pct", 0) >= threshold_pct]
         if not qualifying:
             return
 
@@ -646,7 +685,7 @@ class SetupRankerPage(BloombergPage):
             <tr style="border-bottom:1px solid #2d3148;">
               <td style="padding:9px 12px;font-weight:700;color:#e0e0e0;">{r['pair']}</td>
               <td style="padding:9px 12px;color:{d_color};font-weight:700;">{arrow}</td>
-              <td style="padding:9px 12px;color:#ffa726;font-weight:700;">{r['score']}/10
+              <td style="padding:9px 12px;color:#ffa726;font-weight:700;">{r['score']}/{r.get('max_score', 10)}
                   <span style="color:#8b8fa8;font-size:11px;">({r['grade']})</span></td>
               <td style="padding:9px 12px;color:#e0e0e0;">{fmt_price(r['close'])}</td>
               <td style="padding:9px 12px;color:#ef5350;">{fmt_price(lv['sl_price'])}
@@ -657,7 +696,7 @@ class SetupRankerPage(BloombergPage):
               <td style="padding:9px 12px;color:#26a69a;font-weight:700;">{grow_txt}</td>
             </tr>"""
             plain_lines.append(
-                f"{r['pair']} {r['direction']}  |  Score {r['score']}/10 ({r['grade']})  |  "
+                f"{r['pair']} {r['direction']}  |  Score {r['score']}/{r.get('max_score', 10)} ({r['grade']})  |  "
                 f"Entry {fmt_price(r['close'])}  SL {fmt_price(lv['sl_price'])}  "
                 f"TP {fmt_price(lv['tp_price'])} ({rr_ratio:.1f}R)  |  "
                 f"{n}× {lot_txt} lot · risk {risk_txt} · GROWTH {grow_plain}"
@@ -825,7 +864,7 @@ class SetupRankerPage(BloombergPage):
                 f'<span style="display:inline-block;width:8px;height:8px;'
                 f'background:{color if i < r["score"] else T.BORDER};'
                 f'margin-right:2px;"></span>'
-                for i in range(10)
+                for i in range(r.get("max_score", 10))
             )
             pills = "".join(
                 f'<span style="display:inline-block;border:1px solid '
@@ -870,7 +909,7 @@ class SetupRankerPage(BloombergPage):
                 f'</div>'
                 f'<div style="text-align:right;">'
                 f'<span style="color:{color};font-size:14px;font-weight:700;'
-                f'font-family:\'JetBrains Mono\',monospace;">{r["score"]}/10</span> '
+                f'font-family:\'JetBrains Mono\',monospace;">{r["score"]}/{r.get("max_score", 10)}</span> '
                 f'<span style="color:{color};font-size:10px;letter-spacing:0.1em;">'
                 f'{icon} {label}</span>{state_badge}'
                 f'</div></div>'
@@ -902,7 +941,14 @@ class SetupRankerPage(BloombergPage):
     @staticmethod
     def _render_table(results, rr_ratio, account_bal, risk_pct) -> None:
         rows = []
-        criteria_keys = list(results[0]["scores"].keys()) if results else []
+        # Union of every result's criteria, not just the first row's — FX
+        # pairs carry "Currency Strength" (11 criteria) but commodities don't
+        # (10), so the first row alone may not have every column.
+        criteria_keys: list = []
+        for r in results:
+            for k in r["scores"]:
+                if k not in criteria_keys:
+                    criteria_keys.append(k)
         for r in results:
             inst = INSTRUMENTS.get(r["pair"])
             pip_size = inst.pip_size if inst else None
@@ -915,7 +961,7 @@ class SetupRankerPage(BloombergPage):
                 "Rank": results.index(r) + 1,
                 "Pair": r["pair"],
                 "Dir": r["direction"],
-                "Score": f"{r['score']}/10",
+                "Score": f"{r['score']}/{r.get('max_score', 10)}",
                 "Grade": r["grade"],
                 "State": r.get("signal_state", "—"),
                 "Δ%": (f"{r['delta_pct']:+d}%"
@@ -932,7 +978,10 @@ class SetupRankerPage(BloombergPage):
                 "Win $": f"+${mb['win']:,.0f}" if mb["win"] is not None else "—",
             }
             for k in criteria_keys:
-                row[k] = "✓" if r["scores"][k] else "✗"
+                if k not in r["scores"]:
+                    row[k] = "—"  # not applicable (e.g. Currency Strength on a commodity)
+                else:
+                    row[k] = "✓" if r["scores"][k] else "✗"
             rows.append(row)
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
@@ -940,26 +989,29 @@ class SetupRankerPage(BloombergPage):
     def _render_chart(results) -> None:
         top = results[:20]
         labels = [f"{r['pair']} {r['direction']}" for r in top]
-        values = [r["score"] for r in top]
+        # Percentage, not raw score — FX pairs score /11 (Currency Strength)
+        # while commodities score /10, so raw counts aren't comparable on one
+        # axis, but pct (grade cutoffs are pct-based) always is.
+        values = [r["pct"] for r in top]
         color_for_grade = {"A": T.GREEN, "B": T.CYAN, "C": T.YELLOW, "D": T.GREY}
         bar_colors = [color_for_grade[r["grade"]] for r in top]
         fig = go.Figure(go.Bar(
             y=labels[::-1], x=values[::-1], orientation="h",
             marker_color=bar_colors[::-1],
-            text=[f"{v}/10" for v in values[::-1]],
+            text=[f"{v}%" for v in values[::-1]],
             textposition="outside",
-            hovertemplate="<b>%{y}</b><br>Score: %{x}/10<extra></extra>",
+            hovertemplate="<b>%{y}</b><br>Score: %{x}%<extra></extra>",
         ))
-        fig.add_vline(x=8, line_dash="dash", line_color=T.GREEN, line_width=1.5,
+        fig.add_vline(x=80, line_dash="dash", line_color=T.GREEN, line_width=1.5,
                       annotation_text="Grade A", annotation_font_color=T.GREEN)
-        fig.add_vline(x=6, line_dash="dot", line_color=T.CYAN, line_width=1,
+        fig.add_vline(x=60, line_dash="dot", line_color=T.CYAN, line_width=1,
                       annotation_text="Grade B", annotation_font_color=T.CYAN)
         fig.update_layout(
             paper_bgcolor=T.BG, plot_bgcolor=T.BG_PANEL,
             font=dict(color=T.WHITE, family=T.FONT_MONO, size=10),
             height=max(400, len(top) * 30),
-            xaxis=dict(range=[0, 12], showgrid=True,
-                       gridcolor=T.BORDER, title="Score / 10"),
+            xaxis=dict(range=[0, 110], showgrid=True,
+                       gridcolor=T.BORDER, title="Score %"),
             yaxis=dict(showgrid=False),
             margin=dict(l=10, r=80, t=10, b=10),
             showlegend=False,

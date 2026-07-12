@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
+from src.instruments import INSTRUMENTS as _REGISTRY_INSTRUMENTS
 from src.pages_lib.base import BloombergPage, PageContext
 from src.services.alert_service import NotifyCache
 from src.services.tool_log import log_tool_usage
@@ -20,16 +21,14 @@ from src.ui.components import CommandBar, MetricCell, Panel, render_metric_row
 from src.ui.theme import BloombergTheme as T
 
 
+# Sourced from the shared registry (all 21 FX pairs + XAU/XAG/XPT/WTI) plus two
+# benchmark series that aren't tradable registry instruments but are useful
+# correlation anchors.
 _ALL_INSTRUMENTS: Dict[str, str] = {
-    "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "AUD/USD": "AUDUSD=X",
-    "NZD/USD": "NZDUSD=X", "USD/JPY": "USDJPY=X", "USD/CHF": "USDCHF=X",
-    "USD/CAD": "USDCAD=X", "EUR/GBP": "EURGBP=X", "EUR/JPY": "EURJPY=X",
-    "GBP/JPY": "GBPJPY=X", "AUD/JPY": "AUDJPY=X", "EUR/AUD": "EURAUD=X",
-    "GBP/AUD": "GBPAUD=X", "EUR/CAD": "EURCAD=X", "GBP/CAD": "GBPCAD=X",
-    "USD/ZAR": "USDZAR=X", "EUR/ZAR": "EURZAR=X", "GBP/ZAR": "GBPZAR=X",
-    "XAU/USD": "GC=F", "XAG/USD": "SI=F", "XPT/USD": "PL=F",
-    "DXY": "DX-Y.NYB", "S&P 500": "^GSPC",
+    name: info.ticker for name, info in _REGISTRY_INSTRUMENTS.items()
 }
+_ALL_INSTRUMENTS["DXY"] = "DX-Y.NYB"
+_ALL_INSTRUMENTS["S&P 500"] = "^GSPC"
 
 _KNOWN_RELATIONSHIPS: List[Tuple[str, str, str, str]] = [
     ("EUR/USD", "GBP/USD", "Positive", "Both inversely correlated to DXY."),
@@ -40,6 +39,7 @@ _KNOWN_RELATIONSHIPS: List[Tuple[str, str, str, str]] = [
     ("AUD/USD", "XAU/USD", "Positive", "AU is major gold exporter — AUD tracks gold."),
     ("AUD/USD", "NZD/USD", "Positive", "Commodity-currency bloc."),
     ("USD/CAD", "XAU/USD", "Negative", "CAD with commodities; Gold USD = inverse."),
+    ("USD/CAD", "WTI/USD", "Negative", "CAD is a petro-currency; oil strength lifts CAD, pressuring USD/CAD lower."),
     ("USD/JPY", "EUR/JPY", "Positive", "JPY leg dominates in risk-off."),
     ("USD/ZAR", "XAU/USD", "Negative", "ZAR strengthens with Gold."),
     ("EUR/ZAR", "USD/ZAR", "Positive", "Both ZAR pairs."),

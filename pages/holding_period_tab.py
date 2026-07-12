@@ -49,14 +49,13 @@ import yfinance as yf
 
 from src.services.alert_service import NotifyCache
 from src.services.tool_log import log_tool_usage
+from src.instruments import INSTRUMENTS as _REGISTRY_INSTRUMENTS
 
 MAX_H = 15  # horizons 1..15 days (paper found decay ~7)
 
-PAIRS = {
-    "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "USD/JPY": "USDJPY=X",
-    "USD/ZAR": "USDZAR=X", "AUD/USD": "AUDUSD=X", "Gold (GC=F)": "GC=F",
-    "WTI (CL=F)": "CL=F",
-}
+# Sourced from the shared registry (src/instruments/registry.py) — same
+# universe and naming convention (XAU/USD not "Gold (GC=F)") as every other page.
+PAIRS = {name: info.ticker for name, info in _REGISTRY_INSTRUMENTS.items()}
 
 
 # ----------------------------------------------------------------------

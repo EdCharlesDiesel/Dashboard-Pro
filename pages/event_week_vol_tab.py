@@ -32,22 +32,16 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
+from src.instruments import INSTRUMENTS as _REGISTRY_INSTRUMENTS
 from src.services.alert_service import NotifyCache
 from src.services.tool_log import log_tool_usage
 
 # ---------------------------------------------------------------------------
-# Instruments (Yahoo Finance conventions:
-#   USD-base pairs use "JPY=X" / "ZAR=X" style,
-#   non-USD-base use "EURUSD=X" style)
+# Instruments — sourced from the shared registry (src/instruments/registry.py)
+# so this page covers the same universe as every other page.
 # ---------------------------------------------------------------------------
 INSTRUMENTS: dict[str, str] = {
-    "USDJPY": "JPY=X",
-    "USDZAR": "ZAR=X",
-    "EURUSD": "EURUSD=X",
-    "GBPUSD": "GBPUSD=X",
-    "AUDUSD": "AUDUSD=X",
-    "USDCAD": "CAD=X",
-    "XAUUSD (Gold)": "GC=F",
+    name: info.ticker for name, info in _REGISTRY_INSTRUMENTS.items()
 }
 
 # ---------------------------------------------------------------------------
@@ -101,15 +95,15 @@ US_CPI_DATES = [
     "2025-09-11", "2025-10-15", "2025-11-13", "2025-12-10",
 ]
 
-# Which event calendars matter for which instrument
+# Which event calendars matter for which instrument. Any JPY leg pulls in BOJ,
+# any ZAR leg pulls in SARB; everything else defaults to the US macro trio.
 EVENT_RELEVANCE: dict[str, list[str]] = {
-    "USDJPY": ["NFP", "US_CPI", "FOMC", "BOJ"],
-    "USDZAR": ["NFP", "US_CPI", "FOMC", "SARB"],
-    "EURUSD": ["NFP", "US_CPI", "FOMC"],
-    "GBPUSD": ["NFP", "US_CPI", "FOMC"],
-    "AUDUSD": ["NFP", "US_CPI", "FOMC"],
-    "USDCAD": ["NFP", "US_CPI", "FOMC"],
-    "XAUUSD (Gold)": ["NFP", "US_CPI", "FOMC"],
+    name: (
+        ["NFP", "US_CPI", "FOMC", "BOJ"] if "JPY" in name else
+        ["NFP", "US_CPI", "FOMC", "SARB"] if "ZAR" in name else
+        ["NFP", "US_CPI", "FOMC"]
+    )
+    for name in INSTRUMENTS
 }
 
 
@@ -219,7 +213,7 @@ def render_event_week_vol_tab() -> None:
         window = st.slider("Event window (± days)", 3, 10, 5)
     with col3:
         chosen = st.multiselect("Instruments", list(INSTRUMENTS),
-                                default=["USDJPY", "USDZAR", "EURUSD"])
+                                default=["USD/JPY", "USD/ZAR", "EUR/USD"])
 
     uploaded = st.file_uploader(
         "Optional: extend the event calendar (CSV with columns date,event)",
