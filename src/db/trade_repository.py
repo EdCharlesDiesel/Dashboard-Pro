@@ -51,6 +51,8 @@ class TradeRepository:
         "is_open     BOOLEAN DEFAULT TRUE",
         "source      VARCHAR(20) DEFAULT 'checklist'",
         "profit      FLOAT",
+        "invalidated_at     TIMESTAMP",
+        "invalidation_price FLOAT",
     )
 
     # Small key/value store for app-level state that must survive restarts and
@@ -61,6 +63,19 @@ class TradeRepository:
             key        VARCHAR(64) PRIMARY KEY,
             value      JSONB,
             updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """
+
+    # Lightweight audit trail for the interactive tool pages (R:R calculator,
+    # Account Risk, Correlations, News Filter, Stop Structure) that don't
+    # produce a directional trade_setups row. One row per meaningful
+    # computation; JSONB payload keeps each tool's shape flexible.
+    TOOL_USAGE_SQL = """
+        CREATE TABLE IF NOT EXISTS tool_usage_log (
+            id        SERIAL PRIMARY KEY,
+            logged_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            tool      VARCHAR(30) NOT NULL,
+            payload   JSONB
         )
     """
 
@@ -126,6 +141,7 @@ class TradeRepository:
                         f"ALTER TABLE trade_setups ADD COLUMN IF NOT EXISTS {col_def}"
                     )
                 cur.execute(self.APP_STATE_SQL)
+                cur.execute(self.TOOL_USAGE_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
@@ -150,6 +166,16 @@ class TradeRepository:
         """
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
             cur.execute(sql, (key, psycopg2.extras.Json(value)))
+            conn.commit()
+
+    # ── tool usage log ─────────────────────────────────────────────────────
+    def log_tool_usage(self, tool: str, payload: Dict[str, Any]) -> None:
+        """Insert one tool-interaction row. ``tool`` names the page (e.g.
+        ``'rr_calculator'``); ``payload`` is whatever inputs/outputs that tool
+        wants recorded, stored as-is in JSONB."""
+        sql = "INSERT INTO tool_usage_log (tool, payload) VALUES (%s, %s)"
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, (tool, psycopg2.extras.Json(payload)))
             conn.commit()
 
     # ── writes ──────────────────────────────────────────────────────────────
@@ -250,6 +276,21 @@ class TradeRepository:
                 sql,
                 (entry_price, close_price, pips_gained, r_multiple, outcome, trade_id),
             )
+            conn.commit()
+
+    def mark_invalidated(self, trade_id: int, price: float) -> None:
+        """Flag a signal as price-invalidated (stop level breached before or
+        instead of being taken). A visibility badge only — never touches
+        ``outcome``/``close_price``/``is_open``, which stay driven by a real
+        close (MT4 import or the Checklist's close-trade form). Idempotent:
+        a row already marked keeps its original ``invalidated_at``."""
+        sql = """
+            UPDATE trade_setups
+            SET invalidated_at = NOW(), invalidation_price = %s
+            WHERE id = %s AND invalidated_at IS NULL
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, (price, trade_id))
             conn.commit()
 
     # ── reads ───────────────────────────────────────────────────────────────

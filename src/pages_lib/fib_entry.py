@@ -3,10 +3,11 @@
 Merges the former "15M Rejection" and "15M Entry Signal" pages into a single
 trigger page that:
 
-1. Pulls the **Setup Ranker** signals (same 10-point multi-timeframe scorer used
-   by ``pages/setup-ranker.py`` — see :func:`src.core.signals.score_setup`) and
-   only considers pairs that score at or above the chosen threshold. The Setup
-   Ranker decides *what* and *which direction*; this page finds *where* to enter.
+1. Pulls the **Setup Ranker** signals (the exact same scorer/data feed used by
+   ``pages/setup-ranker.py`` — reuses ``_SetupRankerDataFeed.score()`` directly,
+   see :func:`src.core.signals.score_setup`) and only considers pairs that
+   score at or above the chosen threshold. The Setup Ranker decides *what* and
+   *which direction*; this page finds *where* to enter.
 2. Maps Fibonacci retracements onto the most recent 15M impulse leg in the
    signal's direction and flags every candle that retraced into the 0.382–0.618
    "golden zone" and confirmed in the bias direction. Those are the entries.
@@ -191,7 +192,8 @@ class FibEntryPage(BloombergPage):
     def configure(self) -> PageContext:
         st.session_state.setdefault("fib_pairs",
                                     ["EUR/USD", "GBP/USD", "AUD/USD", "USD/JPY",
-                                     "USD/CAD", "XAU/USD", "XAG/USD"])
+                                     "USD/CHF", "USD/CAD", "XAU/USD", "XAG/USD",
+                                     "WTI/USD"])
         st.session_state.setdefault("fib_min_score", 6)
         st.session_state.setdefault("fib_lookback", 60)
         st.session_state.setdefault("fib_days", 5)
@@ -242,8 +244,10 @@ class FibEntryPage(BloombergPage):
         )
         st.session_state.fib_min_score = st.slider(
             "Min Setup Ranker score", 0, 10, int(st.session_state.fib_min_score),
-            help="Only pairs scoring at/above this on the 10-point multi-timeframe "
-                 "checklist are treated as signals and analysed for a fib entry.",
+            help="Only pairs scoring at/above this are analysed for a fib entry — "
+                 "same multi-timeframe checklist and threshold as Setup Ranker's "
+                 "Min score (out of 10, applied as a percentage since FX pairs "
+                 "score /11 with Currency Strength and commodities score /10).",
         )
         st.divider()
         st.markdown(
@@ -366,7 +370,10 @@ class FibEntryPage(BloombergPage):
                     continue
                 if best is None or r["score"] > best["score"]:
                     best = r
-            if best and best["score"] >= min_score:
+            # Compare on percentage, not raw score — FX pairs score /11
+            # (Currency Strength) while commodities score /10, matching the
+            # same normalization Setup Ranker's Min score filter uses.
+            if best and best["pct"] >= min_score / 10 * 100:
                 out.append(best)
         prog.empty()
         out.sort(key=lambda x: -x["score"])
@@ -417,7 +424,7 @@ class FibEntryPage(BloombergPage):
                 "strength_score": sig["score"],
                 "conviction": fib["status"],
                 "thesis": (f"15M Fib Entry — golden-zone {sig['direction']}, "
-                           f"setup {sig['score']}/10 ({sig['grade']})"),
+                           f"setup {sig['score']}/{sig.get('max_score', 10)} ({sig['grade']})"),
             })
         persist_signals("fib_entry", signals)
 
@@ -491,7 +498,7 @@ class FibEntryPage(BloombergPage):
             <tr style="border-bottom:1px solid #2d3148;">
               <td style="padding:9px 12px;font-weight:700;color:#e0e0e0;">{pair}</td>
               <td style="padding:9px 12px;color:{d_color};font-weight:700;">{arrow}</td>
-              <td style="padding:9px 12px;color:#ffa726;font-weight:700;">{sig['score']}/10
+              <td style="padding:9px 12px;color:#ffa726;font-weight:700;">{sig['score']}/{sig.get('max_score', 10)}
                   <span style="color:#8b8fa8;font-size:11px;">({sig['grade']})</span></td>
               <td style="padding:9px 12px;color:#e0e0e0;">{fmt_price(fib['entry'])}</td>
               <td style="padding:9px 12px;color:#ef5350;">{fmt_price(fib['sl'])}
@@ -502,7 +509,7 @@ class FibEntryPage(BloombergPage):
               <td style="padding:9px 12px;color:#26a69a;font-weight:700;">{win_txt}</td>
             </tr>"""
             plain_lines.append(
-                f"{pair} {d} | Setup {sig['score']}/10 ({sig['grade']}) | "
+                f"{pair} {d} | Setup {sig['score']}/{sig.get('max_score', 10)} ({sig['grade']}) | "
                 f"Entry {fmt_price(fib['entry'])} (golden zone)  "
                 f"SL {fmt_price(fib['sl'])} ({sl_pips}p)  "
                 f"TP {fmt_price(fib['tp1'])} ({fib['rr1']:.1f}R)  | "
@@ -580,7 +587,7 @@ class FibEntryPage(BloombergPage):
                 f'<span style="color:{d_color};font-weight:700;font-size:11px;">{d_arrow} {d}</span></div>'
                 f'<div style="text-align:right;">'
                 f'<span style="color:{T.YELLOW};font-weight:700;font-family:\'JetBrains Mono\',monospace;">'
-                f'SETUP {sig["score"]}/10 ({sig["grade"]})</span><br>'
+                f'SETUP {sig["score"]}/{sig.get("max_score", 10)} ({sig["grade"]})</span><br>'
                 f'<span style="color:{s_color};font-size:11px;font-weight:700;">{s_label}</span></div>'
                 f'</div>'
                 f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;'
@@ -617,7 +624,7 @@ class FibEntryPage(BloombergPage):
             st.error(f"⚠ Could not load 15M data for {pair}.")
             return
         # Bias for the detail chart: prefer the live Setup Ranker best direction.
-        bias, score, grade = "LONG", None, None
+        bias, score, max_score, grade = "LONG", None, 10, None
         best = None
         for d in ("LONG", "SHORT"):
             try:
@@ -627,14 +634,15 @@ class FibEntryPage(BloombergPage):
             if best is None or r["score"] > best["score"]:
                 best = r
         if best:
-            bias, score, grade = best["direction"], best["score"], best["grade"]
+            bias, score, max_score, grade = (
+                best["direction"], best["score"], best["max_score"], best["grade"])
         fib = fib_analysis(df, bias, int(st.session_state.fib_lookback))
         if fib is None:
             st.warning(f"No clean impulse leg for {pair} in the lookback window.")
             return
 
         s_label, s_color, _ = STATUS_CFG[fib["status"]]
-        setup_txt = f"Setup {score}/10 ({grade})" if score is not None else "Setup —"
+        setup_txt = f"Setup {score}/{max_score} ({grade})" if score is not None else "Setup —"
         st.markdown(
             f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;'
             f'color:{T.WHITE};margin-bottom:8px;">{pair} · '
@@ -757,9 +765,10 @@ class FibEntryPage(BloombergPage):
                     color:{T.GREY};line-height:1.8;">
         <b style="color:{T.GREEN};">How this page works</b><br><br>
         <b style="color:{T.WHITE};">1 · Setup Ranker filter</b><br>
-        Every selected pair is scored on the same 10-point multi-timeframe
-        checklist as the Setup Ranker. Only pairs at/above the min score are
-        treated as signals — and the higher-scoring side sets the direction.<br><br>
+        Every selected pair is scored using the exact same checklist as the
+        Setup Ranker (10 technical criteria, +1 Currency Strength for FX
+        pairs). Only pairs at/above the min score are treated as signals —
+        and the higher-scoring side sets the direction.<br><br>
         <b style="color:{T.WHITE};">2 · Impulse leg</b><br>
         On the 15M chart we find the most recent impulse leg in the signal's
         direction (swing low→high for LONG, swing high→low for SHORT) within the

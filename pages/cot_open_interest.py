@@ -155,7 +155,9 @@ if __name__ == "__main__":
     # headlessly. Mirrors the legacy-page contract: set_page_config ->
     # BloombergTheme.apply() -> sidebar (controls first, then nav).
     from src.pages_lib.navigation import render_sidebar_nav
+    from src.services.alert_service import NotifyCache
     from src.services.cot_fetcher import INSTRUMENTS as _COT_INSTRUMENTS
+    from src.services.tool_log import log_tool_usage
     from src.ui.theme import BloombergTheme
 
     st.set_page_config(
@@ -242,6 +244,21 @@ if __name__ == "__main__":
         st.stop()
 
     context = oi_trend_context(df, lookback=lookback)
+
+    # Log this read to Postgres (audit trail, not trade_setups — explicitly
+    # "structural context, not a trade trigger" per this page's own caption).
+    # Deduped per instrument+week via NotifyCache, since CFTC data only
+    # updates weekly.
+    _latest_date = df["date"].iloc[-1]
+    _oi_key = f"{instrument}|{_latest_date}"
+    if NotifyCache("cot_open_interest_log").filter_new([_oi_key]):
+        log_tool_usage("cot_open_int", {
+            "instrument": instrument, "week": str(_latest_date),
+            "open_interest": float(df["open_interest"].iloc[-1]),
+            "net_lev_money": float(df["net_lev_money"].iloc[-1]),
+            "oi_change": context["oi_change"], "position_change": context["position_change"],
+            "interpretation": context["interpretation"],
+        })
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Open Interest", f"{df['open_interest'].iloc[-1]:,.0f}")

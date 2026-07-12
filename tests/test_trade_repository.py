@@ -201,6 +201,20 @@ class TestWrites:
         assert repo.import_mt4_rows([]) == 0
         assert cur.executed == []
 
+    def test_mark_invalidated_params(self):
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.mark_invalidated(7, 1.0970)
+        sql, params = cur.executed[0]
+        assert "UPDATE trade_setups" in sql
+        assert "invalidated_at = NOW()" in sql
+        assert "invalidated_at IS NULL" in sql
+        # Never touches outcome/close_price/is_open — a badge only.
+        assert "outcome" not in sql
+        assert "is_open" not in sql
+        assert params == (1.0970, 7)
+        assert conn.committed is True
+
 
 class TestImportedTickets:
     def test_parses_ticket_numbers_from_notes(self):
@@ -238,6 +252,35 @@ class TestSchema:
         ok, msg = repo.init_schema()
         assert ok is False
         assert "connection refused" in msg
+
+    def test_init_schema_creates_tool_usage_log_table(self):
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        repo.init_schema()
+        statements = " ".join(sql for sql, _ in cur.executed)
+        assert "CREATE TABLE IF NOT EXISTS tool_usage_log" in statements
+
+
+# ── tool usage log ──────────────────────────────────────────────────────────
+class TestToolUsageLog:
+    def test_log_tool_usage_inserts_json_payload(self, monkeypatch):
+        captured = {}
+
+        class FakeJson:
+            def __init__(self, value):
+                captured["value"] = value
+
+        monkeypatch.setattr(
+            "src.db.trade_repository.psycopg2.extras.Json", FakeJson
+        )
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.log_tool_usage("rr_calculator", {"entry": 1.1, "sl_pips": 20})
+        sql, params = cur.executed[0]
+        assert "INSERT INTO tool_usage_log" in sql
+        assert params[0] == "rr_calculator"
+        assert captured["value"] == {"entry": 1.1, "sl_pips": 20}
+        assert conn.committed is True
 
 
 # ── app_state key/value store ─────────────────────────────────────────────────
