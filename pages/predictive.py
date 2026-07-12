@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 from src.services.signal_store import persist_signals
+from src.instruments import INSTRUMENTS as _REGISTRY_INSTRUMENTS
 
 # Page configurations
 st.set_page_config(page_title="Forex Analytics Dashboard", layout="wide", page_icon="💱")
@@ -18,16 +19,9 @@ st.markdown("Monitor real-time currency trends and track key technical indicator
 # --- SIDEBAR CONTROLS ---
 st.sidebar.header("Dashboard Settings")
 
-# Common Forex Pairs (yfinance format: BaseQuote=X)
-forex_pairs = {
-    "EUR/USD": "EURUSD=X",
-    "GBP/USD": "GBPUSD=X",
-    "USD/JPY": "JPY=X",
-    "AUD/USD": "AUDUSD=X",
-    "USD/CAD": "CAD=X",
-    "USD/CHF": "CHF=X",
-    "EUR/GBP": "EURGBP=X",
-}
+# Sourced from the shared registry (src/instruments/registry.py) so this page
+# covers the same universe, with the same tickers, as every other page.
+forex_pairs = {name: info.ticker for name, info in _REGISTRY_INSTRUMENTS.items()}
 
 selected_pair_label = st.sidebar.selectbox("Select Currency Pair", list(forex_pairs.keys()))
 ticker_symbol = forex_pairs[selected_pair_label]

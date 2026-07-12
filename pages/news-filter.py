@@ -782,13 +782,6 @@ The Forex Factory feed couldn't be reached. This may be due to:
             st.info("No events match your current filters.")
     else:
         # Group by date
-        from itertools import groupby
-
-
-        def get_date(e):
-            return e["date_str"]
-
-
         groups = {}
         for e in filtered:
             groups.setdefault(e["date_str"], []).append(e)

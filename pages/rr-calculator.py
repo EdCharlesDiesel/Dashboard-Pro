@@ -106,6 +106,7 @@ INSTRUMENTS = {
     "XAU/USD":    {"ticker": "GC=F",     "pip": 10.0,  "pip_size": 0.10},
     "XAG/USD":  {"ticker": "SI=F",     "pip": 10.0,  "pip_size": 0.01},
     "XPT/USD":{"ticker": "PL=F",     "pip": 10.0,  "pip_size": 0.10},
+    "WTI/USD":    {"ticker": "CL=F",     "pip": 10.0,  "pip_size": 0.01},
 }
 
 

@@ -321,12 +321,25 @@ def swing_structure(df: pd.DataFrame, n: int = 3) -> str:
 
 
 def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataFrame,
-                direction: str, pip_size: float, spread_pips: float = 0.0) -> Dict:
-    """Score a pair 0–10 against the 10-point multi-timeframe checklist.
+                direction: str, pip_size: float, spread_pips: float = 0.0,
+                currency_strength_diff: Optional[float] = None) -> Dict:
+    """Score a pair against the multi-timeframe checklist (10 technical
+    criteria, plus an 11th "Currency Strength" criterion when the caller
+    supplies a fundamental read).
 
     direction: "LONG" or "SHORT". Returns a dict with the per-criterion scores,
     a total, a letter grade, and presentation helpers (price, SL pips, spread%).
     Data-source agnostic — pass whatever Weekly/Daily/4H frames the caller has.
+
+    currency_strength_diff: optional (base currency % return − quote currency %
+    return) over the same lookback the caller used, e.g. from
+    ``src.pages_lib.currency_strength._currency_returns``. Positive favors LONG,
+    negative favors SHORT. Left as ``None`` (e.g. for commodities, which have no
+    single driving currency) the criterion is omitted entirely rather than
+    scored as a fail — max_score shrinks to 10 for that call instead of
+    penalizing pairs with no fundamental read available. grade/pct are always
+    computed as a percentage of the criteria actually scored, so a 10-point and
+    an 11-point call remain comparable.
     """
     df_w = df_weekly if df_weekly is not None else pd.DataFrame()
     df_d = df_daily if df_daily is not None else pd.DataFrame()
@@ -460,16 +473,27 @@ def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataF
         scores["Spread/ATR"] = 0
         details["Spread/ATR"] = "—"
 
+    # ── 11. Currency strength (fundamental, optional) ───────────────────────
+    # Only added when the caller has a differential to offer — commodities and
+    # any caller that hasn't wired this up simply stay on the 10-point scale.
+    if currency_strength_diff is not None:
+        ok = (currency_strength_diff > 0 and direction == "LONG") or \
+             (currency_strength_diff < 0 and direction == "SHORT")
+        scores["Currency Strength"] = 1 if ok else 0
+        details["Currency Strength"] = f"{'✅' if ok else '❌'} {currency_strength_diff:+.2f}%"
+
     total = sum(scores.values())
-    grade = "A" if total >= 8 else "B" if total >= 6 else "C" if total >= 4 else "D"
+    max_score = len(scores)
+    pct = int(round(total / max_score * 100))
+    grade = "A" if pct >= 80 else "B" if pct >= 60 else "C" if pct >= 40 else "D"
     close_price = float(df_d["Close"].iloc[-1]) if not df_d.empty else 0.0
     sl_pips = round(a14p * 1.5, 1) if a14p else 0.0
 
     return {
         "direction": direction,
         "score": total,
-        "max_score": 10,
-        "pct": int(total / 10 * 100),
+        "max_score": max_score,
+        "pct": pct,
         "grade": grade,
         "scores": scores,
         "details": details,
@@ -508,10 +532,13 @@ def analyze_multi_timeframe(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_
     else:
         return None  # no clear directional edge
 
-    # strength_score IS the unified checklist score (0-10). Conviction is keyed
-    # to the same A/B/C/D grade bands as the Setup Ranker (A→High, B→Medium).
+    # strength_score IS the unified checklist score. Conviction is keyed to the
+    # same A/B/C/D grade Setup Ranker computes (A→High, B→Medium) — derived
+    # from the grade itself rather than a duplicated absolute cutoff, since
+    # max_score varies (10 technical, or 11 when a caller adds Currency
+    # Strength — this call site doesn't, so it stays on the 10-point scale).
     strength_score = res["score"]
-    conviction = "High" if strength_score >= 8 else ("Medium" if strength_score >= 6 else "Low")
+    conviction = "High" if res["grade"] == "A" else ("Medium" if res["grade"] == "B" else "Low")
 
     entry_signal = entry_generator.get_entry_signal(df_15m, final_bias)
 
@@ -537,7 +564,7 @@ def analyze_multi_timeframe(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_
                                         pivots=pivots)
 
     passed = [k for k, v in res["scores"].items() if v]
-    thesis = f"{final_bias} setup {strength_score}/10 (Grade {res['grade']})"
+    thesis = f"{final_bias} setup {strength_score}/{res['max_score']} (Grade {res['grade']})"
     if passed:
         thesis += " — " + ", ".join(passed)
     if entry_signal and entry_signal['signal'] != 0:

@@ -347,7 +347,7 @@ def render():
         on_error=lambda item, exc: ohlc_cache.__setitem__(item[0], pd.DataFrame()),
     )
 
-    setup_rows, ideas = [], []
+    setup_rows, ideas, aligned_signals = [], [], []
     for name, (base, quote, ticker) in SCAN_UNIVERSE.items():
         try:
             # pip size varies by instrument (0.0001 majors, 0.01 JPY crosses,
@@ -373,6 +373,27 @@ def render():
                              f"stop {s['stop']:.4f}, target {s['target']:.4f} "
                              f"(risk {s['risk_pips']:.0f} pips); agrees with rate bias "
                              f"and {rc['label']} regime.")
+                aligned_signals.append({
+                    "pair": name,
+                    "bias": "Long" if s["side"] == "long" else "Short",
+                    "entry": s["entry"],
+                    "stop_loss": s["stop"],
+                    "take_profit_1": s["target"],
+                    "stop_loss_pips": s.get("risk_pips"),
+                    "conviction": f"{lean or 'rate-aligned'}, {rc['label']} regime",
+                    "thesis": (f"Daily Cockpit — {name} {s['side']} fresh 20-day breakout, "
+                              f"agrees with rate bias ({lean or '—'}) and "
+                              f"{rc['label']} risk regime."),
+                })
+    # Persist today's aligned ideas (dedup'd per pair/bias/price, source-tagged,
+    # silent no-op without a DB) — same pattern as twenty_day_breakout, whose
+    # scanner this page's breakout logic is built on.
+    if aligned_signals:
+        try:
+            from src.services.signal_store import persist_signals
+            persist_signals("daily_cockpit", aligned_signals)
+        except Exception:
+            pass
     if setup_rows:
         st.dataframe(pd.DataFrame(setup_rows), use_container_width=True, hide_index=True)
     else:
