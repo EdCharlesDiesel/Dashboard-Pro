@@ -102,13 +102,71 @@ class NotifyCache:
     Concurrency-safe: every read-modify-write is serialized by a per-file lock,
     and the file itself is written atomically (temp file + ``os.replace``) so a
     concurrent reader never sees a truncated/half-written JSON.
+
+    Also mirrored to Postgres ``app_state`` (best-effort, same dual-write
+    pattern as ``account_state.py``/``score_history.py``) under key
+    ``notify_cache_{namespace}``, so the dedupe ledger survives a deleted/lost
+    local JSON file and is shared across restarts/devices — not just this
+    process's disk. The local file stays the fast path and the offline
+    fallback; the DB is consulted on every :meth:`load` and merged in, so a
+    key written from either side is never lost.
     """
 
     def __init__(self, namespace: str) -> None:
+        self.namespace = namespace
         self.path = os.path.join(os.getcwd(), f"{namespace}_notify_cache.json")
         self._lock = _lock_for(self.path)
+        self._state_key = f"notify_cache_{namespace}"
 
-    def load(self) -> set:
+    # ── DB layer (best-effort; resolves the same target the pages' data uses) ──
+    def _db_cfg(self):
+        try:
+            from src.db.market_cache import _resolve_cfg
+            return _resolve_cfg()
+        except Exception:
+            return None
+
+    def _db_read(self) -> Optional[set]:
+        cfg = self._db_cfg()
+        if cfg is None:
+            return None
+        try:
+            from src.db import cache as dbcache
+            val = dbcache.cached_get_state(
+                cfg.host, cfg.port, cfg.dbname, cfg.user, cfg.password, self._state_key
+            )
+            return set(val) if isinstance(val, list) else None
+        except Exception:
+            return None
+
+    def _db_write(self, keys: set) -> None:
+        cfg = self._db_cfg()
+        if cfg is None:
+            return
+        try:
+            from src.db import cache as dbcache
+            dbcache.set_state(
+                cfg.host, cfg.port, cfg.dbname, cfg.user, cfg.password,
+                self._state_key, sorted(keys),
+            )
+        except Exception:
+            pass
+
+    def _db_reset(self) -> None:
+        cfg = self._db_cfg()
+        if cfg is None:
+            return
+        try:
+            from src.db import cache as dbcache
+            dbcache.set_state(
+                cfg.host, cfg.port, cfg.dbname, cfg.user, cfg.password,
+                self._state_key, [],
+            )
+        except Exception:
+            pass
+
+    # ── local JSON layer ─────────────────────────────────────────────────────
+    def _local_read(self) -> set:
         try:
             if os.path.exists(self.path):
                 with open(self.path) as fh:
@@ -117,11 +175,18 @@ class NotifyCache:
             pass
         return set()
 
+    def load(self) -> set:
+        """Union of the local file and Postgres, so a key saved while the DB
+        (or the local file) was unreachable is never lost from dedupe."""
+        local = self._local_read()
+        db = self._db_read()
+        return local if db is None else local | db
+
     def _save(self, keys: set) -> None:
         """Atomically overwrite the file. Writes to a sibling temp file then
         ``os.replace``s it into place, so a concurrent reader sees either the old
         or the new file — never a partial one — and a crash mid-write can't
-        corrupt the ledger."""
+        corrupt the ledger. Best-effort mirrors the same set to Postgres."""
         try:
             dir_ = os.path.dirname(self.path) or "."
             fd, tmp = tempfile.mkstemp(dir=dir_, prefix=".notify_", suffix=".tmp")
@@ -137,6 +202,7 @@ class NotifyCache:
                 raise
         except Exception:
             pass
+        self._db_write(keys)
 
     def save(self, keys: Iterable[str]) -> None:
         """Overwrite the persisted set (for callers that manage the set in
@@ -172,3 +238,4 @@ class NotifyCache:
                     os.remove(self.path)
             except Exception:
                 pass
+            self._db_reset()

@@ -126,6 +126,52 @@ class TestScoreSetup:
         assert res["max_score"] == 10
         assert 0 <= res["score"] <= 10
 
+    def test_currency_strength_omitted_by_default(self):
+        """Callers that don't pass currency_strength_diff stay on the
+        original 10-point scale — no silent regression for unmigrated pages."""
+        res = score_setup(
+            df_weekly=self._frame(1.00, 1.20, 260),
+            df_daily=self._frame(1.10, 1.20, 120),
+            df_4h=self._frame(1.18, 1.20, 120),
+            direction="LONG", pip_size=0.0001, spread_pips=1.2,
+        )
+        assert "Currency Strength" not in res["scores"]
+        assert res["max_score"] == 10
+
+    def test_currency_strength_adds_eleventh_criterion(self):
+        res = score_setup(
+            df_weekly=self._frame(1.00, 1.20, 260),
+            df_daily=self._frame(1.10, 1.20, 120),
+            df_4h=self._frame(1.18, 1.20, 120),
+            direction="LONG", pip_size=0.0001, spread_pips=1.2,
+            currency_strength_diff=1.5,
+        )
+        assert res["max_score"] == 11
+        assert res["scores"]["Currency Strength"] == 1
+        assert res["pct"] == int(round(res["score"] / 11 * 100))
+
+    def test_currency_strength_disagreeing_direction_fails(self):
+        res = score_setup(
+            df_weekly=self._frame(1.00, 1.20, 260),
+            df_daily=self._frame(1.10, 1.20, 120),
+            df_4h=self._frame(1.18, 1.20, 120),
+            direction="LONG", pip_size=0.0001, spread_pips=1.2,
+            currency_strength_diff=-1.5,
+        )
+        assert res["scores"]["Currency Strength"] == 0
+
+    def test_grade_bands_are_percentage_based(self):
+        # 9/11 = 81.8% still clears the 80% Grade-A bar that 8/10 used to.
+        res = score_setup(
+            df_weekly=self._frame(1.00, 1.30, 260),
+            df_daily=self._frame(1.10, 1.30, 120),
+            df_4h=self._frame(1.28, 1.30, 120),
+            direction="LONG", pip_size=0.0001, spread_pips=1.0,
+            currency_strength_diff=1.0,
+        )
+        if res["score"] / res["max_score"] >= 0.8:
+            assert res["grade"] == "A"
+
 
 class TestEvaluateTrendFollowingSignal:
     def _frame(self, start, stop, n=260):

@@ -231,7 +231,9 @@ if __name__ == "__main__":
     from datetime import datetime, timedelta
 
     from src.pages_lib.navigation import render_sidebar_nav
+    from src.services.alert_service import NotifyCache
     from src.services.cot_fetcher import INSTRUMENTS, get_instrument_series
+    from src.services.tool_log import log_tool_usage
     from src.ui.theme import BloombergTheme
 
     st.set_page_config(
@@ -348,6 +350,21 @@ if __name__ == "__main__":
         st.stop()
 
     signal = compute_cot_signal(merged, lookback_weeks=lookback_weeks)
+
+    # Log this read to Postgres (audit trail, not trade_setups — explicitly
+    # "not a trade trigger on its own" per this page's own caption). Deduped
+    # per instrument+week via NotifyCache, since CFTC data only updates weekly.
+    _latest_date = merged["date"].iloc[-1]
+    _cs_key = f"{instrument}|{_latest_date}"
+    if NotifyCache("cot_signals_log").filter_new([_cs_key]):
+        log_tool_usage("cot_signals", {
+            "instrument": instrument, "week": str(_latest_date),
+            "latest_position": signal.latest_position, "wow_change": signal.wow_change,
+            "percentile_3y": signal.percentile_3y, "zscore": signal.zscore,
+            "position_trend": signal.position_trend, "price_trend": signal.price_trend,
+            "divergence": signal.divergence, "divergence_type": signal.divergence_type,
+            "squeeze_watch": signal.squeeze_watch, "headline": signal.headline,
+        })
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Latest Net Position", f"{signal.latest_position:,.0f}")

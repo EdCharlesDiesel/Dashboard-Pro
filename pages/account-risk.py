@@ -14,6 +14,8 @@ import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 from src.instruments.registry import INSTRUMENTS, TREND_COMMODITIES
+from src.services.alert_service import NotifyCache
+from src.services.tool_log import log_tool_usage
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
@@ -238,6 +240,19 @@ elif r["risk_pct_total"] > 2:
 else:
     band_color, band_txt, band_cls = "#00ff66", "✅ RISK WITHIN LIMITS", "ok"
 
+# Log this sizing to Postgres (audit trail). Deduped on the rounded input
+# shape via NotifyCache — every widget touch reruns this whole script, so
+# without dedupe an unrelated tweak elsewhere would re-log the same sizing.
+_ar_key = (f"{selected_pair}|{balance:.2f}|{risk_pct:.2f}|{sl_pips:.1f}|"
+          f"{n_trades}|{split_mode}")
+if NotifyCache("account_risk_log").filter_new([_ar_key]):
+    log_tool_usage("account_risk", {
+        "pair": selected_pair, "balance": balance, "risk_pct": risk_pct,
+        "sl_pips": sl_pips, "n_trades": n_trades, "split_mode": split_mode,
+        "leverage": leverage, "lots_per_trade": r["lots_per_trade"],
+        "lots_total": r["lots_total"], "risk_per_trade": r["risk_per_trade"],
+        "risk_total": r["risk_total"], "risk_pct_total": r["risk_pct_total"],
+    })
 
 # ── Header ─────────────────────────────────────────────────────────
 st.markdown(f"""

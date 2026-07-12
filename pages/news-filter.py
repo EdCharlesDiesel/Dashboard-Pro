@@ -2,6 +2,8 @@ import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 from src.core import secrets
+from src.services.alert_service import NotifyCache
+from src.services.tool_log import log_tool_usage
 import pandas as pd
 import requests
 from datetime import datetime, timedelta, date, time
@@ -620,6 +622,20 @@ alerts = []
 if st.session_state.alert_system:
     alerts = check_alerts(events_all, user_tz)
 
+# Log this filter view to Postgres (audit trail). Deduped on the filter
+# criteria + entry window via NotifyCache — the page reruns on every widget
+# touch, so without dedupe an unrelated tweak would re-log an unchanged read.
+_nf_key = (f"{sorted(impact_filter)}|{sorted(ccy_filter)}|{buffer_min}|"
+          f"{entry_local.isoformat()}")
+if NotifyCache("news_filter_log").filter_new([_nf_key]):
+    log_tool_usage("news_filter", {
+        "impact_filter": impact_filter, "ccy_filter": ccy_filter,
+        "buffer_min": buffer_min, "entry_window": entry_local.isoformat(),
+        "events_total": len(events_all), "events_filtered": len(filtered),
+        "near_entry_count": len(near_entry), "safe_to_trade": SAFE,
+        "data_source": data_source,
+    })
+
 # ══════════════════════════════════════════════════════════════════
 # HERO
 # ══════════════════════════════════════════════════════════════════
@@ -766,13 +782,6 @@ The Forex Factory feed couldn't be reached. This may be due to:
             st.info("No events match your current filters.")
     else:
         # Group by date
-        from itertools import groupby
-
-
-        def get_date(e):
-            return e["date_str"]
-
-
         groups = {}
         for e in filtered:
             groups.setdefault(e["date_str"], []).append(e)
