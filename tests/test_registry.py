@@ -30,7 +30,7 @@ class TestDictStyleAccess:
         assert "FOO/BAR" not in INSTRUMENTS
 
     def test_len_is_full_universe(self):
-        assert len(INSTRUMENTS) == 21
+        assert len(INSTRUMENTS) == 22
 
 
 class TestAttributeAccess:
@@ -59,8 +59,8 @@ class TestDomainHelpers:
         assert "EUR/USD" in forex
         assert not (set(forex) & TREND_COMMODITIES)
 
-    def test_commodities_are_the_three_metals(self):
-        assert set(INSTRUMENTS.commodities()) == {"XAU/USD", "XAG/USD", "XPT/USD"}
+    def test_commodities_are_metals_plus_oil(self):
+        assert set(INSTRUMENTS.commodities()) == {"XAU/USD", "XAG/USD", "XPT/USD", "WTI/USD"}
 
     def test_forex_and_commodities_partition_universe(self):
         assert len(INSTRUMENTS.forex_pairs()) + len(INSTRUMENTS.commodities()) == len(INSTRUMENTS)

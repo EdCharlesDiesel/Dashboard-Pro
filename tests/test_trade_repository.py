@@ -239,6 +239,35 @@ class TestSchema:
         assert ok is False
         assert "connection refused" in msg
 
+    def test_init_schema_creates_tool_usage_log_table(self):
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        repo.init_schema()
+        statements = " ".join(sql for sql, _ in cur.executed)
+        assert "CREATE TABLE IF NOT EXISTS tool_usage_log" in statements
+
+
+# ── tool usage log ──────────────────────────────────────────────────────────
+class TestToolUsageLog:
+    def test_log_tool_usage_inserts_json_payload(self, monkeypatch):
+        captured = {}
+
+        class FakeJson:
+            def __init__(self, value):
+                captured["value"] = value
+
+        monkeypatch.setattr(
+            "src.db.trade_repository.psycopg2.extras.Json", FakeJson
+        )
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.log_tool_usage("rr_calculator", {"entry": 1.1, "sl_pips": 20})
+        sql, params = cur.executed[0]
+        assert "INSERT INTO tool_usage_log" in sql
+        assert params[0] == "rr_calculator"
+        assert captured["value"] == {"entry": 1.1, "sl_pips": 20}
+        assert conn.committed is True
+
 
 # ── app_state key/value store ─────────────────────────────────────────────────
 class TestAppState:

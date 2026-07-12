@@ -47,6 +47,37 @@ class BloombergTheme:
         except Exception:
             pass
         st.markdown(cls._css(), unsafe_allow_html=True)
+        cls._render_connection_banner()
+
+    @classmethod
+    def _render_connection_banner(cls) -> None:
+        """Site-wide Postgres connectivity indicator: a thick red line pinned to
+        the top of the page when the DB isn't reachable, a thin green line when
+        it is. ``apply()`` is the one chokepoint every page (framework +
+        legacy — 53 call sites) shares, so injecting it here makes it universal
+        without touching each page.
+
+        Calls ``auto_connect()`` itself (idempotent after the first call per
+        session, never raises) rather than trusting ``db_ok`` to already be
+        set — most pages never otherwise trigger the DB bootstrap, so without
+        this the banner would read a stale/unset gate on everything except
+        the checklist, Trend Signals, and Trade Journal.
+        """
+        try:
+            from src.db.connection import auto_connect
+            ok = auto_connect()
+        except Exception:
+            ok = False
+        if ok:
+            color, height, glow = cls.GREEN, "2px", "none"
+        else:
+            color, height, glow = cls.RED, "6px", f"0 0 10px {cls.RED}"
+        st.markdown(
+            f'<div style="position:fixed;top:0;left:0;right:0;height:{height};'
+            f'background:{color};box-shadow:{glow};z-index:1000001;'
+            f'pointer-events:none;"></div>',
+            unsafe_allow_html=True,
+        )
 
     # ── internal CSS builder ───────────────────────────────────────────────
     @classmethod

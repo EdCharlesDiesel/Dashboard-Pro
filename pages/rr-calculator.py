@@ -1,6 +1,8 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.alert_service import NotifyCache
+from src.services.tool_log import log_tool_usage
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -104,6 +106,7 @@ INSTRUMENTS = {
     "XAU/USD":    {"ticker": "GC=F",     "pip": 10.0,  "pip_size": 0.10},
     "XAG/USD":  {"ticker": "SI=F",     "pip": 10.0,  "pip_size": 0.01},
     "XPT/USD":{"ticker": "PL=F",     "pip": 10.0,  "pip_size": 0.10},
+    "WTI/USD":    {"ticker": "CL=F",     "pip": 10.0,  "pip_size": 0.01},
 }
 
 
@@ -453,6 +456,23 @@ else:
     c["label"]  = f"❌ BELOW MINIMUM — {c['rr_tp1']:.2f}:1 (need {min_rr:.1f}:1)"
     c["color"]  = "#ff3344"
     c["vclass"] = "verdict-fail"
+
+# Log this calculation to Postgres (audit trail, not a trade signal). Deduped
+# on the rounded trade-level shape via NotifyCache — Streamlit reruns this
+# whole script on every widget touch, so without dedupe an unrelated slider
+# nudge elsewhere on the page would re-log an unchanged calculation.
+_rr_key = (f"{selected_pair}|{direction}|{c['entry']:.5f}|{c['sl']:.5f}|"
+          f"{c['tp1']:.5f}|{c['tp2']:.5f}|{min_rr:.1f}")
+if NotifyCache("rr_calculator_log").filter_new([_rr_key]):
+    log_tool_usage("rr_calculator", {
+        "pair": selected_pair, "direction": direction,
+        "entry": c["entry"], "sl": c["sl"], "tp1": c["tp1"], "tp2": c["tp2"],
+        "sl_pips": c["sl_pips"], "tp1_pips": c["tp1_pips"], "tp2_pips": c["tp2_pips"],
+        "rr_tp1": c["rr_tp1"], "rr_tp2": c["rr_tp2"],
+        "lot_size": c["lot_size"], "risk_amt": c["risk_amt"],
+        "account_bal": account_bal, "risk_pct": risk_pct,
+        "min_rr": min_rr, "grade": c["grade"],
+    })
 
 # Header
 st.markdown(f"""
