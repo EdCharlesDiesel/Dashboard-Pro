@@ -51,6 +51,8 @@ class TradeRepository:
         "is_open     BOOLEAN DEFAULT TRUE",
         "source      VARCHAR(20) DEFAULT 'checklist'",
         "profit      FLOAT",
+        "invalidated_at     TIMESTAMP",
+        "invalidation_price FLOAT",
     )
 
     # Small key/value store for app-level state that must survive restarts and
@@ -327,6 +329,21 @@ class TradeRepository:
                 sql,
                 (entry_price, close_price, pips_gained, r_multiple, outcome, trade_id),
             )
+            conn.commit()
+
+    def mark_invalidated(self, trade_id: int, price: float) -> None:
+        """Flag a signal as price-invalidated (stop level breached before or
+        instead of being taken). A visibility badge only — never touches
+        ``outcome``/``close_price``/``is_open``, which stay driven by a real
+        close (MT4 import or the Checklist's close-trade form). Idempotent:
+        a row already marked keeps its original ``invalidated_at``."""
+        sql = """
+            UPDATE trade_setups
+            SET invalidated_at = NOW(), invalidation_price = %s
+            WHERE id = %s AND invalidated_at IS NULL
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, (price, trade_id))
             conn.commit()
 
     # ── reads ───────────────────────────────────────────────────────────────
