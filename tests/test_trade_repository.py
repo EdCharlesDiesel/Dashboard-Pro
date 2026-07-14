@@ -201,6 +201,20 @@ class TestWrites:
         assert repo.import_mt4_rows([]) == 0
         assert cur.executed == []
 
+    def test_mark_invalidated_params(self):
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.mark_invalidated(7, 1.0970)
+        sql, params = cur.executed[0]
+        assert "UPDATE trade_setups" in sql
+        assert "invalidated_at = NOW()" in sql
+        assert "invalidated_at IS NULL" in sql
+        # Never touches outcome/close_price/is_open — a badge only.
+        assert "outcome" not in sql
+        assert "is_open" not in sql
+        assert params == (1.0970, 7)
+        assert conn.committed is True
+
 
 class TestImportedTickets:
     def test_parses_ticket_numbers_from_notes(self):

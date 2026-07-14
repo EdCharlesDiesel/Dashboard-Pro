@@ -23,9 +23,11 @@ from src.ui.components import CommandBar, MetricCell, Panel, render_metric_row
 from src.ui.theme import BloombergTheme as T
 
 # Trading-day windows shown for every currency (short/primary/long context).
-_WINDOWS: Tuple[int, ...] = (5, 20, 60)
+_WINDOWS: Tuple[int, ...] = (5, 20, 60, 120)
 
-_PRIMARY_OPTIONS: Dict[str, int] = {"5 Day": 5, "20 Day": 20, "60 Day": 60}
+_PRIMARY_OPTIONS: Dict[str, int] = {
+    "5 Day": 5, "20 Day": 20, "60 Day": 60, "120 Day": 120,
+}
 
 # Minimum |strength diff| (in %) between a pair's two legs before it's treated
 # as a clear enough divergence to persist as a trade idea.
@@ -35,13 +37,14 @@ _IDEA_THRESHOLD = 0.15
 @st.cache_data(ttl=600, show_spinner=False)
 def _fetch_pair_closes() -> pd.DataFrame:
     """Daily closes for every registry forex pair (commodities excluded —
-    gold/silver/platinum aren't driven by a single fiat currency's strength)."""
+    gold/silver/platinum aren't driven by a single fiat currency's strength).
+    A full year gives the 120-day window enough headroom past holidays/gaps."""
     from src.db.market_cache import cached_closes
 
     pairs = INSTRUMENTS.forex_pairs()
     tickers = [INSTRUMENTS[p]["ticker"] for p in pairs]
     try:
-        close = cached_closes(tickers, period="6mo", interval="1d", ttl=600)
+        close = cached_closes(tickers, period="1y", interval="1d", ttl=600)
         return close if close is not None else pd.DataFrame()
     except Exception:
         return pd.DataFrame()

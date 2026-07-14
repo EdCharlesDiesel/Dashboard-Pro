@@ -38,6 +38,8 @@ omit = [
     "src/services/account_state.py",    # Streamlit session state
     "src/db/connection.py",             # Streamlit session-state + live-DB auto-connect glue
     "src/data_backbone/*",              # SQLAlchemy store, APScheduler worker, yfinance seeder
+    "src/services/evening_sentry.py",   # standalone cron job: SQLAlchemy store, APScheduler, Telegram
+    "src/services/news_fetcher.py",     # standalone cron job: live network fetch, SQLAlchemy upsert
 ]
 
 [tool.coverage.report]

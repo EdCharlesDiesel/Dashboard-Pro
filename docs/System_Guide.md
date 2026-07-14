@@ -158,7 +158,7 @@ confirm it survives every timeframe on the way down to your actual entry.
 ### 9 · Review
 | Page | What it tracks |
 |---|---|
-| **📓 Trade Journal** | Equity curve, win rate vs a 66% target, MT4 statement import. Also where you close a trade (updates the Checklist's daily-loss counter). |
+| **📓 Trade Journal** | Equity curve, win rate vs a 66% target, MT4 statement import. Also where you close a trade (updates the Checklist's daily-loss counter). Every open signal is checked against live price for a crossed stop level — 🔴 INVALIDATED is a visibility badge only; it never changes Outcome/Close/Open, which still require an actual close. |
 
 ---
 
