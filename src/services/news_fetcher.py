@@ -23,9 +23,9 @@ Robustness features (the reasons your current feed feels stale):
     news-window tagging isn't polluted by tentative low-impact noise.
 
 Usage:
-  python news_fetcher.py --fetch            # pull this week into DB
-  python news_fetcher.py --upcoming 12      # show next 12h of events
-  python news_fetcher.py --freshness        # how old is the calendar?
+  python -m src.services.news_fetcher --fetch            # pull this week into DB
+  python -m src.services.news_fetcher --upcoming 12      # show next 12h of events
+  python -m src.services.news_fetcher --freshness        # how old is the calendar?
 
 Scheduling (add to evening_sentry.run(), or its own cron):
   07:00 SAST daily  -> fetch (morning refresh)
@@ -36,14 +36,13 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import time
 from datetime import datetime, timedelta, timezone
 
 import requests
 import sqlalchemy as sa
 
-from evening_sentry import Store
+from src.services.evening_sentry import Store
 
 log = logging.getLogger("news_fetcher")
 logging.basicConfig(level=logging.INFO,
