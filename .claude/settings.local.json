@@ -143,7 +143,12 @@
       "Read(//tmp/**)",
       "Bash(grep -n '^\"\"\"$' pages/news-filter.py)",
       "Bash(PYTHONIOENCODING=utf-8 timeout 180 python -)",
-      "Bash(grep -n \"cot_composite\\\\` \\(\\\\`pages/cot_composite\" CLAUDE.md)"
+      "Bash(grep -n \"cot_composite\\\\` \\(\\\\`pages/cot_composite\" CLAUDE.md)",
+      "Bash(py -0)",
+      "Bash(py --list)",
+      "Bash(where python3.12)",
+      "Read(//c/Users/kmokhethi/AppData/Local/Programs/**)",
+      "Bash(pip download *)"
     ]
   }
 }

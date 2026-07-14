@@ -13236,3 +13236,8 @@
 {"ts": "2026-07-14T12:03:32.547917+00:00", "session_id": "d9b51f6e0d35", "page": "trend-signals", "event_type": "page_view", "level": "INFO", "message": "", "data": {"selected_instrument": "EUR/USD", "trend_timeframe": "4 Hours", "trade_direction": "LONG", "session": "London"}}
 {"ts": "2026-07-14T12:03:34.252214+00:00", "session_id": "d9b51f6e0d35", "page": "trend-signals", "event_type": "page_view", "level": "INFO", "message": "", "data": {"selected_instrument": "EUR/USD", "trend_timeframe": "4 Hours", "trade_direction": "LONG", "session": "London"}}
 {"ts": "2026-07-14T12:03:44.176991+00:00", "session_id": "d9b51f6e0d35", "page": "trend-signals", "event_type": "page_view", "level": "INFO", "message": "", "data": {"selected_instrument": "EUR/USD", "trend_timeframe": "4 Hours", "trade_direction": "LONG", "session": "London"}}
+{"ts": "2026-07-14T12:17:36.576266+00:00", "session_id": "f9ffbf384ed6", "page": "predictive", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T12:17:36.591886+00:00", "session_id": "47cb230de4dd", "page": "abr_toolkit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T12:17:38.391091+00:00", "session_id": "4f139bbc75ad", "page": "instrument-predictor", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T12:18:14.537559+00:00", "session_id": "47cb230de4dd", "page": "abr_toolkit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T12:18:17.079476+00:00", "session_id": "47cb230de4dd", "page": "abr_toolkit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}

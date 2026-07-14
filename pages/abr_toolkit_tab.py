@@ -317,7 +317,11 @@ def _fetch_ohlc_mt5(symbol: str, tf: str) -> pd.DataFrame:
     """Candles straight from a running Deriv/MT5 terminal — matches your
     actual fills instead of yfinance's futures/spot basis offset. Empty
     DataFrame (never raises) if MetaTrader5 isn't installed, the terminal
-    isn't running, or the symbol isn't found; caller falls back to yfinance."""
+    isn't running, or the symbol isn't found; caller falls back to yfinance.
+
+    Deliberately not in requirements.txt: it's a Windows-only package with no
+    Linux wheel/sdist, so pinning it breaks `pip install` in CI/on Linux. Install
+    it yourself (`pip install MetaTrader5`) on the Windows box running the app."""
     try:
         import MetaTrader5 as mt5
     except ImportError:
