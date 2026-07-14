@@ -35,7 +35,7 @@ Env vars:
   HEALTHCHECK_URL      e.g. https://hc-ping.com/<uuid>   (optional)
 
 Usage:
-  python evening_sentry.py --once | --brief | --digest | --run
+  python -m src.services.evening_sentry --once | --brief | --digest | --run
 """
 
 from __future__ import annotations
