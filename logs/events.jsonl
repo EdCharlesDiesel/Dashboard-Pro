@@ -13241,5 +13241,3 @@
 {"ts": "2026-07-14T12:17:38.391091+00:00", "session_id": "4f139bbc75ad", "page": "instrument-predictor", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
 {"ts": "2026-07-14T12:18:14.537559+00:00", "session_id": "47cb230de4dd", "page": "abr_toolkit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
 {"ts": "2026-07-14T12:18:17.079476+00:00", "session_id": "47cb230de4dd", "page": "abr_toolkit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
-{"ts": "2026-07-14T13:08:06.974450+00:00", "session_id": "f9ffbf384ed6", "page": "trade-journal", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
-{"ts": "2026-07-14T13:12:45.187455+00:00", "session_id": "87a56c8f6465", "page": "setup-ranker", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
