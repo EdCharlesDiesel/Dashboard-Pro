@@ -60,6 +60,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("CMEF", "07. CME FX Futures",       "📦", "pages/cme-futures-volume.py"),
         NavEntry("PRED", "08. Predictive Analytics", "💱", "pages/predictive.py"),
         NavEntry("VWAP", "09. VWAP-EMA Gold",        "🟡", "pages/vwap-ema-gold.py"),
+        NavEntry("ABRT", "09a. ABR Toolkit",         "🧱", "pages/abr_toolkit_tab.py"),
     ]),
     # NEW — the composite cross-check: Setup Score (Scan) + Trend Signal +
     # Currency Strength + COT Composite (Filter), one weighted directional
