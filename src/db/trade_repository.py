@@ -77,6 +77,25 @@ class TradeRepository:
         )
     """
 
+    # One row per symbol+timeframe holding the ABR Toolkit's latest read
+    # (pages/abr_toolkit_tab.py) — upserted on every rerun rather than
+    # appended, since only the current signal per instrument/timeframe matters.
+    ABR_SIGNALS_SQL = """
+        CREATE TABLE IF NOT EXISTS abr_signals (
+            symbol      TEXT NOT NULL,
+            timeframe   TEXT NOT NULL,
+            ts          TIMESTAMPTZ NOT NULL,
+            signal      TEXT,
+            entry       DOUBLE PRECISION,
+            sl          DOUBLE PRECISION,
+            tp3         DOUBLE PRECISION,
+            quality     INT,
+            grade       TEXT,
+            htf_aligned INT,
+            PRIMARY KEY (symbol, timeframe)
+        )
+    """
+
     CREATE_SQL = """
         CREATE TABLE IF NOT EXISTS trade_setups (
             id            SERIAL PRIMARY KEY,
@@ -140,6 +159,7 @@ class TradeRepository:
                     )
                 cur.execute(self.APP_STATE_SQL)
                 cur.execute(self.TOOL_USAGE_SQL)
+                cur.execute(self.ABR_SIGNALS_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
@@ -174,6 +194,39 @@ class TradeRepository:
         sql = "INSERT INTO tool_usage_log (tool, payload) VALUES (%s, %s)"
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
             cur.execute(sql, (tool, psycopg2.extras.Json(payload)))
+            conn.commit()
+
+    # ── ABR Toolkit signals ─────────────────────────────────────────────────
+    def save_abr_signal(
+        self,
+        symbol: str,
+        timeframe: str,
+        signal: str,
+        entry: Optional[float],
+        sl: Optional[float],
+        tp3: Optional[float],
+        quality: int,
+        grade: str,
+        htf_aligned: int,
+    ) -> None:
+        """Upsert the ABR Toolkit's latest read for one symbol+timeframe."""
+        sql = """
+            INSERT INTO abr_signals
+                (symbol, timeframe, ts, signal, entry, sl, tp3, quality, grade, htf_aligned)
+            VALUES
+                (%(symbol)s, %(timeframe)s, NOW(), %(signal)s, %(entry)s, %(sl)s, %(tp3)s,
+                 %(quality)s, %(grade)s, %(htf_aligned)s)
+            ON CONFLICT (symbol, timeframe) DO UPDATE SET
+                ts = EXCLUDED.ts, signal = EXCLUDED.signal, entry = EXCLUDED.entry,
+                sl = EXCLUDED.sl, tp3 = EXCLUDED.tp3, quality = EXCLUDED.quality,
+                grade = EXCLUDED.grade, htf_aligned = EXCLUDED.htf_aligned
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, {
+                "symbol": symbol, "timeframe": timeframe, "signal": signal,
+                "entry": entry, "sl": sl, "tp3": tp3,
+                "quality": quality, "grade": grade, "htf_aligned": htf_aligned,
+            })
             conn.commit()
 
     # ── writes ──────────────────────────────────────────────────────────────
