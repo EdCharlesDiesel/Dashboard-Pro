@@ -117,6 +117,8 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("ONDR", "35. Overnight Drift",        "🌙", "pages/overnight_drift_tab.py"),
         NavEntry("HOLD", "36. Optimal Holding Period", "⏱️", "pages/holding_period_tab.py"),
         NavEntry("QNTM", "37. Quant Models Lab",       "🧮", "pages/quant_models_tab.py"),
+        NavEntry("FCST", "37a. Forecast",              "🔭", "pages/forecast_tab.py"),
+        NavEntry("SURP", "38. Surprise Awareness",     "😲", "pages/surprise_tab.py"),
     ]),
 ]
 

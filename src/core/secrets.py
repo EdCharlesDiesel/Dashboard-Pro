@@ -136,6 +136,48 @@ def gmail_config() -> Dict[str, str]:
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Telegram (Evening Sentry / Surprise Awareness alerts)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def telegram_config() -> Dict[str, str]:
+    """Telegram bot credentials for in-app alert sends (pages/surprise_tab.py).
+
+    Canonical: ``[telegram] bot_token`` / ``chat_id``. Env fallback:
+    ``TELEGRAM_BOT_TOKEN`` / ``TELEGRAM_CHAT_ID`` — the same two variables
+    src/services/evening_sentry.py's standalone CLI reads directly from
+    ``os.environ`` (it has no Streamlit runtime, so it can't use ``st.secrets``);
+    set both env vars to the same values as this ``[telegram]`` block so the
+    dashboard and the background sentry alert through the same bot.
+    """
+    return {
+        "bot_token": _get("telegram", "bot_token", "TELEGRAM_BOT_TOKEN"),
+        "chat_id": _get("telegram", "chat_id", "TELEGRAM_CHAT_ID"),
+    }
+
+
+def send_telegram_message(text: str) -> tuple[bool, str]:
+    """Send ``text`` via the configured Telegram bot. Returns ``(ok, detail)``.
+
+    Never raises — a missing/invalid config or a network failure is reported
+    in the returned message, not thrown, so callers can surface it with
+    ``st.error``/``st.caption`` without their own try/except.
+    """
+    cfg = telegram_config()
+    if not cfg["bot_token"] or not cfg["chat_id"]:
+        return False, "Telegram not configured — add [telegram] bot_token/chat_id to secrets.toml"
+    import requests
+    try:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage",
+            json={"chat_id": cfg["chat_id"], "text": text}, timeout=10,
+        )
+        resp.raise_for_status()
+        return True, "sent"
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+
 def email_config() -> Dict[str, Any]:
     """SMTP settings in the shape ``market-overview.py`` expects.
 

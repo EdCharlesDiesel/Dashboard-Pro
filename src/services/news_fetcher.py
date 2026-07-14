@@ -115,6 +115,9 @@ class NewsFetcher:
                     "currency": ccy,
                     "impact": impact.lower(),
                     "title": str(it.get("title", "")).strip()[:200],
+                    "actual": str(it.get("actual", "")).strip(),
+                    "forecast": str(it.get("forecast", "")).strip(),
+                    "previous": str(it.get("previous", "")).strip(),
                 })
             except Exception as e:
                 log.debug("skipping malformed event %r: %s", it, e)
@@ -138,11 +141,15 @@ class NewsFetcher:
                 if row is None:
                     cx.execute(news.insert().values(**ev))
                     added += 1
-                elif row.ts_utc != ev["ts_utc"]:
+                else:
+                    # Always refresh actual/forecast/previous (a scheduled
+                    # release fills these in later) as well as ts_utc/impact
+                    # (FF often reshuffles times).
                     cx.execute(news.update()
                                .where(news.c.id == row.id)
-                               .values(ts_utc=ev["ts_utc"],
-                                       impact=ev["impact"]))
+                               .values(ts_utc=ev["ts_utc"], impact=ev["impact"],
+                                       actual=ev["actual"], forecast=ev["forecast"],
+                                       previous=ev["previous"]))
                     updated += 1
         return added, updated
 

@@ -8,7 +8,7 @@ them into a single, disciplined trade decision.*
 ## 1. What this system is
 
 Dashboard Pro is a **forex & metals day-trading terminal** built on Streamlit.
-It is not a black box that spits out "buy" or "sell" — it is a set of 42
+It is not a black box that spits out "buy" or "sell" — it is a set of 45
 purpose-built lenses on the same 22-instrument universe (21 forex pairs +
 Gold/Silver/Platinum), organized so that working through them in order
 narrows a huge, noisy market down to one or two trades you can actually
@@ -87,6 +87,7 @@ look. Run these, don't act on any of them alone.
 | **📦 CME FX Futures** | Real, exchange-reported volume via CME currency futures (`6E=F`, `6B=F`, …) — OBV/CMF that actually mean something, unlike on zero-volume spot pairs. | Volume confirming a move (OBV rising with price) is a stronger read than price alone; volume divergence is a warning. |
 | **💱 Predictive Analytics** | A standalone statistical/ML directional read (price vs SMA-style) per pair. | A single model's opinion — treat it as one more vote, not the final word. (Don't confuse this with the Instrument Predictor in Section 8, which combines *several* of this system's own tools rather than being its own model.) |
 | **🟡 VWAP-EMA Gold** | A dedicated VWAP + EMA strategy view, specific to Gold. | Gold-specific execution context if Gold is your candidate. |
+| **🧱 ABR Toolkit** | Swing detection → BoS/CHoCH (with ATR strength) → order blocks (mitigation + age) → auto trendlines + break detection → MTF EMA bias → a 0–100 quality score → a full trade plan (entry/SL/TP1-3, USD lot sizing) for Gold, Silver, the majors, WTI, and BTC. Tries a running Deriv/MT5 terminal first for exact broker candles (avoids the futures/spot basis offset yfinance carries on GC=F/SI=F), falling back to yfinance when MT5 isn't available. | A structure-first second read on a Scan candidate — order blocks and trendline breaks are additional confluence, not a replacement for the top-down pass below. |
 
 ---
 
@@ -180,6 +181,8 @@ whenever you're doing deeper research — not every session.
 | **🌙 Overnight Drift** | Studies the overnight-session return pattern for index futures. |
 | **⏱️ Optimal Holding Period** | Backtests how many days a breakout-style entry should be held before mean-reverting/decaying, per pair. |
 | **🧮 Quant Models Lab** | Six statistical models for pairs research: Engle-Granger cointegration test, Kalman-filter dynamic hedge ratio, Ornstein-Uhlenbeck mean-reversion fit (half-life + z-bands), GARCH(1,1) volatility regime + vol-targeted position sizing, UIP/carry deviation, and a GBM Monte-Carlo null test for judging whether *any* backtest number beats pure luck. See Section 9.4 for how this feeds the Instrument Predictor's vol-regime confidence modifier. |
+| **🔭 Forecast** | A GARCH(1,1)-t volatility cone (1 week / 1 month / 1 quarter) around a random-walk center — deliberately no point forecast, since beating a random walk at these horizons is hard (Meese-Rogoff). Alongside it, a transparent driver score (trend, 200d MA, momentum, 20-day breakout, and the ABR Toolkit's structure bias when available) and a plain-language narrative (template by default, polished by the Claude API when `ANTHROPIC_API_KEY` is set). Every forecast is journaled and later scored against what actually happened — hit rate inside the 68%/95% bands, and whether the directional call was right. | The self-scoring history is the point: it tells you honestly, over time, whether this page's driver score has any real edge for a given instrument, rather than asking you to trust it on faith. |
+| **😲 Surprise Awareness** | Three tools sharing one economic-calendar feed: (1) a **surprise index** — z-scored actual-vs-forecast per data release (Citi-ESI style), covering every registry currency, not just USD; (2) an **event-proximity gate** per instrument — suppresses/flags signals when a high-impact release for its currencies is imminent or just happened; (3) a **gold~oil rolling correlation** to catch when "escalation = buy gold" has inverted (it did, Feb 2026). Telegram-alerts on qualifying surprises if `[telegram]` is configured in secrets.toml. | Check the gate for your candidate instrument before triggering an entry — a red-folder release inside the window means stand aside, the geopolitical/data premium unwinds in hours, not weeks. |
 
 ---
 
