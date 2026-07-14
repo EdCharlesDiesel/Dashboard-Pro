@@ -26,9 +26,3 @@ lxml==6.1.1  # HTML parsing backend for pandas.read_html (MT4 statement import)
 # left unpinned; pin once installed.
 anthropic
 reportlab==5.0.0  # docs/generate_guide_pdf.py only (builds assets/Dashboard_Pro_System_Guide.pdf); not imported by the running app
-# MetaTrader5: optional, Windows-only, lazy-imported by pages/abr_toolkit_tab.py
-# to pull candles straight from a running Deriv/MT5 terminal (matches your
-# actual fills instead of yfinance's futures/spot basis offset). Falls back to
-# yfinance when the terminal isn't running or the package isn't installed, so
-# it's left unpinned here rather than a hard dependency of the app.
-MetaTrader5

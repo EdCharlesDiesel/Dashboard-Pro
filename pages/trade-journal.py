@@ -4,7 +4,10 @@ from src.pages_lib.navigation import render_sidebar_nav
 from src.instruments.registry import INSTRUMENTS
 from src.core import secrets
 from src.db.trade_repository import TradeRepository, DBConfig
+from src.db.cache import pooled_repository
+from src.db.market_cache import cached_closes
 from src.services import mt4_import, account_state
+from src.services import signal_expiry
 import os
 import pandas as pd
 import numpy as np
@@ -75,11 +78,12 @@ def load_journal_trades(cfg, limit: int = 500):
         conn = get_db_connection(cfg)
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT id, logged_at, instrument, direction, session,
+            SELECT id, logged_at, instrument, ticker, direction, session,
                    score, verdict, sl_pips, tp1_pips, tp2_pips, rr_tp1,
                    lot_size, risk_amount,
                    entry_price, close_price, outcome, pips_gained, r_multiple,
-                   is_open, checks_passed, checks_total, source, notes
+                   is_open, checks_passed, checks_total, source, notes,
+                   checks_detail, invalidated_at, invalidation_price
             FROM trade_setups
             ORDER BY logged_at DESC
             LIMIT %s
@@ -90,6 +94,79 @@ def load_journal_trades(cfg, limit: int = 500):
         return rows
     except Exception:
         return []
+
+
+def _run_invalidation_check(df_all: pd.DataFrame, cfg: dict) -> None:
+    """Price-based signal invalidation: flag open rows whose stop level has
+    been crossed. A visibility badge only — never touches
+    outcome/close_price/is_open. Persists newly-detected hits to Postgres via
+    ``TradeRepository.mark_invalidated`` and patches ``df_all`` in place so
+    the current render reflects them without a forced rerun.
+
+    Candidates are open rows (``is_open != False``) not yet invalidated, with
+    a known stop distance (``sl_pips``) and instrument (for pip_size). Rows
+    missing an entry price (checklist-saved, still open) or an unresolved
+    direction are silently skipped by ``signal_expiry`` — never flagged on
+    incomplete data.
+    """
+    if "invalidated_at" not in df_all.columns:
+        return
+    candidates_mask = (
+        (df_all["is_open"] != False)
+        & df_all["invalidated_at"].isna()
+        & df_all["sl_pips"].notna()
+    )
+    candidate_rows = []
+    for idx, r in df_all[candidates_mask].iterrows():
+        inst = INSTRUMENTS.get(r.get("instrument"))
+        if inst is None:
+            continue
+        candidate_rows.append({
+            "id": r["id"], "direction": r.get("direction"),
+            "sl_pips": r.get("sl_pips"), "pip_size": inst.pip_size,
+            "ticker": r.get("ticker") or inst.ticker,
+            "entry_price": r.get("entry_price"), "checks_detail": r.get("checks_detail"),
+            "_row_idx": idx,
+        })
+    if not candidate_rows:
+        return
+
+    tickers = sorted({row["ticker"] for row in candidate_rows if row["ticker"]})
+    if not tickers:
+        return
+    try:
+        closes = cached_closes(tickers, period="5d", interval="1d", ttl=300)
+    except Exception:
+        return  # never break the journal over a market-data hiccup
+    price_by_ticker = {}
+    for ticker in tickers:
+        if ticker not in closes.columns:
+            continue
+        series = closes[ticker].dropna()
+        if not series.empty:
+            price_by_ticker[ticker] = float(series.iloc[-1])
+    if not price_by_ticker:
+        return
+
+    hits = signal_expiry.find_newly_invalidated(candidate_rows, price_by_ticker)
+    if not hits:
+        return
+
+    by_id = {row["id"]: row["_row_idx"] for row in candidate_rows}
+    try:
+        repo = pooled_repository(DBConfig.from_mapping(cfg))
+    except Exception:
+        return  # DB unreachable — leave rows OPEN, retried next load
+    now = pd.Timestamp.now()
+    for trade_id, price in hits:
+        try:
+            repo.mark_invalidated(trade_id, price)
+        except Exception:
+            continue
+        row_idx = by_id.get(trade_id)
+        if row_idx is not None:
+            df_all.loc[row_idx, "invalidated_at"] = now
+            df_all.loc[row_idx, "invalidation_price"] = price
 
 
 def _existing_tickets(cfg) -> set:
@@ -352,11 +429,22 @@ if "source" not in df_all.columns:
     df_all["source"] = "checklist"
 df_all["source"] = df_all["source"].fillna("checklist")
 
+_run_invalidation_check(df_all, _cfg)
+
+# Signal status badge: a real close (MT4 import / Checklist close-trade form)
+# always wins over price-based invalidation — is_open == False is CLOSED even
+# if the row was flagged invalidated first.
+df_all["signal_status"] = np.where(
+    df_all["is_open"] == False, "⚪ CLOSED",
+    np.where(df_all["invalidated_at"].notna(), "🔴 INVALIDATED", "🟢 OPEN"),
+)
+
 # Closed trades only for analytics. Imported broker fills without a Stop Loss
 # carry a null R — treat as 0R for cumulative math; they still count by outcome.
 df_closed = df_all[df_all["outcome"].notna() & (df_all["is_open"] == False)].copy()
 df_closed["r_multiple"] = df_closed["r_multiple"].fillna(0)
 df_open = df_all[df_all["is_open"] != False].copy()
+n_invalidated = int((df_open["signal_status"] == "🔴 INVALIDATED").sum())
 
 n_total = len(df_all)
 n_closed = len(df_closed)
@@ -395,16 +483,17 @@ wr_color = "#00ff66" if win_rate >= target else "#ff3344"
 # KPI STRIP
 # ══════════════════════════════════════════════════════════════════
 
-k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
+k1, k2, k3, k4, k5, k6, k7, k8 = st.columns(8)
 kpis = [
     (k1, f"{win_rate:.1f}%", "Win Rate", wr_color),
     (k2, f"{len(wins) if n_closed else 0}W/{len(losses) if n_closed else 0}L/{len(be_trades) if n_closed else 0}BE",
      "W / L / BE", "#e6e6e6"),
     (k3, f"{n_closed}", "Closed", "#9a9a9a"),
     (k4, f"{n_open}", "Open", "#00ff41"),
-    (k5, f"{expectancy:+.2f}R", "Expectancy", "#00ff66" if expectancy > 0 else "#ff3344"),
-    (k6, f"{pf:.2f}", "Profit Factor", "#00ff66" if pf >= 1.5 else "#ffcc00" if pf >= 1 else "#ff3344"),
-    (k7, f"{total_r:+.1f}R", "Total R", "#00ff66" if total_r > 0 else "#ff3344"),
+    (k5, f"{n_invalidated}", "Invalidated", "#ff3344" if n_invalidated else "#9a9a9a"),
+    (k6, f"{expectancy:+.2f}R", "Expectancy", "#00ff66" if expectancy > 0 else "#ff3344"),
+    (k7, f"{pf:.2f}", "Profit Factor", "#00ff66" if pf >= 1.5 else "#ffcc00" if pf >= 1 else "#ff3344"),
+    (k8, f"{total_r:+.1f}R", "Total R", "#00ff66" if total_r > 0 else "#ff3344"),
 ]
 for col, val, lbl, color in kpis:
     with col:
@@ -894,8 +983,16 @@ with tab_log:
             "risk_amount": st.column_config.NumberColumn("Risk $", format="%.2f"),
             "checks_passed": st.column_config.NumberColumn("✅", width="small"),
             "is_open": st.column_config.CheckboxColumn("Open", width="small"),
+            "signal_status": st.column_config.TextColumn("Status", width="small",
+                help="🔴 INVALIDATED = price crossed the stop level before/instead of "
+                     "being taken. Badge only — it never changes Outcome/Close/Open, "
+                     "which stay driven by an actual close."),
             "source": st.column_config.TextColumn("Source", width="small"),
             "notes": st.column_config.TextColumn("Notes", width="large"),
+            "ticker": None,
+            "checks_detail": None,
+            "invalidated_at": None,
+            "invalidation_price": None,
         },
     )
 
