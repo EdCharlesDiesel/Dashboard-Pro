@@ -31,4 +31,5 @@ lxml==6.1.1  # HTML parsing backend for pandas.read_html (MT4 statement import)
 # left unpinned; pin once installed.
 anthropic
 reportlab==5.0.0  # docs/generate_guide_pdf.py only (builds assets/Dashboard_Pro_System_Guide.pdf); not imported by the running app
+dukascopy-python==4.0.1  # src/data/dukascopy_backfill.py — historical archive for local debug mode's replay/time-machine (see src/debug/); not imported by the running app in prod
 

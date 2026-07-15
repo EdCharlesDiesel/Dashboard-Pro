@@ -7,7 +7,7 @@ fall back to a live fetch.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
@@ -18,13 +18,17 @@ from src.db.trade_repository import DBConfig
 
 # ── fakes ─────────────────────────────────────────────────────────────────────
 class FakeRepo:
-    def __init__(self, fetched_at=None, blob_at=None, blob=None):
+    def __init__(self, fetched_at=None, blob_at=None, blob=None, duka_bars=None,
+                duka_raises=None):
         self._fetched_at = fetched_at
         self._blob_at = blob_at
         self._blob = blob
+        self._duka_bars = duka_bars if duka_bars is not None else pd.DataFrame()
+        self._duka_raises = duka_raises
         self.upserted = []
         self.set_blobs = []
         self.loaded = []
+        self.duka_loaded = []
 
     def last_fetched_at(self, symbol, interval):
         return self._fetched_at
@@ -35,6 +39,12 @@ class FakeRepo:
 
     def upsert_bars(self, symbol, interval, df):
         self.upserted.append((symbol, interval, len(df)))
+
+    def load_dukascopy_bars(self, symbol, interval, start=None):
+        self.duka_loaded.append((symbol, interval, start))
+        if self._duka_raises:
+            raise self._duka_raises
+        return self._duka_bars
 
     def blob_fetched_at(self, key):
         return self._blob_at
@@ -220,3 +230,100 @@ class TestInvalidation:
 
     def test_clear_runs(self):
         mc.clear_market_caches()
+
+
+# ── debug mode: source/asof resolution + time-machine truncation ─────────────
+class TestResolveDebugDefaults:
+    def test_explicit_values_win(self):
+        # No Streamlit runtime in tests, so st.session_state access raises —
+        # explicit args must short-circuit that, not attempt the lookup.
+        source, asof = mc._resolve_debug_defaults("duka", date(2026, 1, 1))
+        assert (source, asof) == ("duka", date(2026, 1, 1))
+
+    def test_none_falls_back_to_live_no_asof_without_runtime(self):
+        # Outside a Streamlit runtime, st.session_state access raises and the
+        # resolver must degrade to the safe defaults rather than propagate.
+        source, asof = mc._resolve_debug_defaults(None, None)
+        assert source == "live"
+        assert asof is None
+
+
+class TestApplyAsof:
+    def _frame(self):
+        idx = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"])
+        return pd.DataFrame({"Close": [1.0, 2.0, 3.0]}, index=idx)
+
+    def test_none_asof_is_noop(self):
+        df = self._frame()
+        out = mc._apply_asof(df, None)
+        assert len(out) == 3
+
+    def test_truncates_to_asof_inclusive(self):
+        out = mc._apply_asof(self._frame(), date(2026, 1, 2))
+        assert list(out["Close"]) == [1.0, 2.0]
+
+    def test_asof_before_all_data_empties_frame(self):
+        out = mc._apply_asof(self._frame(), date(2025, 1, 1))
+        assert out.empty
+
+    def test_empty_frame_is_noop(self):
+        out = mc._apply_asof(pd.DataFrame(), date(2026, 1, 1))
+        assert out.empty
+
+    def test_tz_aware_index_handled(self):
+        idx = pd.to_datetime(["2026-01-01", "2026-01-02"]).tz_localize("UTC")
+        df = pd.DataFrame({"Close": [1.0, 2.0]}, index=idx)
+        out = mc._apply_asof(df, date(2026, 1, 1))
+        assert len(out) == 1
+
+
+class TestOhlcImplDuka:
+    def test_no_cfg_falls_back_to_live(self, monkeypatch):
+        monkeypatch.setattr(mc, "_resolve_cfg", lambda: None)
+        calls = _track_fetch(monkeypatch)
+        out = mc._ohlc_impl("EURUSD=X", "60d", "1d", None, None, 300, True,
+                            source="duka")
+        assert calls["n"] == 1                 # fell back to live fetch
+        assert out["Close"].iloc[0] == 9.9
+
+    def test_archived_bars_served_no_live_fetch(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        archived = pd.DataFrame({"Close": [1.2345]})
+        repo = FakeRepo(duka_bars=archived)
+        out = mc._ohlc_impl("EURUSD=X", "60d", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo, source="duka")
+        assert calls["n"] == 0                 # no live fetch — served from archive
+        # "60d" period resolves to a ~60-days-ago cutoff via _window_start,
+        # same trimming _ohlc_impl's live path already applies to load_bars.
+        loaded_symbol, loaded_interval, loaded_start = repo.duka_loaded[0]
+        assert (loaded_symbol, loaded_interval) == ("EURUSD=X", "1d")
+        assert loaded_start is not None
+        assert out["Close"].iloc[0] == pytest.approx(1.2345)
+
+    def test_empty_archive_falls_back_to_live(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(duka_bars=pd.DataFrame())  # symbol never backfilled
+        out = mc._ohlc_impl("GBPZAR=X", "60d", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo, source="duka")
+        assert calls["n"] == 1
+        assert out["Close"].iloc[0] == 9.9
+
+    def test_duka_read_error_falls_back_to_live(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(duka_raises=RuntimeError("table missing"))
+        out = mc._ohlc_impl("EURUSD=X", "60d", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo, source="duka")
+        assert calls["n"] == 1
+        assert out["Close"].iloc[0] == 9.9
+
+    def test_falls_back_still_goes_through_normal_live_cache_path(self, cfg_set, monkeypatch):
+        # A duka miss shouldn't just live-fetch and discard — it should still
+        # hit the same fresh-from-DB / upsert-on-stale contract as source="live".
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(duka_bars=pd.DataFrame(),
+                        fetched_at=datetime.utcnow() - timedelta(seconds=5))
+        out = mc._ohlc_impl("EURUSD=X", "60d", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo, source="duka")
+        assert calls["n"] == 0                 # fresh market_bars served instead
+        assert repo.loaded                     # went through the live-cache path
+        assert out["Close"].iloc[0] == 1.0     # came from load_bars, not live fetch

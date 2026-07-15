@@ -63,6 +63,11 @@ class TrendController:
         self._record_alert_history(results)
         self._render_alert_history()
 
+        from src.debug import debug_panel
+        debug_panel("Trend Signals", {
+            pair: r["df"] for pair, r in list(results.items())[:3] if not r.get("error")
+        })
+
     @staticmethod
     def _scan_markets(
         selected: List[str], interval: str, period: str,

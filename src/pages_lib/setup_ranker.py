@@ -388,6 +388,12 @@ class SetupRankerPage(BloombergPage):
 
         directions = ["LONG", "SHORT"] if direction == "Both" else [direction]
 
+        # Rendered outside the fragment below — fragments can't write new
+        # sidebar widgets ("Fragments cannot write widgets to outside
+        # containers"), so the debug panel has to live in the outer body().
+        from src.debug import debug_panel
+        debug_panel("Setup Ranker")
+
         # Auto-refreshing fragment: re-scans, re-persists, and re-checks email
         # alerts every 5 min on its own (matching the underlying data's cache
         # TTL) without a manual "RESCAN ALL PAIRS" click or full-page rerun —
