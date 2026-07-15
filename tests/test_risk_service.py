@@ -48,3 +48,19 @@ class TestCompute:
         r = RiskService.compute(10_000, 1.0, 10.0, 20.0, 40.0, 60.0)
         with pytest.raises(Exception):
             r.lot_size = 1.0  # frozen dataclass
+
+    def test_actual_risk_matches_target_when_lot_rounds_cleanly(self):
+        r = RiskService.compute(10_000, 1.0, 10.0, 20.0, 40.0, 60.0)
+        assert r.actual_risk == pytest.approx(r.risk_amount)
+
+    def test_actual_risk_drifts_from_target_on_coarse_rounding(self):
+        # $100 target / 128.67 sl_pips / $10 pip_value = 0.0777 lots -> rounds
+        # to 0.08, so the dollar risk actually taken differs from the target.
+        r = RiskService.compute(10_000, 1.0, 10.0, 128.67, 257.34, 386.01)
+        assert r.lot_size == pytest.approx(0.08)
+        assert r.actual_risk == pytest.approx(0.08 * 10.0 * 128.67)
+        assert r.actual_risk != pytest.approx(r.risk_amount)
+
+    def test_actual_risk_zero_when_ungrounded(self):
+        r = RiskService.compute(10_000, 1.0, 0.0, 20.0, 40.0, 60.0)
+        assert r.actual_risk == 0.0

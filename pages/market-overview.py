@@ -32,7 +32,7 @@ logger = logging.getLogger("ForexDashboard")
 
 
 def main():
-    st.title(f"💹 Macro Dashboard Pro v{config.version}")
+    st.title(f"💹 Market Overview")
 
     # ── Auto-refresh every 5 minutes ─────────────────────────────────────────
     # st_autorefresh returns a monotonically increasing counter (0 on first load).

@@ -95,133 +95,120 @@ python -m pytest --runslow --no-cov tests/test_pages_smoke.py   # page smoke tes
 
 ---
 
-## How the system works — the 10-step workflow (+ a weekly research lab)
+## How the system works — the daily path vs. reference & research
 
-The pages are grouped and numbered the way you actually trade a session. Work
-sections 0–9 top to bottom; most days you touch a handful and take one clean
-trade. Section 10 (Weekly & Research Lab) is a weekly/occasional check, not
-part of the daily top-to-bottom pass. This table mirrors
-[`src/pages_lib/navigation.py`](src/pages_lib/navigation.py) exactly — that
-file is the single source of truth; if the two ever disagree, the code wins.
-**For what each page's output actually means and how to act on it, see the
-[System Guide](pages/system_guide.py)** — this table is deliberately just a
-map.
+44 pages is too many stops for any daily routine to survive. The pages are
+grouped by **when in the day you'd actually touch them**, not the order they
+were built — separating the daily path (walked in order, execute-or-pass)
+from reference and research (visited on demand, never mid-session). This
+table mirrors [`src/pages_lib/navigation.py`](src/pages_lib/navigation.py)
+exactly — that file is the single source of truth; if the two ever disagree,
+the code wins. **For what each page's output actually means and how to act
+on it, see the [System Guide](pages/system_guide.py)** — this table is
+deliberately just a map.
 
-Re-architected 2026-07: two changes from the original layout, both driven by
-actual cadence rather than where a page happened to be added historically.
-(1) A new **Synthesize** section for the **Instrument Predictor**, which
-combines a Scan-stage read (Setup Score) with Filter-stage reads (Currency
-Strength, COT) into one composite — it sits between the two rather than
-inside either. (2) **Filter the day** now holds only genuinely
-daily-checked tools; every COT page plus Bonds→Gold→DXY moved into a
-consolidated **Weekly & Research Lab** with the tools that already lived
-there, since all of them are weekly-cadence per their own captions.
+Re-architected 2026-07 around a 17:00–20:00 SAST session: Morning Brief (5
+min, sets bias, no decisions) → Pre-Session (build the shortlist, ~20 min,
+frozen once the session opens) → Session (execution only — nothing here
+generates a new opinion) → Weekend (weekly-bias tools + the full COT suite)
+→ Research Lab (everything else, visited when building or validating, never
+during a session) → Reference. Of the five scanners that produce directional
+opinions (Setup Ranker, AMD Scanner, Trend Signals, 20-Day Breakout, MTF
+Matrix), only Setup Ranker (primary) and Trend Signals (confirmer) hold a
+daily-path slot — the other three move to Research Lab until there's enough
+journaled history to know which one actually earns it. Daily Trend / Daily
+MACD / Market Structure do more analysis than the Ranker's checklist booleans
+(histogram momentum, EMA100/200 stack + slope, CHoCH/BOS) so they're kept as
+full pages, just relocated out of the 7-touch day. Stop Structure, R:R
+Calculator, and Account Risk were merged into one **Risk Suite** page — they
+were one decision ("where's the stop, what's the size") spread across three
+separate re-entries of the same instrument/balance/risk inputs.
 
-### 0 · Cockpit
-| # | Page | What it's for |
-|---|------|---------------|
-| 00 | [📋 Daily Checklist](app.py) | **The cockpit.** The 18-point pre-trade gate; saves the trade and the journal. Everything else feeds this. |
-| 00a | [📖 System Guide & Playbook](pages/system_guide.py) | The full deep-dive: every page, what its numbers mean, the Instrument Predictor's methodology. In-app or as a downloadable PDF. |
-| 01 | [🛫 Daily Cockpit](pages/daily_cockpit_tab.py) | Pre-market routine on one screen — risk regime → rate bias → events → fresh setups, with the parts that agree flagged. Covers the full 21-pair + metals registry. |
-| 02 | [📊 Market Overview](pages/market-overview.py) | Morning snapshot — headline KPIs + price table across FX, metals, indices. |
+### 🌅 Morning Brief — 5 min with coffee, sets bias, no decisions
+| Page | What it's for |
+|------|---------------|
+| [🛫 Daily Cockpit](pages/daily_cockpit_tab.py) | Regime → rate bias → events → fresh setups, one screen. Covers the full registry. |
+| [📊 Market Overview](pages/market-overview.py) | Headline KPIs + price table across FX, metals, indices. |
+| [📰 News Filter](pages/news-filter.py) | Today's landmines, in SAST — wait or skip. |
 
-### 1 · Scan — build the shortlist
-| # | Page | What it's for |
-|---|------|---------------|
-| 03 | [🎰 Setup Ranker](pages/setup-ranker.py) | The multi-timeframe scorer — 10 technical criteria, plus an 11th Currency Strength criterion for FX pairs (commodities stay on the 10-point scale). Auto-refreshes every 5 min; run **Both** directions; pairs scoring 70%+ are today's candidates, 90%+ fire an email alert. |
-| 04 | [📊 AMD Scanner](pages/amd-scanner.py) | Accumulation / Manipulation / Distribution scanner (1H × 1 month). |
-| 05 | [📡 Trend Signals](pages/trend-signals.py) | The 6-condition trend-following scan (50/200 EMA, RSI, MACD, ADX). |
-| 05a | [🧭 MTF Matrix](pages/mtf-matrix.py) | The trend read across multiple timeframes at once, in one grid. |
-| 06 | [🚀 20-Day Breakout](pages/twenty_day_breakout_tab.py) | Donchian-style 20-day breakout candidates. |
-| 07 | [📦 CME FX Futures](pages/cme-futures-volume.py) | Real, exchange-reported volume for FX via CME currency futures (6E=F, 6B=F, …) — OBV/CMF that actually mean something, unlike on zero-volume spot pairs. |
-| 08 | [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |
-| 09 | [🟡 VWAP-EMA Gold](pages/vwap-ema-gold.py) | A dedicated VWAP+EMA strategy view for Gold. |
-| 09a | [🧱 ABR Toolkit](pages/abr_toolkit_tab.py) | Structure (BoS/CHoCH) + order blocks + auto trendlines + MTF EMA bias + quality-graded trade plan (entry/SL/TP1-3, USD sizing) across gold, silver, majors, WTI, BTC. Tries a running Deriv/MT5 terminal first for exact broker candles, falls back to yfinance. |
+### 📋 Pre-Session — 16:30 SAST, build the shortlist (~20 min)
+| Page | What it's for |
+|------|---------------|
+| [🎰 Setup Ranker](pages/setup-ranker.py) | **Primary scan.** Direction-only scoring (7-8 criteria; ATR/Spread/4H-Zone are a separate quality gate, not points) — 80%+ is Grade A. |
+| [📡 Trend Signals](pages/trend-signals.py) | **Confirmer.** Confirms/denies the Ranker's top picks — 50/200 EMA, RSI, MACD, with ADX as a hard trend gate (not one point of six). |
+| [💪 Currency Strength](pages/currency-strength.py) | Kill conflicted exposure — ranks the 9 registry currencies strong → weak. |
+| [🔗 Correlations](pages/correlations.py) | Kill duplicated exposure — stacked-risk check before adding a correlated pair. |
+| [🔀 Confluence Check](pages/confluence-checker.py) | The final gate: what survives? At least 2 of 3 confluences (Fib + Pivot + EMA) must line up. |
 
-### 2 · Synthesize — composite read (NEW)
-| # | Page | What it's for |
-|---|------|---------------|
-| 10 | [🔮 Instrument Predictor](pages/instrument-predictor.py) | Combines Setup Score + Trend Signal + Currency Strength + COT Composite into one weighted directional read (label, confidence, agreement %) for a chosen instrument — a fast second opinion on your Scan-stage shortlist. GARCH vol regime caps confidence in choppy conditions. Heuristic, not a validated model — see the System Guide for the full methodology. |
+### ⚡ Session — 17:00–20:00, execution only
+The shortlist is frozen at session open. Nothing in this section is
+analytical — if you can re-open the Ranker mid-session you will, and that's
+how a flat day becomes a revenge trade.
+| Page | What it's for |
+|------|---------------|
+| [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Optional email alerts. |
+| [🛡️ Risk Suite](pages/risk-suite.py) | Stop Structure + R:R Calculator + Account Risk, one page, three tabs — where's the stop, is R:R ≥2:1, what's the size. |
+| [📓 Trade Journal](pages/trade-journal.py) | Log at entry, not after. Also the 19:00 post-session review stop — equity curve, win rate vs 66% target. |
 
-### 3 · Filter the day — daily macro & risk backdrop
-| # | Page | What it's for |
-|---|------|---------------|
-| 11 | [💵 DXY vs Gold](pages/dxy-gold.py) | Dollar vs Gold inverse — the cross-asset confirmation. |
-| 12 | [💪 Currency Strength](pages/currency-strength.py) | Ranks the 9 registry currencies strong → weak from average pair returns; surfaces the strongest-vs-weakest pair as the highest-probability trend trade. |
-| 13 | [📰 News Filter](pages/news-filter.py) | Red-folder events in the next hours — wait or skip. |
-| 14 | [🔗 Correlations](pages/correlations.py) | Stacked-exposure check before adding correlated risk. |
+### 📅 Weekend — weekly bias & the full COT suite
+Having these in the daily path just adds scroll — check once a week, not
+every session.
+| Page | What it's for |
+|------|---------------|
+| [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
+| [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
+| [📔 Swing Playbook](pages/swing_playbook_tab.py) | Weekly pre-flight: price, COT crowdedness, gold disconnect, supply/demand zones, vol-scaled sizing, written thesis journal. |
+| [🏛️ COT Positioning](pages/cot_tab.py) | Weekly CFTC institutional/speculative positioning — a crowdedness read, not a trade trigger on its own. |
+| [🧭 COT Signals](pages/cot_signals.py) | Extreme-positioning + price/positioning divergence, plus a composite squeeze-watch flag. |
+| [🧮 COT Open Interest](pages/cot_open_interest.py) | Position-change + open-interest-change context — fresh conviction or an unwind? |
+| [🥇 Gold COT](pages/gold_cot_tab.py) | The same positioning read, gold-specific. |
+| [🛢️ Oil COT](pages/oil_cot_tab.py) | The same positioning read, WTI-specific. |
+| [🏦 Bonds → Gold → DXY](pages/bonds_gold_dxy_app.py) | Treasury-yield ⇄ gold ⇄ dollar seesaw — cross-asset context, educational. |
+| [🧩 COT Composite Signal](pages/cot_composite_trade_signal.py) | Combines the three COT pages into one scored STRONG_BUY…STRONG_SELL read plus a collapse-watch flag. Rules-based heuristic — backtest it before trusting it. |
+| [🧪 COT Composite Backtest](pages/cot_trade_signal_walk_forward_backtest_harness.py) | No-lookahead walk-forward validation of the composite signal. |
 
-### 4 · Weekly bias
-| # | Page | What it's for |
-|---|------|---------------|
-| 15 | [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
-| 16 | [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
-| 16a | [📔 Swing Playbook](pages/swing_playbook_tab.py) | Weekly pre-flight: price, COT crowdedness, gold disconnect, supply/demand zones, vol-scaled sizing, and a written thesis journal per instrument. |
+### 🔬 Research Lab — on demand, never mid-session
+Visited when building or validating, not part of the routine.
+| Page | What it's for |
+|------|---------------|
+| [📊 AMD Scanner](pages/amd-scanner.py) | Accumulation / Manipulation / Distribution scanner (1H × 1 month). |
+| [🧭 MTF Matrix](pages/mtf-matrix.py) | The trend read across multiple timeframes at once, in one grid. |
+| [🚀 20-Day Breakout](pages/twenty_day_breakout_tab.py) | Donchian-style 20-day breakout candidates. |
+| [📦 CME FX Futures](pages/cme-futures-volume.py) | Real, exchange-reported volume for FX via CME currency futures — OBV/CMF that actually mean something. |
+| [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |
+| [🟡 VWAP-EMA Gold](pages/vwap-ema-gold.py) | A dedicated VWAP+EMA strategy view for Gold. |
+| [🔮 Instrument Predictor](pages/instrument-predictor.py) | Composite second opinion — Setup Score + Trend Signal + Currency Strength + COT Composite, one weighted read. Heuristic, not a validated model. |
+| [💵 DXY vs Gold](pages/dxy-gold.py) | Dollar vs Gold inverse — cross-asset confirmation. |
+| [📈 Daily Trend](pages/daily-trend.py) | EMA20/50/100/200 stack + slope + crossover-recency + gap history — more than the Ranker's single boolean. |
+| [📊 Daily MACD](pages/daily-macd.py) | Full histogram-momentum analysis (rising/falling counts, acceleration, 6-way verdict) — more than the Ranker's MACD>signal check. |
+| [🏗️ Market Structure](pages/market-structure.py) | HH/HL/LH/LL + CHoCH/BOS across 4 timeframes — more than the Ranker's single Daily read. |
+| [🎯 4H Confluence Zone](pages/4H-confluence-zone.py) | Fib + Pivot + EMA20 overlap detail behind the Pre-Session confluence check. |
+| [📅 Busy-Week Anatomy](pages/event_week_vol_tab.py) | Historical study of price behavior during high-event-density weeks. |
+| [🔌 Disconnect Monitor](pages/disconnect_monitor_tab.py) | Tests "this divergence should close" theses via a rolling-regression residual z-score. |
+| [🌙 Overnight Drift](pages/overnight_drift_tab.py) | Studies the overnight-session return pattern for index futures. |
+| [⏱️ Optimal Holding Period](pages/holding_period_tab.py) | Backtests how many days a breakout-style entry should be held, per pair. |
+| [🧮 Quant Models Lab](pages/quant_models_tab.py) | Engle-Granger cointegration, Kalman dynamic hedge ratio, OU mean-reversion, GARCH(1,1) vol regime, UIP/carry, GBM null test. |
+| [🔭 Forecast](pages/forecast_tab.py) | GARCH(1,1) volatility cone + a transparent driver score + a narrative, journaled and self-scored against realized outcomes. |
+| [😲 Surprise Awareness](pages/surprise_tab.py) | Economic surprise index, an event-proximity gate, and the gold~oil regime-inversion correlation. |
 
-### 5 · Daily confirm
-| # | Page | What it's for |
-|---|------|---------------|
-| 17 | [📈 Daily Trend](pages/daily-trend.py) | Daily EMA20>50 confirms the weekly is intact. |
-| 18 | [📊 Daily MACD](pages/daily-macd.py) | Daily MACD momentum — building or fading. |
-| 19 | [🏗️ Market Structure](pages/market-structure.py) | HH/HL or LH/LL — is structure intact? |
-
-### 6 · 4H zone
-| # | Page | What it's for |
-|---|------|---------------|
-| 20 | [🎯 4H Confluence Zone](pages/4H-confluence-zone.py) | Fib + Pivot + EMA20 overlap = the execution zone. |
-| 21 | [🔀 2/3 Confluence Check](pages/confluence-checker.py) | Quick gate: do at least 2 of 3 confluences line up? |
-
-### 7 · 15M trigger
-| # | Page | What it's for |
-|---|------|---------------|
-| 22 | [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Optional email alerts. |
-
-### 8 · Risk & execute
-| # | Page | What it's for |
-|---|------|---------------|
-| 23 | [🛡️ Stop Structure](pages/stop-structure.py) | Is the stop behind a real structure level (≥1× ATR)? |
-| 24 | [⚖️ R:R Calculator](pages/rr-calculator.py) | Is R:R ≥ 2:1 to TP1? (the engine filters at 1.5:1). |
-| 25 | [💵 Account Risk](pages/account-risk.py) | Position size = (Account × Risk%) ÷ (SL pips × pip value). |
-
-### 9 · Review
-| # | Page | What it's for |
-|---|------|---------------|
-| 26 | [📓 Trade Journal](pages/trade-journal.py) | Equity curve, win rate vs 66% target, MT4 statement import. |
-
-### 10 · Weekly & Research Lab (not a daily step)
-Every weekly-cadence CFTC/COT page, the educational cross-asset context page,
-and the occasional stat-arb/backtest research tools — one section for
-"check weekly, not every session," not split across two.
-
-| # | Page | What it's for |
-|---|------|---------------|
-| 27 | [🏛️ COT Positioning](pages/cot_tab.py) | Weekly CFTC institutional/speculative positioning for majors, gold, DXY. Updates weekly (Friday, for the week ending the prior Tuesday) — a crowdedness read, not a trade trigger on its own. |
-| 28 | [🧭 COT Signals](pages/cot_signals.py) | Extreme-positioning + price/positioning divergence on top of 27, plus a composite squeeze-watch flag. |
-| 29 | [🧮 COT Open Interest](pages/cot_open_interest.py) | Position-change + open-interest-change context — is a move fresh conviction or an unwind? |
-| 29a | [🥇 Gold COT](pages/gold_cot_tab.py) | The same positioning read, gold-specific. |
-| 29b | [🛢️ Oil COT](pages/oil_cot_tab.py) | The same positioning read, WTI-specific. |
-| 30 | [🏦 Bonds → Gold → DXY](pages/bonds_gold_dxy_app.py) | Treasury-yield ⇄ gold ⇄ dollar seesaw, explained then tested against live data — cross-asset context, educational. |
-| 31 | [🧩 COT Composite Signal](pages/cot_composite_trade_signal.py) | Combines 27/28/29 into one scored STRONG_BUY…STRONG_SELL read plus a collapse-watch flag; auto-saves actionable, non-neutral, higher-confidence reads to the journal. **Rules-based heuristic, not a validated edge** — backtest it (32) per instrument before trusting it. Also one of the four votes inside the Instrument Predictor. |
-| 32 | [🧪 COT Composite Backtest](pages/cot_trade_signal_walk_forward_backtest_harness.py) | No-lookahead walk-forward validation of 31 — win rate / avg return by signal state and horizon, plus a naive equity curve. A research tool; it saves nothing to the journal. |
-| 33 | [📅 Busy-Week Anatomy](pages/event_week_vol_tab.py) | Historical study of price behavior during high-event-density weeks. |
-| 34 | [🔌 Disconnect Monitor](pages/disconnect_monitor_tab.py) | Tests "this divergence should close" theses via a rolling-regression residual z-score + an event study of past disconnects. |
-| 35 | [🌙 Overnight Drift](pages/overnight_drift_tab.py) | Studies the overnight-session return pattern for index futures. |
-| 36 | [⏱️ Optimal Holding Period](pages/holding_period_tab.py) | Backtests how many days a breakout-style entry should be held, per pair. |
-| 37 | [🧮 Quant Models Lab](pages/quant_models_tab.py) | Engle-Granger cointegration, Kalman dynamic hedge ratio, OU mean-reversion (half-life + z-bands), GARCH(1,1) vol regime + sizing, UIP/carry deviation, GBM null test. Its GARCH regime also feeds the Instrument Predictor's confidence modifier. |
-| 37a | [🔭 Forecast](pages/forecast_tab.py) | GARCH(1,1) volatility cone (1 week / 1 month / 1 quarter) around a random-walk center + a transparent driver score (trend, 200d MA, momentum, breakout, ABR structure) + a narrative (Claude-polished if `ANTHROPIC_API_KEY` is set) — journaled and self-scored against realized outcomes over time. Full registry universe. |
-| 38 | [😲 Surprise Awareness](pages/surprise_tab.py) | Economic surprise index (z-scored actual-vs-forecast per release), an event-proximity gate (suppress signals near red-folder events), and the gold~oil regime-inversion correlation. Full registry universe for the gate/surprise view; Telegram alerts via `[telegram]` in secrets.toml. |
+### 📖 Reference
+| Page | What it's for |
+|------|---------------|
+| [📋 Daily Checklist (18-point)](app.py) | The original pre-trade gate; saves the trade and the journal. Superseded as the daily entry point by the Cockpit → Ranker → Confluence → Execute path above, kept for the detailed 18-point audit trail. |
+| [📖 System Guide & Playbook](pages/system_guide.py) | The full deep-dive: every page, what its numbers mean, the Instrument Predictor's methodology. In-app or as a downloadable PDF. |
+| [🧱 ABR Toolkit](pages/abr_toolkit_tab.py) | Structure (BoS/CHoCH) + order blocks + auto trendlines + MTF EMA bias + quality-graded trade plan across gold, silver, majors, WTI, BTC. |
 
 ---
 
 ## Archived pages
 
-21 pages were retired from the daily workflow (moved to `archive/pages/`, not
+24 pages were retired from the daily workflow (moved to `archive/pages/`, not
 deleted — full git history intact, code still imports/compiles) to keep the
-system focused on a lean, forex-daily-execution path. Two reasons:
+system focused on a lean, forex-daily-execution path. Three reasons:
 
 - **Not forex-usable**: Smart Money and Volume Profile both need real
   exchange volume; spot FX (`=X` tickers) reports zero on yfinance, so
-  volume-based indicators on them are meaningless. [07 · CME FX
+  volume-based indicators on them are meaningless. [CME FX
   Futures](pages/cme-futures-volume.py) replaces the forex-relevant half of
   Smart Money — CME currency futures (`6E=F`, `6B=F`, `6J=F`, …) carry real,
   exchange-reported volume, so OBV/CMF on them are actually meaningful.
@@ -233,13 +220,17 @@ system focused on a lean, forex-daily-execution path. Two reasons:
   Fundamentals, Market Regime), or are periodic/research tools rather than
   part of the daily loop (Backtest Lab, Trading Lab, Forecast Lab,
   Seasonality, Reports, System Logs).
+- **Superseded by a merge**: Stop Structure, R:R Calculator, and Account Risk
+  were one decision spread across three pages — merged into
+  [Risk Suite](pages/risk-suite.py).
 
-Archived: Trading Ideas, MTF Matrix, Technical Chart, Pivots & Fibonacci,
-Volume Profile, FRED Macro Grid, Smart Money, Forecast Lab, Macro Bias, Forex
-Fundamentals, Market Regime, Risk Reversals, Event Impact, Seasonality, ATR
-Volatility, Weekly RSI, Double Zeros, Backtest Lab, Trading Lab, Reports,
-System Logs. To bring one back into the daily nav, move its file back to
-`pages/` and add its `NavEntry` back to `src/pages_lib/navigation.py`.
+Archived: Trading Ideas, MTF Matrix (early version), Technical Chart, Pivots
+& Fibonacci, Volume Profile, FRED Macro Grid, Smart Money, Forecast Lab,
+Macro Bias, Forex Fundamentals, Market Regime, Risk Reversals, Event Impact,
+Seasonality, ATR Volatility, Weekly RSI, Double Zeros, Backtest Lab, Trading
+Lab, Reports, System Logs, Stop Structure, R:R Calculator, Account Risk. To
+bring one back into the daily nav, move its file back to `pages/` and add its
+`NavEntry` back to `src/pages_lib/navigation.py`.
 
 ---
 
@@ -248,7 +239,7 @@ System Logs. To bring one back into the daily nav, move its file back to
 The core principle is **confluence** — never trade a single signal. Each step
 narrows the universe until only high-probability setups remain.
 
-### Step 1 — Macro backdrop · [01 Daily Cockpit](pages/daily_cockpit_tab.py)
+### Step 1 — Macro backdrop · [Daily Cockpit](pages/daily_cockpit_tab.py)
 Before touching a chart, understand *why* a pair should move. The Cockpit's
 rate-bias table (per-pair, full registry) and risk-regime read replace the
 old dedicated Macro Bias / Forex Fundamentals pages (archived — see
@@ -264,43 +255,48 @@ old dedicated Macro Bias / Forex Fundamentals pages (archived — see
 **Output:** *"Fundamental bias for [pair] is [Long/Short/Neutral] because [reason]."*
 Only look for setups that align with it.
 
-**Weekly add-on — positioning context:** [27 COT Positioning](pages/cot_tab.py) /
-[28 COT Signals](pages/cot_signals.py) / [29 COT Open Interest](pages/cot_open_interest.py) /
-[31 COT Composite Signal](pages/cot_composite_trade_signal.py) (all now in the Weekly
-& Research Lab, section 10) show what leveraged funds are actually positioned for, and
+**Weekend add-on — positioning context:** [COT Positioning](pages/cot_tab.py) /
+[COT Signals](pages/cot_signals.py) / [COT Open Interest](pages/cot_open_interest.py) /
+[COT Composite Signal](pages/cot_composite_trade_signal.py) (all in the Weekend
+section) show what leveraged funds are actually positioned for, and
 whether that positioning is crowded, diverging from price, or actively unwinding. It's
 a crowdedness/contrarian read on top of the fundamental bias above, not a replacement
 for it — and it only refreshes weekly.
 
-**New — a fast second opinion:** [10 Instrument Predictor](pages/instrument-predictor.py)
+**A fast second opinion (Research Lab):** [Instrument Predictor](pages/instrument-predictor.py)
 combines several of the tools above (plus Setup Score and Trend Signal) into one
 composite read before you commit to the deeper weekly → daily → 4H → 15M pass below.
 See the [System Guide](pages/system_guide.py) for the full methodology.
 
-### Step 2 — Weekly trend · [15 Weekly EMA](pages/weekly-ema.py) · [16 Weekly Swing](pages/weekly-swing.py)
+### Step 2 — Weekly trend · [Weekly EMA](pages/weekly-ema.py) · [Weekly Swing](pages/weekly-swing.py)
 - **EMA20 vs EMA50** — EMA20 above EMA50 with price above both = weekly uptrend.
 - **Price vs weekly pivot** — sustained above PP = buyers in control.
 - **RSI** — above 50 confirms bullish momentum; above 70, be cautious adding longs.
 
 > **Rule:** If the weekly trend is up, only look for longs on lower timeframes. Never fight the weekly.
 
-### Step 3 — Daily confirmation · [17 Daily Trend](pages/daily-trend.py) · [18 Daily MACD](pages/daily-macd.py) · [19 Market Structure](pages/market-structure.py)
+### Step 3 — Daily confirmation (Research Lab) · [Daily Trend](pages/daily-trend.py) · [Daily MACD](pages/daily-macd.py) · [Market Structure](pages/market-structure.py)
 - **EMA alignment** — daily EMA20>50 should match the weekly bias. A bearish daily cross under a bullish weekly = a *pullback* (a buying opportunity), not a reversal.
 - **RSI 40–60 on a pullback** gives room to run; >70 = extended, wait for a reset.
 - **MACD histogram** turning from negative toward zero signals exhausting sell-side momentum.
 - **ATR** sets your minimum stop distance — anything tighter than 1× ATR is noise.
 
-### Step 4 — 4H zone · [20 4H Confluence Zone](pages/4H-confluence-zone.py) · [21 Confluence Check](pages/confluence-checker.py)
+These three do more analysis than the Setup Ranker's checklist booleans, but
+aren't part of the frozen daily path — the Ranker + Confluence Check already
+cover this step for the 7-touch day; visit these when validating a candidate
+in more depth.
+
+### Step 4 — 4H zone · [Confluence Check](pages/confluence-checker.py) (detail: [4H Confluence Zone](pages/4H-confluence-zone.py), Research Lab)
 The **confluence zone** = Fibonacci level (38.2 / 50 / 61.8%) + Pivot S/R + EMA20,
 all overlapping at one price. When two or three align there, that is where you execute.
 
-### Step 5 — Entry trigger · [22 15M Fib Entry](pages/15m-fib-entry.py)
+### Step 5 — Entry trigger · [15M Fib Entry](pages/15m-fib-entry.py)
 Wait for at least **two of three** within 1–2 candles: Stochastic cross below 25
 (longs), 15M RSI reset off 40, lower Bollinger-band touch curling back in.
 **Do not enter** if price is still slicing through the zone, the daily shows
 ⚠️ Conflicting, or the spread is abnormally wide ahead of news.
 
-### Step 6 — Risk definition · [23 Stop Structure](pages/stop-structure.py) · [24 R:R Calculator](pages/rr-calculator.py) · [25 Account Risk](pages/account-risk.py)
+### Step 6 — Risk definition · [Risk Suite](pages/risk-suite.py) (Stop Structure + R:R Calculator + Account Risk tabs)
 - **Stop** below the structure that justifies the trade; SL = 1.5 × ATR14.
 - **Targets** TP1 = 2R, TP2 = 3R.
 - **Size** = (Account × Risk%) ÷ (SL pips × pip value). Risk 1–2% per trade.
@@ -347,44 +343,47 @@ You wake at the London Kill Zone open — the highest-probability window of the 
 | London Close | 15:00–17:00 | 17:00–19:00 | 🟡 Secondary |
 | Tokyo | 00:00–03:00 | 02:00–05:00 | 🔴 Avoid |
 
-**☕ 08:30–09:00 — Pre-market prep.** [01 Daily Cockpit](pages/daily_cockpit_tab.py)
-(regime + rate bias + fresh setups, one screen) → [03 Setup Ranker](pages/setup-ranker.py)
-(Both modes; 7+/10 = candidates) → [10 Instrument Predictor](pages/instrument-predictor.py)
-(second-opinion check on those candidates) → [13 News Filter](pages/news-filter.py) →
-[14 Correlations](pages/correlations.py) → [15 Weekly EMA](pages/weekly-ema.py) /
-[16 Weekly Swing](pages/weekly-swing.py) → [17 Daily Trend](pages/daily-trend.py) /
-[18 Daily MACD](pages/daily-macd.py).
-**Output:** 1–2 pairs confirmed by score + macro, with direction set.
+The routine is keyed to a 17:00–20:00 SAST session (London Close window).
+Seven touches, in order — analysis is fully done before the session opens;
+the shortlist is frozen at 17:00.
 
-**📅 Monday morning (weekly, not daily) — positioning & cross-asset context.**
-[30 Bonds → Gold → DXY](pages/bonds_gold_dxy_app.py) → [27 COT Positioning](pages/cot_tab.py) /
-[28 COT Signals](pages/cot_signals.py) / [29 COT Open Interest](pages/cot_open_interest.py) →
-[31 COT Composite Signal](pages/cot_composite_trade_signal.py) for any pair you're
+**🌅 Morning Brief — 5 min with coffee, sets bias, no decisions.**
+[Daily Cockpit](pages/daily_cockpit_tab.py) (regime → rate bias → events →
+setups, one screen) → [Market Overview](pages/market-overview.py) →
+[News Filter](pages/news-filter.py) (today's landmines, in SAST).
+
+**📋 Pre-Session — 16:30 SAST, build the shortlist (~20 min).**
+[Setup Ranker](pages/setup-ranker.py) (primary scan — direction-only score,
+Grade A ≥80%) → [Trend Signals](pages/trend-signals.py) (confirm/deny the
+Ranker's top picks; ADX is a hard trend gate) →
+[Currency Strength](pages/currency-strength.py) + [Correlations](pages/correlations.py)
+(kill conflicted/duplicated exposure) → [Confluence Check](pages/confluence-checker.py)
+(the final gate — what survives?). **Output:** a frozen shortlist, direction set.
+
+**📅 Weekend (not daily) — positioning & weekly bias.**
+[Weekly EMA](pages/weekly-ema.py) / [Weekly Swing](pages/weekly-swing.py) /
+[Swing Playbook](pages/swing_playbook_tab.py) →
+[Bonds → Gold → DXY](pages/bonds_gold_dxy_app.py) → [COT Positioning](pages/cot_tab.py) /
+[COT Signals](pages/cot_signals.py) / [COT Open Interest](pages/cot_open_interest.py) →
+[COT Composite Signal](pages/cot_composite_trade_signal.py) for any pair you're
 already watching. CFTC data only updates weekly, so re-checking this intraday is
 wasted effort — fold whatever bias it gives into that week's macro read from
-[01 Daily Cockpit](pages/daily_cockpit_tab.py). Run [32 COT Composite Backtest](pages/cot_trade_signal_walk_forward_backtest_harness.py)
-occasionally (not daily) to sanity-check 31 still has edge on the instrument you trade.
+[Daily Cockpit](pages/daily_cockpit_tab.py). Run [COT Composite Backtest](pages/cot_trade_signal_walk_forward_backtest_harness.py)
+occasionally to sanity-check the composite signal still has edge on the instrument you trade.
 
-**🔎 09:00–09:15 — Confirm the zone.**
-[20 4H Confluence Zone](pages/4H-confluence-zone.py) →
-[21 Confluence Check](pages/confluence-checker.py).
+**⚡ 17:00–20:00 — Session, execution only.** Nothing here generates a new
+opinion — if you can re-open the Ranker mid-session you will, and that's how
+a flat day becomes a revenge trade. Wait for [15M Fib Entry](pages/15m-fib-entry.py)
+to fire on a shortlisted pair, then work [Risk Suite](pages/risk-suite.py)
+(Stop Structure tab → R:R Calculator tab → Account Risk tab) → daily-loss
+check (2 losses → stop) → **log the trade at entry** in
+[Trade Journal](pages/trade-journal.py), not after.
 
-**⚡ 09:15–11:00 — Watch for the entry (London KZ).** Open
-[00 Daily Checklist](app.py) on your pair; tick checks from your pre-market work;
-watch the MTF alignment strip and the correlation-exposure warning. Wait for
-[22 15M Fib Entry](pages/15m-fib-entry.py) to fire. **Take it only at 16/18+ with
-checks 11–16 ticked and the chip showing 🟢 GO.**
-
-**🛡️ Before you click.** [23 Stop Structure](pages/stop-structure.py) →
-[24 R:R Calculator](pages/rr-calculator.py) → daily-loss check (2 losses → stop).
-Then **save** the trade in [00 Daily Checklist → Save Trade Setup](app.py).
-
-**🌇 14:00–16:00 — NY KZ (second chance).** If London gave no GO, re-run the zone
-pages for the NY open — price often re-tests the London level.
-
-**📓 19:00 — End-of-day review.** [26 Trade Journal](pages/trade-journal.py)
-(equity up? win rate toward 66%?) → [19 Market Structure](pages/market-structure.py)
-→ close open trades in [00 Daily Checklist → Close Trade](app.py).
+**🌙 19:00 — Post-session review.** [Trade Journal](pages/trade-journal.py)
+again — equity curve, win rate vs 66% target, tag outcomes (aligned score,
+grade, no-trade days). The 18-point [Daily Checklist](app.py) remains
+available as a detailed audit trail if you want the full 18-point gate on a
+specific trade.
 
 ---
 
@@ -393,7 +392,11 @@ pages for the NY open — price often re-tests the London level.
 - **2 losses today** → the engine blocks new entries (daily loss limit, from Postgres).
 - **Correlated pairs open** → it warns you (stacked risk, via `CorrelationService`).
 - **Not in a kill zone** → the session check shows red.
-- **Setup ranks below 7/10** → skip it.
+- **Setup Ranker direction score below 60%** → skip it (Grade A ≥80%, B ≥60% —
+  quality-gate criteria like ATR/spread/4H-zone no longer inflate the score;
+  a wide spread caps the grade at C regardless of direction score).
+- **Same currency on both sides of the shortlist** → the Ranker's net-exposure
+  strip flags it as a conflict.
 - **High-vol GARCH regime** → the Instrument Predictor caps its own confidence
   at Medium even when its four components otherwise agree unanimously.
 

@@ -9,6 +9,16 @@ from src.core.config import default_config as config
 from src.instruments.registry import INSTRUMENTS, TYPICAL_SPREADS
 
 
+# score_setup()'s 3 "quality gate" criteria pass or fail the same way for
+# LONG and SHORT on the same pair (volatility, spread, being near a 4H zone
+# are tradeability conditions, not directional evidence) — pooling them into
+# the graded total let a pair score identically on both sides purely from
+# these, and inflated the grade of a genuinely weak directional read. They're
+# still scored and shown (see `scores`/`details`), just excluded from
+# `score`/`max_score`/`pct`/`grade`, which are direction-only.
+_QUALITY_CRITERIA = frozenset({"ATR Volatile", "4H Zone", "Spread/ATR"})
+
+
 def safe_get(row: pd.Series, col: str, default: float = 0.0) -> float:
 
     try:
@@ -323,9 +333,21 @@ def swing_structure(df: pd.DataFrame, n: int = 3) -> str:
 def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataFrame,
                 direction: str, pip_size: float, spread_pips: float = 0.0,
                 currency_strength_diff: Optional[float] = None) -> Dict:
-    """Score a pair against the multi-timeframe checklist (10 technical
-    criteria, plus an 11th "Currency Strength" criterion when the caller
-    supplies a fundamental read).
+    """Score a pair against the multi-timeframe checklist: 7 directional
+    criteria (Weekly EMA/RSI/Structure, Daily Trend/Structure/MACD, 4H
+    Structure), an 8th "Currency Strength" criterion when the caller supplies
+    a fundamental read, and 3 "quality gate" criteria (ATR Volatile, 4H Zone,
+    Spread/ATR) that pass or fail identically for LONG and SHORT on the same
+    pair — tradeability conditions, not directional evidence.
+
+    ``score``/``max_score``/``pct``/``grade`` are direction-only (the quality
+    criteria are excluded, so two opposite-direction calls on the same pair
+    can no longer tie purely because both pass the same volatility/spread/zone
+    checks — see ``quality_score``/``quality_max``/``quality_passed`` for
+    those separately, and ``total_score``/``total_max`` for the old blended
+    figure). A grade otherwise landing at A or B is capped at C when the
+    spread flag fires (``spread_pct`` > 5% of ATR) — a wide spread erodes R
+    before the trade starts regardless of how clean the direction read is.
 
     direction: "LONG" or "SHORT". Returns a dict with the per-criterion scores,
     a total, a letter grade, and presentation helpers (price, SL pips, spread%).
@@ -336,10 +358,10 @@ def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataF
     ``src.pages_lib.currency_strength._currency_returns``. Positive favors LONG,
     negative favors SHORT. Left as ``None`` (e.g. for commodities, which have no
     single driving currency) the criterion is omitted entirely rather than
-    scored as a fail — max_score shrinks to 10 for that call instead of
-    penalizing pairs with no fundamental read available. grade/pct are always
-    computed as a percentage of the criteria actually scored, so a 10-point and
-    an 11-point call remain comparable.
+    scored as a fail — direction max_score shrinks to 7 for that call instead
+    of penalizing pairs with no fundamental read available. grade/pct are
+    always computed as a percentage of the direction criteria actually scored,
+    so a 7-point and an 8-point call remain comparable.
     """
     df_w = df_weekly if df_weekly is not None else pd.DataFrame()
     df_d = df_daily if df_daily is not None else pd.DataFrame()
@@ -482,19 +504,38 @@ def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataF
         scores["Currency Strength"] = 1 if ok else 0
         details["Currency Strength"] = f"{'✅' if ok else '❌'} {currency_strength_diff:+.2f}%"
 
-    total = sum(scores.values())
-    max_score = len(scores)
-    pct = int(round(total / max_score * 100))
+    total_score = sum(scores.values())
+    total_max = len(scores)
+
+    direction_items = {k: v for k, v in scores.items() if k not in _QUALITY_CRITERIA}
+    quality_items = {k: v for k, v in scores.items() if k in _QUALITY_CRITERIA}
+    direction_score = sum(direction_items.values())
+    direction_max = len(direction_items)
+    quality_score = sum(quality_items.values())
+    quality_max = len(quality_items)
+
+    pct = int(round(direction_score / direction_max * 100)) if direction_max else 0
     grade = "A" if pct >= 80 else "B" if pct >= 60 else "C" if pct >= 40 else "D"
+    # A spread eating >5% of ATR erodes R before the trade even starts — cap
+    # the grade rather than let a wide spread hide inside a clean direction
+    # score (Spread/ATR itself doesn't move the grade; it's a quality-gate
+    # criterion, but a *flagged* spread specifically should never read as A/B).
+    if spread_pct > 5 and grade in ("A", "B"):
+        grade = "C"
     close_price = float(df_d["Close"].iloc[-1]) if not df_d.empty else 0.0
     sl_pips = round(a14p * 1.5, 1) if a14p else 0.0
 
     return {
         "direction": direction,
-        "score": total,
-        "max_score": max_score,
+        "score": direction_score,
+        "max_score": direction_max,
         "pct": pct,
         "grade": grade,
+        "quality_score": quality_score,
+        "quality_max": quality_max,
+        "quality_passed": quality_score == quality_max,
+        "total_score": total_score,
+        "total_max": total_max,
         "scores": scores,
         "details": details,
         "close": close_price,

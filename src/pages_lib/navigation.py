@@ -23,103 +23,94 @@ class NavEntry:
     path: str          # Streamlit page path (top-level file or pages/foo.py)
 
 
-# Re-architected (2026-07) from the original 9-section layout. Ordered the way
-# a professional day trader works a session, top-down: cockpit → scan for
-# candidates → synthesize a composite read → filter the day (DAILY macro/risk
-# only) → weekly bias → daily confirm → 4H zone → 15M trigger → size the risk
-# → review → weekly/occasional research lab. This is the single source of
-# truth for both the sidebar and the README's step-by-step guide — keep the
-# two in sync when reordering.
+# Re-architected (2026-07) around WHEN a page gets touched during the day,
+# not the order features were built or a numbered sequential walkthrough.
+# 44 pages is too many stops for any daily routine to survive — the fix is
+# separating the daily path (walked in order, ≤8 touches) from reference and
+# research (visited on demand). Numeric label prefixes (00/05a/09a-style) are
+# dropped entirely: the section grouping IS the ordering, and lettered
+# suffixes were a smell that pages accreted rather than got designed. This is
+# the single source of truth for both the sidebar and README/System_Guide's
+# walkthroughs — keep those in sync when reordering.
 #
-# Two changes from the prior layout, both driven by actual cadence rather than
-# where a page happened to be added historically:
-#   1. New "2 · SYNTHESIZE" section for the Instrument Predictor — it combines
-#      Scan-stage (Setup Score) and Filter-stage (Currency Strength, COT)
-#      reads into one composite, so it naturally sits as a checkpoint between
-#      the two rather than inside either.
-#   2. "Filter the day" now holds ONLY genuinely daily-checked tools (DXY vs
-#      Gold, Currency Strength, News Filter, Correlations). Every COT page
-#      (17/18/20/20a/20b previously) plus Bonds→Gold→DXY are weekly-cadence
-#      per their own captions/README notes ("check once a week, not every
-#      session") and are consolidated into "10 · WEEKLY & RESEARCH LAB" with
-#      the other weekly/occasional tools that already lived there — one
-#      section for "not part of the daily top-to-bottom pass," not two.
+#   Morning Brief   — 5 min, sets bias, no decisions.
+#   Pre-Session     — build the shortlist: Setup Ranker (primary scan) +
+#                     Trend Signals (confirm/deny the top picks) + Currency
+#                     Strength/Correlations (kill conflicted exposure) +
+#                     Confluence Check (the final gate).
+#   Session         — execution only, nothing analytical. If you can re-open
+#                     the Ranker mid-session you will, and that's how a flat
+#                     day becomes a revenge trade — the shortlist is frozen
+#                     at session open.
+#   Weekend         — weekly-bias tools (EMA/Swing/Playbook) + the full COT
+#                     suite; having them in the daily path just adds scroll.
+#   Research Lab    — everything else: the other directional scanners (AMD,
+#                     MTF Matrix, 20-Day Breakout — one primary + one
+#                     confirmer earns the daily-path slot, not all five;
+#                     revisit once there's enough journaled history to know
+#                     which one actually earns it), Daily Trend/MACD/Market
+#                     Structure (genuinely more analysis than the Ranker's
+#                     checklist booleans — kept as full pages, just not part
+#                     of the 7-touch day), and the stat-arb/backtest/vol
+#                     research tools. Visited when building or validating,
+#                     never during a session.
+#   Reference       — System Guide, ABR Toolkit, the 18-point Daily Checklist.
 NAV_SECTIONS: List[tuple] = [
-    ("0 · COCKPIT", [
-        NavEntry("CHCK", "00. Daily Checklist",           "📋", "app.py"),
-        NavEntry("GUID", "00a. System Guide & Playbook",  "📖", "pages/system_guide.py"),
-        NavEntry("DCKP", "01. Daily Cockpit",             "🛫", "pages/daily_cockpit_tab.py"),
-        NavEntry("OVRV", "02. Market Overview",           "📊", "pages/market-overview.py"),
+    ("🌅 MORNING BRIEF", [
+        NavEntry("DCKP", "Daily Cockpit",   "🛫", "pages/daily_cockpit_tab.py"),
+        NavEntry("OVRV", "Market Overview", "📊", "pages/market-overview.py"),
+        NavEntry("NEWS", "News Filter",     "📰", "pages/news-filter.py"),
     ]),
-    ("1 · SCAN — SHORTLIST", [
-        NavEntry("RANK", "03. Setup Ranker",         "🎰", "pages/setup-ranker.py"),
-        NavEntry("AMD",  "04. AMD Scanner",          "📊", "pages/amd-scanner.py"),
-        NavEntry("TSIG", "05. Trend Signals",        "📡", "pages/trend-signals.py"),
-        NavEntry("MTFX", "05a. MTF Matrix",          "🧭", "pages/mtf-matrix.py"),
-        NavEntry("20DB", "06. 20-Day Breakout",      "🚀", "pages/twenty_day_breakout_tab.py"),
-        NavEntry("CMEF", "07. CME FX Futures",       "📦", "pages/cme-futures-volume.py"),
-        NavEntry("PRED", "08. Predictive Analytics", "💱", "pages/predictive.py"),
-        NavEntry("VWAP", "09. VWAP-EMA Gold",        "🟡", "pages/vwap-ema-gold.py"),
-        NavEntry("ABRT", "09a. ABR Toolkit",         "🧱", "pages/abr_toolkit_tab.py"),
+    ("📋 PRE-SESSION", [
+        NavEntry("RANK", "Setup Ranker",       "🎰", "pages/setup-ranker.py"),
+        NavEntry("TSIG", "Trend Signals",      "📡", "pages/trend-signals.py"),
+        NavEntry("CCYS", "Currency Strength",  "💪", "pages/currency-strength.py"),
+        NavEntry("CORR", "Correlations",       "🔗", "pages/correlations.py"),
+        NavEntry("CONF", "Confluence Check",   "🔀", "pages/confluence-checker.py"),
     ]),
-    # NEW — the composite cross-check: Setup Score (Scan) + Trend Signal +
-    # Currency Strength + COT Composite (Filter), one weighted directional
-    # read. Run it on your shortlist before sinking time into deeper macro
-    # digging on a candidate that doesn't hold up under a second opinion.
-    ("2 · SYNTHESIZE — composite read", [
-        NavEntry("PRDX", "10. Instrument Predictor", "🔮", "pages/instrument-predictor.py"),
+    ("⚡ SESSION — execution only", [
+        NavEntry("15FB", "15M Fib Entry", "⚡", "pages/15m-fib-entry.py"),
+        NavEntry("RSKS", "Risk Suite",    "🛡️", "pages/risk-suite.py"),
+        NavEntry("JRNL", "Trade Journal", "📓", "pages/trade-journal.py"),
     ]),
-    ("3 · FILTER THE DAY", [
-        NavEntry("DXAU", "11. DXY vs Gold",          "💵", "pages/dxy-gold.py"),
-        NavEntry("CCYS", "12. Currency Strength",    "💪", "pages/currency-strength.py"),
-        NavEntry("NEWS", "13. News Filter",          "📰", "pages/news-filter.py"),
-        NavEntry("CORR", "14. Correlations",         "🔗", "pages/correlations.py"),
+    ("📅 WEEKEND — weekly bias & COT", [
+        NavEntry("WEMA", "Weekly EMA",              "📉", "pages/weekly-ema.py"),
+        NavEntry("WSWG", "Weekly Swing",            "🔄", "pages/weekly-swing.py"),
+        NavEntry("SWPB", "Swing Playbook",          "📔", "pages/swing_playbook_tab.py"),
+        NavEntry("COT",  "COT Positioning",         "🏛️", "pages/cot_tab.py"),
+        NavEntry("COTS", "COT Signals",             "🧭", "pages/cot_signals.py"),
+        NavEntry("COTO", "COT Open Interest",       "🧮", "pages/cot_open_interest.py"),
+        NavEntry("GCOT", "Gold COT",                "🥇", "pages/gold_cot_tab.py"),
+        NavEntry("OCOT", "Oil COT",                 "🛢️", "pages/oil_cot_tab.py"),
+        NavEntry("BGDX", "Bonds → Gold → DXY",      "🏦", "pages/bonds_gold_dxy_app.py"),
+        NavEntry("COTX", "COT Composite Signal",    "🧩", "pages/cot_composite_trade_signal.py"),
+        NavEntry("COTB", "COT Composite Backtest",  "🧪", "pages/cot_trade_signal_walk_forward_backtest_harness.py"),
     ]),
-    ("4 · WEEKLY BIAS", [
-        NavEntry("WEMA", "15. Weekly EMA",           "📉", "pages/weekly-ema.py"),
-        NavEntry("WSWG", "16. Weekly Swing",         "🔄", "pages/weekly-swing.py"),
-        NavEntry("SWPB", "16a. Swing Playbook",      "📔", "pages/swing_playbook_tab.py"),
+    ("🔬 RESEARCH LAB — on demand, never mid-session", [
+        NavEntry("AMD",  "AMD Scanner",           "📊", "pages/amd-scanner.py"),
+        NavEntry("MTFX", "MTF Matrix",            "🧭", "pages/mtf-matrix.py"),
+        NavEntry("20DB", "20-Day Breakout",       "🚀", "pages/twenty_day_breakout_tab.py"),
+        NavEntry("CMEF", "CME FX Futures",        "📦", "pages/cme-futures-volume.py"),
+        NavEntry("PRED", "Predictive Analytics",  "💱", "pages/predictive.py"),
+        NavEntry("VWAP", "VWAP-EMA Gold",         "🟡", "pages/vwap-ema-gold.py"),
+        NavEntry("PRDX", "Instrument Predictor",  "🔮", "pages/instrument-predictor.py"),
+        NavEntry("DXAU", "DXY vs Gold",           "💵", "pages/dxy-gold.py"),
+        NavEntry("DTRN", "Daily Trend",           "📈", "pages/daily-trend.py"),
+        NavEntry("DMCD", "Daily MACD",            "📊", "pages/daily-macd.py"),
+        NavEntry("STRC", "Market Structure",      "🏗️", "pages/market-structure.py"),
+        NavEntry("4HCZ", "4H Confluence Zone",    "🎯", "pages/4H-confluence-zone.py"),
+        NavEntry("EWKV", "Busy-Week Anatomy",     "📅", "pages/event_week_vol_tab.py"),
+        NavEntry("DISC", "Disconnect Monitor",    "🔌", "pages/disconnect_monitor_tab.py"),
+        NavEntry("ONDR", "Overnight Drift",       "🌙", "pages/overnight_drift_tab.py"),
+        NavEntry("HOLD", "Optimal Holding Period","⏱️", "pages/holding_period_tab.py"),
+        NavEntry("QNTM", "Quant Models Lab",      "🧮", "pages/quant_models_tab.py"),
+        NavEntry("FCST", "Forecast",              "🔭", "pages/forecast_tab.py"),
+        NavEntry("SURP", "Surprise Awareness",    "😲", "pages/surprise_tab.py"),
     ]),
-    ("5 · DAILY CONFIRM", [
-        NavEntry("DTRN", "17. Daily Trend",          "📈", "pages/daily-trend.py"),
-        NavEntry("DMCD", "18. Daily MACD",           "📊", "pages/daily-macd.py"),
-        NavEntry("STRC", "19. Market Structure",     "🏗️", "pages/market-structure.py"),
-    ]),
-    ("6 · 4H ZONE", [
-        NavEntry("4HCZ", "20. 4H Confluence Zone",   "🎯", "pages/4H-confluence-zone.py"),
-        NavEntry("CONF", "21. 2/3 Confluence Check", "🔀", "pages/confluence-checker.py"),
-    ]),
-    ("7 · 15M TRIGGER", [
-        NavEntry("15FB", "22. 15M Fib Entry",        "⚡", "pages/15m-fib-entry.py"),
-    ]),
-    ("8 · RISK & EXECUTE", [
-        NavEntry("STOP", "23. Stop Structure",       "🛡️", "pages/stop-structure.py"),
-        NavEntry("RRC",  "24. R:R Calculator",       "⚖️", "pages/rr-calculator.py"),
-        NavEntry("ACCT", "25. Account Risk",         "💵", "pages/account-risk.py"),
-    ]),
-    ("9 · REVIEW", [
-        NavEntry("JRNL", "26. Trade Journal",        "📓", "pages/trade-journal.py"),
-    ]),
-    # Not a sequential daily step -- every weekly-cadence CFTC/COT page (moved
-    # here from "Filter the day"), the educational cross-asset context page,
-    # and the occasional stat-arb/backtest research tools. Check this section
-    # weekly (Monday morning is a good habit), not every session.
-    ("10 · WEEKLY & RESEARCH LAB", [
-        NavEntry("COT",  "27. COT Positioning",        "🏛️", "pages/cot_tab.py"),
-        NavEntry("COTS", "28. COT Signals",            "🧭", "pages/cot_signals.py"),
-        NavEntry("COTO", "29. COT Open Interest",      "🧮", "pages/cot_open_interest.py"),
-        NavEntry("GCOT", "29a. Gold COT",               "🥇", "pages/gold_cot_tab.py"),
-        NavEntry("OCOT", "29b. Oil COT",                "🛢️", "pages/oil_cot_tab.py"),
-        NavEntry("BGDX", "30. Bonds → Gold → DXY",     "🏦", "pages/bonds_gold_dxy_app.py"),
-        NavEntry("COTX", "31. COT Composite Signal",   "🧩", "pages/cot_composite_trade_signal.py"),
-        NavEntry("COTB", "32. COT Composite Backtest", "🧪", "pages/cot_trade_signal_walk_forward_backtest_harness.py"),
-        NavEntry("EWKV", "33. Busy-Week Anatomy",      "📅", "pages/event_week_vol_tab.py"),
-        NavEntry("DISC", "34. Disconnect Monitor",     "🔌", "pages/disconnect_monitor_tab.py"),
-        NavEntry("ONDR", "35. Overnight Drift",        "🌙", "pages/overnight_drift_tab.py"),
-        NavEntry("HOLD", "36. Optimal Holding Period", "⏱️", "pages/holding_period_tab.py"),
-        NavEntry("QNTM", "37. Quant Models Lab",       "🧮", "pages/quant_models_tab.py"),
-        NavEntry("FCST", "37a. Forecast",              "🔭", "pages/forecast_tab.py"),
-        NavEntry("SURP", "38. Surprise Awareness",     "😲", "pages/surprise_tab.py"),
+    ("📖 REFERENCE", [
+        NavEntry("CHCK", "Daily Checklist (18-point)", "📋", "app.py"),
+        NavEntry("GUID", "System Guide & Playbook",    "📖", "pages/system_guide.py"),
+        NavEntry("ABRT", "ABR Toolkit",                "🧱", "pages/abr_toolkit_tab.py"),
     ]),
 ]
 
@@ -127,8 +118,8 @@ NAV_SECTIONS: List[tuple] = [
 # Trading Ideas, Technical Chart, Pivots & Fibonacci, Volume Profile, FRED
 # Macro Grid, Smart Money, Forecast Lab, Macro Bias, Forex Fundamentals,
 # Market Regime, Risk Reversals, Event Impact, Seasonality, ATR Volatility,
-# Weekly RSI, Double Zeros, Backtest Lab, Trading Lab, Reports, System Logs.
-# (MTF Matrix was restored to the live nav above — see MTFX.)
+# Weekly RSI, Double Zeros, Backtest Lab, Trading Lab, Reports, System Logs,
+# Stop Structure, R:R Calculator, Account Risk (superseded by Risk Suite).
 
 # Flat list kept for any caller that doesn't care about grouping.
 NAV_ENTRIES: List[NavEntry] = [e for _, entries in NAV_SECTIONS for e in entries]

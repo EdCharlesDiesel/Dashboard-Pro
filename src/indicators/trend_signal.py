@@ -94,6 +94,17 @@ class TrendSignalEvaluator:
         ss = sum(sell_conds.values())
         max_score = TrendSignalEvaluator.MAX_SCORE
         strong = TrendSignalEvaluator.STRONG_THRESHOLD
+
+        # ADX is the precondition for the other 5 conditions meaning anything
+        # in a trend-following strategy, not one point out of six equal-weight
+        # criteria — golden cross + price above EMAs + positive MACD in a
+        # ranging market is exactly the whipsaw setup (those line up at range
+        # tops right before mean reversion). Gate on it instead of letting it
+        # get outvoted 5-to-1.
+        if adx_v <= 25:
+            conds = buy_conds if bs >= ss else sell_conds
+            return TrendSignal("⏳ NO TREND — STAND ASIDE", max(bs, ss),
+                               max_score, conds, "NEUTRAL")
         if bs >= min_conditions and bs >= ss:
             if bs >= strong:
                 return TrendSignal("🚀 STRONG BUY", bs, max_score, buy_conds, "STRONG_BUY")

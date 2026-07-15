@@ -149,7 +149,10 @@
       "Bash(where python3.12)",
       "Read(//c/Users/kmokhethi/AppData/Local/Programs/**)",
       "Bash(pip download *)",
-      "Bash(DATABASE_URL=\"postgresql+psycopg2://neondb_owner:npg_I8HBqeKrV7zu@ep-billowing-sky-aip5p12a.c-4.us-east-1.aws.neon.tech/neondb\" PYTHONIOENCODING=utf-8 python -m src.services.news_fetcher --fetch)"
+      "Bash(DATABASE_URL=\"postgresql+psycopg2://neondb_owner:npg_I8HBqeKrV7zu@ep-billowing-sky-aip5p12a.c-4.us-east-1.aws.neon.tech/neondb\" PYTHONIOENCODING=utf-8 python -m src.services.news_fetcher --fetch)",
+      "Bash(gh run *)",
+      "Bash(chromium-cli --help)",
+      "Bash(grep *)"
     ]
   }
 }
