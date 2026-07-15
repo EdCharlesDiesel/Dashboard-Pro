@@ -27,7 +27,7 @@ Still-applicable preferences:
 - Fundamental analysis.
 - Sentiment analysis.
 - Risk management.
-- Object Oriented Programming.
+- Object-Oriented Programming.
 - Data structures.
 - Machine learning.
 - Financial Engineering.

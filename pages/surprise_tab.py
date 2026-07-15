@@ -408,7 +408,18 @@ def _sentry_store():
     return Store(url=url)
 
 
-st.set_page_config(page_title="Surprise Awareness", layout="wide")
-T.apply()
-with _sentry_store().engine.connect() as _conn:
-    render(_conn)
+# ===========================================================================
+# PAGE ENTRY — multipage (auto-run) + standalone (streamlit run)
+# ===========================================================================
+# Guarded behind __main__ (Streamlit runs each page script as __main__) so the
+# pure functions above (event_gate, compute_surprises, ...) stay importable
+# headlessly — same contract as pages/cot_signals.py and
+# pages/disconnect_monitor_tab.py. src/services/surprise_service.py relies on
+# this to reuse event_gate() from the Swing Playbook without re-running this
+# page's full UI (and colliding on a second set_page_config()).
+
+if __name__ == "__main__":
+    st.set_page_config(page_title="Surprise Awareness", layout="wide")
+    T.apply()
+    with _sentry_store().engine.connect() as _conn:
+        render(_conn)

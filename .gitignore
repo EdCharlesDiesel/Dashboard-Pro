@@ -28,3 +28,4 @@ src/services/cot_cache/
 # Editor atomic-write temp files (accidentally committed before)
 *.py.tmp.*
 *.tmp.*
+.streamlit/secrets.toml

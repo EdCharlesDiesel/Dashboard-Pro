@@ -156,6 +156,7 @@ there, since all of them are weekly-cadence per their own captions.
 |---|------|---------------|
 | 15 | [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
 | 16 | [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
+| 16a | [📔 Swing Playbook](pages/swing_playbook_tab.py) | Weekly pre-flight: price, COT crowdedness, gold disconnect, supply/demand zones, vol-scaled sizing, and a written thesis journal per instrument. |
 
 ### 5 · Daily confirm
 | # | Page | What it's for |

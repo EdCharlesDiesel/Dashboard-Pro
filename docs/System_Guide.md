@@ -130,6 +130,7 @@ confirm it survives every timeframe on the way down to your actual entry.
 |---|---|
 | **📉 Weekly EMA** | EMA20 above EMA50 with price above both = weekly uptrend (and the mirror for downtrends). **If the weekly trend is up, only look for longs on lower timeframes. Never fight the weekly.** |
 | **🔄 Weekly Swing** | Weekly pivot swing setups plus daily confirmation. |
+| **📔 Swing Playbook** | Weekly pre-flight checklist per instrument: last price, COT positioning percentile/z-score (majors + gold), gold's real-yield disconnect z-score, nearest swing-pivot supply/demand levels, GARCH/EWMA-scaled position sizing, and a hand-typed weekly thesis + invalidation. Red row = no thesis written yet; yellow row = an event gate is blocking entry. Audit-only — logged to `tool_usage_log`, not a `trade_setups` signal, since the bias is your own written call, not a computed read. |
 
 ### 5 · Daily confirm
 | Page | Rule |

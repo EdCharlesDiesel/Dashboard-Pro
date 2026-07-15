@@ -321,6 +321,12 @@ def render_disconnect_monitor_tab() -> None:
 # ===========================================================================
 # PAGE ENTRY — multipage (auto-run) + standalone (streamlit run)
 # ===========================================================================
+# Guarded behind __main__ (Streamlit runs each page script as __main__) so the
+# pure math above (real_yield_series, fetch_yf, disconnect_frame) stays
+# importable headlessly — same contract as pages/cot_signals.py and
+# pages/cot_composite_trade_signal.py. src/services/swing_playbook_service.py
+# relies on this to reuse the gold disconnect-z math without re-running this
+# page's full UI (and colliding on a second set_page_config()).
 
 def _page() -> None:
     from src.ui.theme import BloombergTheme
@@ -341,4 +347,5 @@ def _page() -> None:
     render_disconnect_monitor_tab()
 
 
-_page()
+if __name__ == "__main__":
+    _page()

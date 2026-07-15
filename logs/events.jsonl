@@ -13598,3 +13598,22 @@
 {"ts": "2026-07-14T17:56:30.055270+00:00", "session_id": "5046fb337d57", "page": "unknown", "event_type": "data_fetch", "level": "INFO", "message": "", "data": {"source": "yfinance", "duration_ms": 31296.5, "ok": true, "rows": 66, "error": null, "symbol": "EURGBP=X", "interval": "1d", "period": "3mo"}}
 {"ts": "2026-07-14T17:56:34.848103+00:00", "session_id": "5046fb337d57", "page": "unknown", "event_type": "data_fetch", "level": "INFO", "message": "", "data": {"source": "yfinance", "duration_ms": 35816.5, "ok": true, "rows": 66, "error": null, "symbol": "EURJPY=X", "interval": "1d", "period": "3mo"}}
 {"ts": "2026-07-14T17:56:38.462644+00:00", "session_id": "5046fb337d57", "page": "unknown", "event_type": "data_fetch", "level": "INFO", "message": "", "data": {"source": "yfinance", "duration_ms": 28343.9, "ok": true, "rows": 66, "error": null, "symbol": "GBPJPY=X", "interval": "1d", "period": "3mo"}}
+{"ts": "2026-07-14T18:30:10.270257+00:00", "session_id": "8050e63655c1", "page": "stop-structure", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T18:30:10.271036+00:00", "session_id": "db25151c5f4d", "page": "account-risk", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T18:30:10.272926+00:00", "session_id": "925f7ad6ef99", "page": "rr-calculator", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T18:30:19.521207+00:00", "session_id": "7a26485d2082", "page": "market-overview", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T18:30:23.089275+00:00", "session_id": "84d9c43b4596", "page": "app", "event_type": "page_view", "level": "INFO", "message": "", "data": {"selected_instrument": "EUR/USD", "trend_timeframe": "4 Hours", "trade_direction": "LONG", "session": "London"}}
+{"ts": "2026-07-14T18:32:07.239939+00:00", "session_id": "22910240e413", "page": "swing_playbook_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-14T18:34:16.291841+00:00", "session_id": "22910240e413", "page": "swing_playbook_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:12:19.300452+00:00", "session_id": "987036e2f77f", "page": "app", "event_type": "page_view", "level": "INFO", "message": "", "data": {"selected_instrument": "EUR/USD", "trend_timeframe": "4 Hours", "trade_direction": "LONG", "session": "London"}}
+{"ts": "2026-07-15T07:13:10.678370+00:00", "session_id": "6a0a72916888", "page": "daily_cockpit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:14:47.787620+00:00", "session_id": "a8a2c0fe8f43", "page": "surprise_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:14:49.187629+00:00", "session_id": "b6fd036ad658", "page": "forecast_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:15:02.789980+00:00", "session_id": "465c98972cb4", "page": "setup-ranker", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:15:30.090762+00:00", "session_id": "a8a2c0fe8f43", "page": "surprise_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:15:39.054211+00:00", "session_id": "a8a2c0fe8f43", "page": "surprise_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:17:18.107438+00:00", "session_id": "465c98972cb4", "page": "setup-ranker", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:17:21.558166+00:00", "session_id": "465c98972cb4", "page": "setup-ranker", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:21:40.683367+00:00", "session_id": "601f1a768dd8", "page": "swing_playbook_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:21:42.232394+00:00", "session_id": "44bac2d88a65", "page": "abr_toolkit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}
+{"ts": "2026-07-15T07:23:05.017147+00:00", "session_id": "44bac2d88a65", "page": "abr_toolkit_tab", "event_type": "page_view", "level": "INFO", "message": "", "data": {}}

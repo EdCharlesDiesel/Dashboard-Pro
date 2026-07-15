@@ -118,6 +118,21 @@ class TradeRepository:
         )
     """
 
+    # One row per instrument+week holding the Swing Playbook's hand-typed
+    # weekly thesis (pages/swing_playbook_tab.py) — upserted so only the
+    # current week's thesis per instrument is kept.
+    SWING_THESES_SQL = """
+        CREATE TABLE IF NOT EXISTS swing_theses (
+            id           SERIAL PRIMARY KEY,
+            instrument   VARCHAR(20) NOT NULL,
+            week_start   DATE NOT NULL,
+            bias         VARCHAR(10),
+            invalidation TEXT,
+            created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+            UNIQUE (instrument, week_start)
+        )
+    """
+
     CREATE_SQL = """
         CREATE TABLE IF NOT EXISTS trade_setups (
             id            SERIAL PRIMARY KEY,
@@ -183,6 +198,7 @@ class TradeRepository:
                 cur.execute(self.TOOL_USAGE_SQL)
                 cur.execute(self.ABR_SIGNALS_SQL)
                 cur.execute(self.ABR_FORECASTS_SQL)
+                cur.execute(self.SWING_THESES_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
@@ -328,6 +344,38 @@ class TradeRepository:
                 (realized, forecast_id),
             )
             conn.commit()
+
+    # ── Swing Playbook weekly theses ────────────────────────────────────────
+    def save_swing_thesis(
+        self, instrument: str, week_start: Any, bias: str, invalidation: str
+    ) -> None:
+        """Upsert the weekly thesis for ``instrument`` — at most one per
+        instrument+week (see ``pages/swing_playbook_tab.py``)."""
+        sql = """
+            INSERT INTO swing_theses (instrument, week_start, bias, invalidation)
+            VALUES (%(instrument)s, %(week_start)s, %(bias)s, %(invalidation)s)
+            ON CONFLICT (instrument, week_start) DO UPDATE SET
+                bias = EXCLUDED.bias, invalidation = EXCLUDED.invalidation
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, {
+                "instrument": instrument, "week_start": week_start,
+                "bias": bias, "invalidation": invalidation,
+            })
+            conn.commit()
+
+    def load_swing_thesis(self, instrument: str, week_start: Any) -> Optional[Dict[str, Any]]:
+        """This week's thesis for ``instrument``, or ``None`` if not yet set."""
+        sql = """
+            SELECT bias, invalidation FROM swing_theses
+            WHERE instrument = %s AND week_start = %s
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(sql, (instrument, week_start))
+            row = cur.fetchone()
+        return dict(row) if row else None
 
     # ── writes ──────────────────────────────────────────────────────────────
     def save_setup(self, row: Dict[str, Any], source: Optional[str] = None) -> None:
