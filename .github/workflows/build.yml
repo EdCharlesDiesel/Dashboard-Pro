@@ -19,9 +19,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Project targets Python 3.14 (avoids 3.12+-only syntax intentionally);
-        # 3.13 is tested too as a compatibility hedge.
-        python-version: ["3.13", "3.14"]
+        # Pinned to 3.12 to match runtime.txt and the pinned numpy/pandas/scipy
+        # stack (see requirements.txt) — those versions predate 3.13+ wheel
+        # support and a newer combo segfaulted on Streamlit Cloud under 3.13.
+        python-version: ["3.12"]
 
     env:
       # Pages print ◇/emoji glyphs; force UTF-8 so stdout never crashes on CI.
