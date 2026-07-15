@@ -443,6 +443,14 @@ def render_kpis(daily_data: Dict) -> None:
                 st.metric(pair, "N/A", "—")
 
 
+def _fmt_price(price: float) -> str:
+    """Domain convention (CLAUDE.md): 5 decimals for FX (<100), else 2 for JPY
+    crosses / metals / indices — same magnitude-based rule as render_kpis
+    above and setup_ranker/market-structure. Also rounds away yfinance's raw
+    float64 casting noise (e.g. 4037.39990234375)."""
+    return f"{price:.5f}" if abs(price) < 100 else f"{price:,.2f}"
+
+
 def render_overview_tab(daily_data: Dict):
     import streamlit as st
     st.subheader("Market Overview")
@@ -452,8 +460,11 @@ def render_overview_tab(daily_data: Dict):
             if not df.empty:
                 price = df['Close'].iloc[-1]
                 change = df['Close'].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
-                rows.append({"Pair": pair, "Price": price, "Change %": change, "Bars": len(df)})
-        st.dataframe(pd.DataFrame(rows), width="stretch")
+                trend = "🟢 ▲" if change > 0 else ("🔴 ▼" if change < 0 else "⚪ –")
+                rows.append({"Pair": pair, "Price": _fmt_price(price),
+                            "Change %": round(change, 2),
+                            "Trend": trend, "Bars": len(df)})
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
 def render_mtf_matrix_tab(data_by_timeframe: Dict):

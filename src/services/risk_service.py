@@ -10,6 +10,11 @@ class RiskBreakdown:
     lot_size: float
     rr_tp1: float
     rr_tp2: float
+    # Dollar risk actually taken once lot_size is rounded to 2dp — can drift
+    # meaningfully from risk_amount (the target) on instruments where the
+    # rounding step is large relative to the ideal lot (e.g. a wide-stop
+    # metals trade rounding 0.078 lots up to 0.08).
+    actual_risk: float = 0.0
 
 
 class RiskService:
@@ -32,4 +37,5 @@ class RiskService:
         )
         rr_tp1 = round(tp1_pips / sl_pips, 2) if sl_pips else 0.0
         rr_tp2 = round(tp2_pips / sl_pips, 2) if sl_pips else 0.0
-        return RiskBreakdown(risk_amount, lot_size, rr_tp1, rr_tp2)
+        actual_risk = lot_size * pip_value * sl_pips if (sl_pips and pip_value) else 0.0
+        return RiskBreakdown(risk_amount, lot_size, rr_tp1, rr_tp2, actual_risk)

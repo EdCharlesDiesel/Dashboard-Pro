@@ -202,6 +202,67 @@ def is_aligned(side: str, lean: str, base: str, quote: str, risk_label: str) -> 
     return bool(rate_ok and risk_ok)
 
 
+# Bars of follow-through a fresh breakout gets before it's stale, not "fresh"
+# (signal-expiry framework: 1-3 bars typical, 3-5 max).
+EXPIRY_BARS = 3
+
+
+def setup_status(side: str, stop: float, target: float, current_price: float | None,
+                 bars_since_trigger: int, expiry_bars: int = EXPIRY_BARS) -> str:
+    """Live invalidation + staleness check. A stopped/target-hit read always wins
+    over "expired" — it's the more informative fact about what actually happened."""
+    if current_price is not None:
+        if side == "short":
+            if current_price >= stop:
+                return "STOPPED"
+            if current_price <= target:
+                return "TARGET_HIT"
+        else:
+            if current_price <= stop:
+                return "STOPPED"
+            if current_price >= target:
+                return "TARGET_HIT"
+    if bars_since_trigger > expiry_bars:
+        return "EXPIRED"
+    return "LIVE"
+
+
+def regime_agrees(side: str, base: str, quote: str, risk_label: str) -> bool:
+    """True only when the regime actively favours this direction. A Neutral
+    regime (or the veto-only check in is_aligned) is not a point of confluence."""
+    if risk_label == "Risk-Off":
+        return (side == "long" and base in HAVEN_CCY) or (side == "short" and quote in HAVEN_CCY) \
+            or (side == "short" and base in RISK_CCY) or (side == "long" and quote in RISK_CCY)
+    if risk_label == "Risk-On":
+        return (side == "long" and base in RISK_CCY) or (side == "short" and quote in RISK_CCY) \
+            or (side == "short" and base in HAVEN_CCY) or (side == "long" and quote in HAVEN_CCY)
+    return False
+
+
+def alignment_score(side: str, lean: str, base: str, quote: str, risk_label: str,
+                    status: str) -> tuple[int, int]:
+    """0-3 confluence score (rate bias, regime actively agreeing, setup still
+    live) — replaces a binary tick that credited a Neutral regime as full
+    conviction and never checked whether the setup was still tradeable."""
+    rate_pt = 1 if ((side == "long" and "long" in lean.lower()) or
+                    (side == "short" and "short" in lean.lower())) else 0
+    regime_pt = 1 if regime_agrees(side, base, quote, risk_label) else 0
+    live_pt = 1 if status == "LIVE" else 0
+    return rate_pt + regime_pt + live_pt, 3
+
+
+def dedupe_by_side(setups: list[dict]) -> list[dict]:
+    """A pair/side re-triggering inside the lookback window (e.g. two EUR/GBP
+    shorts a few days apart) is one idea re-confirming, not two — keep only the
+    latest trigger per side so conviction isn't double-counted."""
+    latest = {}
+    for s in setups:
+        key = s["side"]
+        if key not in latest or s["entry_date"] > latest[key]["entry_date"]:
+            latest[key] = s
+    return sorted(latest.values(), key=lambda s: s["entry_date"])
+
+
 # ===========================================================================
 # LOADERS
 # ===========================================================================
@@ -349,24 +410,32 @@ def render():
 
     setup_rows, ideas, aligned_signals = [], [], []
     for name, (base, quote, ticker) in SCAN_UNIVERSE.items():
+        df = ohlc_cache.get(name, pd.DataFrame())
+        current_price = float(df["Close"].iloc[-1]) if not df.empty and "Close" in df else None
         try:
             # pip size varies by instrument (0.0001 majors, 0.01 JPY crosses,
             # 0.10 XAU/XPT) — registry-sourced so risk_pips isn't off by
             # 100-1000x for the pairs beyond the original 5 majors.
             pip_size = INSTRUMENTS[name]["pip_size"]
-            setups = find_recent_setups(ohlc_cache.get(name, pd.DataFrame()), pip=pip_size)
+            setups = dedupe_by_side(find_recent_setups(df, pip=pip_size))
         except Exception:
             setups = []
         for s in setups:
+            bars_since = (len(df) - 1 - df.index.get_loc(s["entry_date"])) if not df.empty else 0
+            status = setup_status(s["side"], s["stop"], s["target"], current_price, bars_since)
             lean = biases.get(name, {}).get("lean", "")
-            aligned = is_aligned(s["side"], lean, base, quote, rc["label"])
+            score, max_score = alignment_score(s["side"], lean, base, quote, rc["label"], status)
+            # "Aligned idea" gate: rate/regime confluence (is_aligned) AND still LIVE —
+            # a stopped-out or expired setup is never a today's-idea, no matter the score.
+            aligned = status == "LIVE" and is_aligned(s["side"], lean, base, quote, rc["label"])
             setup_rows.append({
                 "Pair": name, "Side": s["side"],
                 "Entry": round(s["entry"], 4), "Stop": round(s["stop"], 4),
                 "Target": round(s["target"], 4), "Risk (pips)": round(s["risk_pips"], 0),
                 "Triggered": s["entry_date"].date().isoformat(),
                 "Rate lean": lean or "—",
-                "Aligned": "✅" if aligned else "—",
+                "Status": status,
+                "Aligned": f"{score}/{max_score}" + (" ✅" if aligned else ""),
             })
             if aligned:
                 ideas.append(f"**{name} {s['side']}** — entry {s['entry']:.4f}, "
@@ -437,8 +506,11 @@ def _page() -> None:
     render()
 
 
-# Streamlit executes a page module top-to-bottom on every run (the same way the
-# other legacy pages self-initialise), so call the entry unconditionally when a
-# Streamlit runtime is present.
-if st is not None:
+# Guarded like twenty_day_breakout_tab.py / cot_composite_trade_signal.py so
+# this module is safe to import elsewhere for its pure functions (rate_bias,
+# risk_composite, event_flags, …) without re-running st.set_page_config — the
+# Setup Ranker's cockpit-reconciliation panel relies on this.
+if __name__ == "__main__":
+    if st is None:
+        raise SystemExit("Run with: streamlit run daily_cockpit_tab.py")
     _page()

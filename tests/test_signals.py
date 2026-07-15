@@ -87,10 +87,16 @@ class TestScoreSetup:
             pip_size=0.0001,
             spread_pips=1.2,
         )
-        assert res["max_score"] == 10
-        assert 0 <= res["score"] <= 10
+        # score/max_score are direction-only (7 criteria without Currency
+        # Strength); the 3 quality-gate criteria (ATR Volatile, 4H Zone,
+        # Spread/ATR) still appear in scores/details but are excluded here.
+        assert res["max_score"] == 7
+        assert 0 <= res["score"] <= 7
         assert res["grade"] in {"A", "B", "C", "D"}
-        assert res["pct"] == int(res["score"] / 10 * 100)
+        assert res["pct"] == int(round(res["score"] / 7 * 100))
+        assert res["total_max"] == 10
+        assert res["quality_max"] == 3
+        assert res["quality_score"] + res["score"] == res["total_score"]
         assert set(res["scores"]) == set(res["details"])
         assert all(v in (0, 1) for v in res["scores"].values())
 
@@ -116,19 +122,21 @@ class TestScoreSetup:
             pip_size=0.0001,
             spread_pips=0.0,
         )
-        # With no data every data-dependent check is 0; only Spread/ATR can flip.
-        assert res["score"] <= 1
+        # With no data every directional check is 0 (Spread/ATR can no longer
+        # rescue the direction score — it's a quality-gate criterion now).
+        assert res["score"] == 0
         assert res["grade"] == "D"
         assert res["close"] == 0.0
 
     def test_none_frames_do_not_crash(self):
         res = score_setup(None, None, None, "SHORT", 0.0001, 0.0)
-        assert res["max_score"] == 10
-        assert 0 <= res["score"] <= 10
+        assert res["max_score"] == 7
+        assert 0 <= res["score"] <= 7
 
     def test_currency_strength_omitted_by_default(self):
         """Callers that don't pass currency_strength_diff stay on the
-        original 10-point scale — no silent regression for unmigrated pages."""
+        original 7-criterion directional scale — no silent regression for
+        unmigrated pages."""
         res = score_setup(
             df_weekly=self._frame(1.00, 1.20, 260),
             df_daily=self._frame(1.10, 1.20, 120),
@@ -136,9 +144,9 @@ class TestScoreSetup:
             direction="LONG", pip_size=0.0001, spread_pips=1.2,
         )
         assert "Currency Strength" not in res["scores"]
-        assert res["max_score"] == 10
+        assert res["max_score"] == 7
 
-    def test_currency_strength_adds_eleventh_criterion(self):
+    def test_currency_strength_adds_eighth_direction_criterion(self):
         res = score_setup(
             df_weekly=self._frame(1.00, 1.20, 260),
             df_daily=self._frame(1.10, 1.20, 120),
@@ -146,9 +154,9 @@ class TestScoreSetup:
             direction="LONG", pip_size=0.0001, spread_pips=1.2,
             currency_strength_diff=1.5,
         )
-        assert res["max_score"] == 11
+        assert res["max_score"] == 8
         assert res["scores"]["Currency Strength"] == 1
-        assert res["pct"] == int(round(res["score"] / 11 * 100))
+        assert res["pct"] == int(round(res["score"] / 8 * 100))
 
     def test_currency_strength_disagreeing_direction_fails(self):
         res = score_setup(
@@ -161,7 +169,8 @@ class TestScoreSetup:
         assert res["scores"]["Currency Strength"] == 0
 
     def test_grade_bands_are_percentage_based(self):
-        # 9/11 = 81.8% still clears the 80% Grade-A bar that 8/10 used to.
+        # 7/8 direction criteria = 87.5% still clears the 80% Grade-A bar that
+        # 6/7 (85.7%) also would — percentage, not a fixed score range.
         res = score_setup(
             df_weekly=self._frame(1.00, 1.30, 260),
             df_daily=self._frame(1.10, 1.30, 120),

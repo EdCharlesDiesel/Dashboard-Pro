@@ -424,7 +424,7 @@ class FibEntryPage(BloombergPage):
                 "strength_score": sig["score"],
                 "conviction": fib["status"],
                 "thesis": (f"15M Fib Entry — golden-zone {sig['direction']}, "
-                           f"setup {sig['score']}/{sig.get('max_score', 10)} ({sig['grade']})"),
+                           f"setup {sig['score']}/{sig.get('max_score', 7)} ({sig['grade']})"),
             })
         persist_signals("fib_entry", signals)
 
@@ -498,7 +498,7 @@ class FibEntryPage(BloombergPage):
             <tr style="border-bottom:1px solid #2d3148;">
               <td style="padding:9px 12px;font-weight:700;color:#e0e0e0;">{pair}</td>
               <td style="padding:9px 12px;color:{d_color};font-weight:700;">{arrow}</td>
-              <td style="padding:9px 12px;color:#ffa726;font-weight:700;">{sig['score']}/{sig.get('max_score', 10)}
+              <td style="padding:9px 12px;color:#ffa726;font-weight:700;">{sig['score']}/{sig.get('max_score', 7)}
                   <span style="color:#8b8fa8;font-size:11px;">({sig['grade']})</span></td>
               <td style="padding:9px 12px;color:#e0e0e0;">{fmt_price(fib['entry'])}</td>
               <td style="padding:9px 12px;color:#ef5350;">{fmt_price(fib['sl'])}
@@ -509,7 +509,7 @@ class FibEntryPage(BloombergPage):
               <td style="padding:9px 12px;color:#26a69a;font-weight:700;">{win_txt}</td>
             </tr>"""
             plain_lines.append(
-                f"{pair} {d} | Setup {sig['score']}/{sig.get('max_score', 10)} ({sig['grade']}) | "
+                f"{pair} {d} | Setup {sig['score']}/{sig.get('max_score', 7)} ({sig['grade']}) | "
                 f"Entry {fmt_price(fib['entry'])} (golden zone)  "
                 f"SL {fmt_price(fib['sl'])} ({sl_pips}p)  "
                 f"TP {fmt_price(fib['tp1'])} ({fib['rr1']:.1f}R)  | "
@@ -587,7 +587,7 @@ class FibEntryPage(BloombergPage):
                 f'<span style="color:{d_color};font-weight:700;font-size:11px;">{d_arrow} {d}</span></div>'
                 f'<div style="text-align:right;">'
                 f'<span style="color:{T.YELLOW};font-weight:700;font-family:\'JetBrains Mono\',monospace;">'
-                f'SETUP {sig["score"]}/{sig.get("max_score", 10)} ({sig["grade"]})</span><br>'
+                f'SETUP {sig["score"]}/{sig.get("max_score", 7)} ({sig["grade"]})</span><br>'
                 f'<span style="color:{s_color};font-size:11px;font-weight:700;">{s_label}</span></div>'
                 f'</div>'
                 f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;'
@@ -624,7 +624,7 @@ class FibEntryPage(BloombergPage):
             st.error(f"⚠ Could not load 15M data for {pair}.")
             return
         # Bias for the detail chart: prefer the live Setup Ranker best direction.
-        bias, score, max_score, grade = "LONG", None, 10, None
+        bias, score, max_score, grade = "LONG", None, 7, None
         best = None
         for d in ("LONG", "SHORT"):
             try:
