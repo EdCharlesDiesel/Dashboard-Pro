@@ -7,6 +7,19 @@ from typing import Dict, List
 import pandas as pd
 import streamlit as st
 
+
+def _format_age(delta) -> str:
+    """Human age string ('5m ago', '1h 12m ago', '2d 3h ago') for a signal's
+    last-bar timestamp, so a morning signal isn't mistaken for a fresh one."""
+    total_min = max(0, int(delta.total_seconds() // 60))
+    days, rem_min = divmod(total_min, 1440)
+    hours, mins = divmod(rem_min, 60)
+    if days:
+        return f"{days}d {hours}h ago"
+    if hours:
+        return f"{hours}h {mins}m ago"
+    return f"{mins}m ago"
+
 from src.indicators import TrendSignalEvaluator
 from src.instruments import INSTRUMENTS, TREND_COMMODITIES, TREND_TIMEFRAMES
 from src.services.signal_store import persist_signals
@@ -67,6 +80,7 @@ class TrendController:
                 continue
             sig = TrendSignalEvaluator.evaluate(df, min_conds)
             last = df.iloc[-1]
+            bar_time = df.index[-1].to_pydatetime()
             results[pair] = {
                 "error": False, "df": df,
                 "signal": sig.label, "score": sig.score,
@@ -78,6 +92,11 @@ class TrendController:
                 "rsi": float(last["RSI"]),
                 "macd": float(last["MACD"]),
                 "adx": float(last["ADX"]),
+                # bar_time is tz-naive UTC (market_cache normalizes it) —
+                # compare against naive utcnow() so a morning 4H signal isn't
+                # mistaken for a fresh one hours later.
+                "bar_time": bar_time,
+                "age": _format_age(datetime.utcnow() - bar_time),
             }
         progress.empty()
         return results
@@ -117,6 +136,11 @@ class TrendController:
                 )
                 continue
             label, kind, color = kind_map.get(r["direction"], kind_map["NEUTRAL"])
+            if r["direction"] == "NEUTRAL" and r["adx"] <= 25:
+                # Distinguish "ADX gate failed" from a genuine flat-market
+                # NEUTRAL — the whole point of the gate is visible staleness,
+                # not a silently identical grey badge.
+                label = "◇ NO TREND"
             tag_text = "METAL" if pair in TREND_COMMODITIES else "FOREX"
             tag_color = T.YELLOW if pair in TREND_COMMODITIES else T.CYAN
             pct_bar = int(r["score"] / r["max_score"] * 100)
@@ -129,7 +153,10 @@ class TrendController:
                 f'PX {r["close"]:.5f}</div>'
                 f'<div style="font-family:\'JetBrains Mono\',monospace;'
                 f'font-size:10px;color:#9a9a9a;margin-top:2px;">'
-                f'COND {r["score"]}/{r["max_score"]}</div>'
+                f'COND {r["score"]}/{r["max_score"]} · ADX {r["adx"]:.1f} '
+                f'({"TREND" if r["adx"] > 25 else "RANGE"})</div>'
+                f'<div style="font-family:\'JetBrains Mono\',monospace;'
+                f'font-size:9px;color:#6a6a6a;margin-top:2px;">{r["age"]}</div>'
                 f'<div style="margin-top:6px;">{ProgressBar(pct_bar, color=color).render()}</div>'
             )
             cells_html.append(
@@ -156,6 +183,12 @@ class TrendController:
             "Inspect pair:", valid_pairs, index=valid_pairs.index(default),
         )
         r = results[chosen]
+
+        st.caption(
+            f"{r['signal']} · {r['score']}/{r['max_score']} conditions · "
+            f"signal bar {r['bar_time'].strftime('%Y-%m-%d %H:%M UTC')} "
+            f"({r['age']}) — confirm it's still fresh before acting on it."
+        )
 
         render_metric_row([
             MetricCell("Close",  f"{r['close']:.5f}", "white"),
@@ -229,20 +262,29 @@ class TrendController:
 - ADX **> 25** (trend strength)
 """)
 
-    @staticmethod
-    def _persist_signals(results: Dict[str, dict]) -> None:
-        """Persist directional BUY/SELL signals to trade_setups (deduped,
-        source='trend_signals'). NEUTRAL/error rows are skipped."""
+    # Alert/persist floor: STRONG only. A plain BUY/SELL (4/6, ADX gate passed
+    # but not all conditions) still displays on the grid, but doesn't fire an
+    # alert or auto-save — otherwise the floor is asymmetric per-pair (one
+    # pair alerting at 4/6 while another needs 5/6 to say the same thing) and
+    # the alert history becomes noise. STRONG already implies the ADX gate
+    # passed (evaluate() gates before scoring), so this is "5/6 with trend
+    # confirmed," not just "5 points."
+    _ALERT_DIRECTIONS = ("STRONG_BUY", "STRONG_SELL")
+
+    @classmethod
+    def _persist_signals(cls, results: Dict[str, dict]) -> None:
+        """Persist STRONG BUY/SELL signals to trade_setups (deduped,
+        source='trend_signals'). Weaker/NEUTRAL/error rows are skipped."""
         signals = []
         for pair, r in results.items():
             if r.get("error"):
                 continue
             direction = r.get("direction")
-            if direction not in ("STRONG_BUY", "BUY", "STRONG_SELL", "SELL"):
+            if direction not in cls._ALERT_DIRECTIONS:
                 continue
             signals.append({
                 "pair": pair,
-                "bias": "Long" if direction in ("STRONG_BUY", "BUY") else "Short",
+                "bias": "Long" if direction == "STRONG_BUY" else "Short",
                 "entry": r.get("close"),
                 "conviction": r.get("signal"),
                 "thesis": (f"Trend Signals — {r.get('signal')} · "
@@ -251,14 +293,14 @@ class TrendController:
             })
         persist_signals("trend_signals", signals)
 
-    @staticmethod
-    def _record_alert_history(results: Dict[str, dict]) -> None:
+    @classmethod
+    def _record_alert_history(cls, results: Dict[str, dict]) -> None:
         st.session_state.setdefault("trend_alert_history", [])
         new_alerts = [
             (pair, r["signal"], r["direction"], r["close"])
             for pair, r in results.items()
             if not r.get("error")
-            and r["direction"] in ("STRONG_BUY", "BUY", "STRONG_SELL", "SELL")
+            and r["direction"] in cls._ALERT_DIRECTIONS
         ]
         if (new_alerts and st.session_state.get("trend_last_alert_count", 0)
                 != len(new_alerts)):

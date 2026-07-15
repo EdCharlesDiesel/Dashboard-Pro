@@ -37,27 +37,31 @@ jump to Section 7 (the daily routine) or Section 8 (the Instrument Predictor) fo
 
 ## 2. How the sidebar is organized
 
-The sidebar (`src/pages_lib/navigation.py`) is grouped into 11 sections,
-numbered the way a trader actually works a session:
+44 pages is too many stops for any daily routine to survive. The sidebar
+(`src/pages_lib/navigation.py`) is grouped by **when in the day you'd
+actually touch a page**, not the order it was built — separating the daily
+path (walked in order, ≤8 touches) from reference and research (visited on
+demand, never mid-session):
 
-| # | Section | Cadence | Purpose |
-|---|---------|---------|---------|
-| 0 | Cockpit | Every session | Orientation: the checklist, this guide, the pre-market routine, the market snapshot |
-| 1 | Scan — shortlist | Every session | Find candidates worth looking at today |
-| 2 | Synthesize | Per candidate | One composite second-opinion read before you commit time to a candidate |
-| 3 | Filter the day | Every session | Daily macro/risk backdrop that can veto a candidate |
-| 4 | Weekly bias | Every session | The higher-timeframe trend you must not fight |
-| 5 | Daily confirm | Every session | Does the daily timeframe agree with the weekly? |
-| 6 | 4H zone | Every session | Where, precisely, would you enter? |
-| 7 | 15M trigger | Every session | The exact candle/indicator event that says "now" |
-| 8 | Risk & execute | Every session | Stop, reward, and position size *before* you click |
-| 9 | Review | End of day | Did it work? What's the equity curve doing? |
-| 10 | Weekly & research lab | Once a week (Monday habit) | CFTC positioning, stat-arb research, backtests — context, not daily triggers |
+| Section | Cadence | Purpose |
+|---------|---------|---------|
+| 🌅 Morning Brief | Every session, 5 min | Sets bias, no decisions — regime, snapshot, today's events |
+| 📋 Pre-Session | Every session, ~20 min, 16:30 SAST | Build the shortlist: primary scan → confirmer → kill conflicted/duplicated exposure → final gate |
+| ⚡ Session | Every session, 17:00–20:00 SAST | Execution only. Nothing here generates a new opinion — the shortlist is frozen at session open |
+| 📅 Weekend | Weekly | Weekly-bias tools + the full COT suite |
+| 🔬 Research Lab | On demand | The other scanners, deeper single-timeframe analysis, stat-arb research, backtests — visited when building or validating, never during a session |
+| 📖 Reference | As needed | System Guide, ABR Toolkit, the 18-point Daily Checklist |
 
-Sections 0–9 are the **daily top-to-bottom pass**. Section 10 runs on
-weekly-updated data (CFTC Commitment of Traders reports refresh Fridays) or
-is occasional research — checking it intraday wastes effort because the
-underlying data hasn't changed.
+Of the five scanners that produce directional opinions (Setup Ranker, AMD
+Scanner, Trend Signals, 20-Day Breakout, MTF Matrix), only **Setup Ranker**
+(primary) and **Trend Signals** (confirmer) hold a Pre-Session slot — the
+other three live in Research Lab until there's enough journaled history to
+know which one actually earns a slot. **Daily Trend / Daily MACD / Market
+Structure** do more analysis than the Setup Ranker's checklist booleans
+(histogram momentum, EMA100/200 stack + slope, CHoCH/BOS) so they're kept as
+full pages in Research Lab, not folded into the Ranker. **Stop Structure, R:R
+Calculator, and Account Risk** were one decision spread across three pages —
+merged into one **Risk Suite** page (three tabs) in the Session section.
 
 ---
 
@@ -150,8 +154,13 @@ confirm it survives every timeframe on the way down to your actual entry.
 |---|---|
 | **⚡ 15M Fib Entry** | Wait for **at least two of three**, within 1–2 candles: Stochastic cross below 25 (longs) / above 75 (shorts), 15M RSI reset off 40/60, a Bollinger-band touch curling back in. **Do not enter** if price is still slicing through the zone, the daily shows a conflicting flag, or the spread is abnormally wide ahead of news. |
 
-### 8 · Risk & execute
-| Page | Formula |
+### 8 · Risk & execute — 🛡️ Risk Suite (one page, three tabs)
+Stop Structure, R:R Calculator, and Account Risk were one decision spread
+across three separate pages that each re-asked for instrument/balance/risk —
+merged into a single **Risk Suite** page sharing those inputs once, with each
+tool's original math preserved exactly.
+
+| Tab | Formula |
 |---|---|
 | **🛡️ Stop Structure** | Stop must sit behind a real structure level, minimum 1× ATR14 distance. SL = 1.5 × ATR14 in pips. |
 | **⚖️ R:R Calculator** | TP1 = 2R, TP2 = 3R. **Only take trades with ≥2:1 R:R to TP1** (a 40% win rate at 2.5:1 is profitable; a 60% win rate at 1:1 barely breaks even after costs). |
