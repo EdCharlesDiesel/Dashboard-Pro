@@ -235,16 +235,17 @@ class ChecklistController:
         # the nav step labels. The check numbers (1–18) are unchanged: they are
         # already in workflow order, so CRITICAL_CHECKS (11–16), the radar and
         # autofill indices stay valid.
-        def link(slug: str) -> str:
+        def link(slug: str, label: str = "OPEN ▸") -> str:
             return (f" · <a href='/{slug}' target='_self' "
-                    f"style='color:#00e0ff;'>OPEN ▸</a>")
+                    f"style='color:#00e0ff;'>{label}</a>")
 
         sections = [
             ("2 · FILTER THE DAY", [
                 (1, "Macro bias confirmed",
                  "Rates, GDP, inflation favour direction"),
                 (2, "No red-folder news",
-                 "No high-impact news within 1 hour" + link("news-filter")),
+                 "No high-impact news within 1 hour" + link("news-filter")
+                 + link("surprise_tab", "GATE ▸")),
                 (3, "Correlated markets align",
                  f"Expected: {inst['corr']}" + link("correlations")),
                 (4, "ATR above 20-period avg", atr_hint),

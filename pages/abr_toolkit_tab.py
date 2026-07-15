@@ -30,21 +30,51 @@ import yfinance as yf
 
 from src.db.cache import pooled_repository
 from src.db.connection import current_db_config
+from src.instruments.registry import INSTRUMENTS as _REGISTRY
+from src.instruments.registry import TREND_COMMODITIES as _COMMODITIES
 from src.pages_lib.navigation import render_sidebar_nav
 from src.ui.theme import BloombergTheme as T
 
 # ----------------------------------------------------------------------------
-# Instrument presets: yfinance ticker + USD value of a 1.0 price move per lot
+# Instrument presets: yfinance ticker + USD value of a 1.0 price move per lot,
+# derived from the shared registry (was previously a hardcoded 7-symbol
+# subset). Symbol keys are compact ("XAUUSD" not "XAU/USD") to match this
+# page's own abr_signals.symbol convention (MT5-style naming for the fetch
+# fallback in _fetch_ohlc_mt5).
+#
+# point_value derivation differs by asset class:
+#  - Forex: registry pip / pip_size (standard retail 100k-unit lot formula —
+#    matches this dict's pre-existing EUR/USD and GBP/USD values exactly).
+#  - Commodities: real futures-contract multipliers, NOT the registry's
+#    generic pip formula (that's tuned for forex lot sizing and is simply
+#    wrong for futures — e.g. it would give silver 1000 instead of the real
+#    5000, a 5x position-sizing error for a COMEX SI=F contract).
 # ----------------------------------------------------------------------------
-INSTRUMENTS: dict[str, dict] = {
-    "XAUUSD": {"yf": "GC=F",      "point_value": 100.0},
-    "XAGUSD": {"yf": "SI=F",      "point_value": 5000.0},
-    "EURUSD": {"yf": "EURUSD=X",  "point_value": 100000.0},
-    "GBPUSD": {"yf": "GBPUSD=X",  "point_value": 100000.0},
-    "USDJPY": {"yf": "USDJPY=X",  "point_value": 100000.0},  # approx, quote=JPY
-    "WTI":    {"yf": "CL=F",      "point_value": 1000.0},
-    "BTCUSD": {"yf": "BTC-USD",   "point_value": 1.0},
+_SYMBOL_OVERRIDES = {"WTI/USD": "WTI"}  # crude isn't quoted as "WTI/USD" by convention
+_COMMODITY_POINT_VALUES = {
+    "XAU/USD": 100.0,    # COMEX GC=F: 100 troy oz/contract
+    "XAG/USD": 5000.0,   # COMEX SI=F: 5,000 troy oz/contract
+    "XPT/USD": 50.0,     # NYMEX PL=F: 50 troy oz/contract
+    "WTI/USD": 1000.0,   # NYMEX CL=F: 1,000 barrels/contract
 }
+
+
+def _point_value(name: str, inst) -> float:
+    if name in _COMMODITIES:
+        return _COMMODITY_POINT_VALUES[name]
+    return inst.pip / inst.pip_size
+
+
+INSTRUMENTS: dict[str, dict] = {
+    _SYMBOL_OVERRIDES.get(name, name.replace("/", "")): {
+        "yf": inst.ticker, "point_value": _point_value(name, inst),
+    }
+    for name, inst in _REGISTRY.items()
+}
+# BTC/USD isn't a registry instrument (crypto, no forex/metal pip convention
+# applies) — kept as an ABR-only addition; point_value=1.0 since BTC-USD is
+# quoted in whole dollars (a $1 move = $1/unit).
+INSTRUMENTS["BTCUSD"] = {"yf": "BTC-USD", "point_value": 1.0}
 
 TIMEFRAMES = {"H1": "1h", "H4": "4h", "H6": "6h", "D1": "1d"}
 

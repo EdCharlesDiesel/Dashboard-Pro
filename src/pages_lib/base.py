@@ -104,5 +104,5 @@ class BloombergPage:
             f"FN {ctx.code}",
             f"PG {ctx.title.upper()}",
             f"LOCAL {now}",
-            "DASHBOARD PRO v3.0",
+            "DASHBOARD PRO v1.0.1",
         ]).show()

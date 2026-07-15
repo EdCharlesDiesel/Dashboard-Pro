@@ -1,0 +1,156 @@
+"""
+pages/swing_playbook_tab.py
+============================
+Swing Playbook — weekly pre-flight. One row per instrument: price, COT
+crowdedness, gold's real-yield disconnect read, nearby swing-pivot supply/
+demand levels, and vol-scaled position sizing, plus a per-instrument weekly
+thesis journal. All data comes from services this app already has — see
+src/services/swing_playbook_service.py.
+
+Audit-only (not a trade_setups signal): the "bias" per row is a hand-typed
+weekly thesis, not a computed directional read, so playbook snapshots are
+logged to tool_usage_log (like Disconnect Monitor / Quant Models) rather than
+persist_signals.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+import pandas as pd
+import streamlit as st
+
+from src.instruments.registry import INSTRUMENTS
+from src.pages_lib.navigation import render_sidebar_nav
+from src.services.alert_service import NotifyCache
+from src.services.swing_playbook_service import (
+    build_playbook,
+    load_thesis,
+    save_thesis,
+    week_start,
+)
+from src.services.surprise_service import event_gate
+from src.services.tool_log import log_tool_usage
+from src.ui.theme import BloombergTheme
+
+T = BloombergTheme
+
+st.set_page_config(
+    page_title="Swing Playbook",
+    page_icon="📔",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+BloombergTheme.apply()
+
+DEFAULT_INSTRUMENTS = ["EUR/USD", "GBP/USD", "AUD/USD", "USD/JPY", "XAU/USD", "XAG/USD"]
+
+with st.sidebar:
+    st.markdown("### 📔 Swing Playbook")
+
+    all_instruments = INSTRUMENTS.keys()
+    selected = st.multiselect(
+        "Instruments", all_instruments,
+        default=[i for i in DEFAULT_INSTRUMENTS if i in all_instruments],
+    )
+
+    st.divider()
+    account = st.number_input("Account size", value=10_000.0, min_value=0.0, step=500.0)
+    risk_pct = st.number_input(
+        "Risk per trade (%)", value=1.0, min_value=0.25, max_value=3.0, step=0.25,
+    ) / 100
+
+    st.divider()
+    if st.button("🔄 Refresh Data", width="stretch"):
+        st.cache_data.clear()
+        st.rerun()
+    st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')} local")
+
+    st.divider()
+    render_sidebar_nav()
+
+st.markdown(f"""
+<div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
+            border:1px solid {T.BORDER}; border-radius:16px; padding:24px 28px;
+            margin-bottom:20px;">
+  <div style="font-size:24px; font-weight:700; color:{T.WHITE};">📔 Swing Playbook</div>
+  <div style="color:{T.GREY}; font-size:13px; margin-top:4px;">
+    Weekly pre-flight — positioning, disconnect, zones, sizing, and your written thesis
+  </div>
+  <div style="font-size:12px; color:{T.AMBER}; margin-top:6px;">
+    Week of {week_start().strftime('%A %d %B %Y')}
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+if not selected:
+    st.info("Select at least one instrument in the sidebar.")
+    st.stop()
+
+with st.spinner("Building playbook…"):
+    rows = build_playbook(selected, account, risk_pct, event_gate_fn=event_gate)
+
+df = pd.DataFrame([{
+    "Instrument": r.instrument,
+    "Price": f"{r.price:,.5f}" if r.price and abs(r.price) < 100 else (f"{r.price:,.2f}" if r.price else "N/A"),
+    "Bias": r.bias,
+    "COT %ile": f"{r.cot_pctile:.0f}" if r.cot_pctile is not None else "N/A",
+    "Disc z": f"{r.disconnect_z:+.1f}" if r.disconnect_z is not None else "—",
+    "Gate": r.gate,
+    "Supply": f"{r.supply:,.5f}" if r.supply else "—",
+    "Demand": f"{r.demand:,.5f}" if r.demand else "—",
+    "Stop %": f"{r.stop_pct:.2f}" if r.stop_pct else "N/A",
+    "Units @ risk": f"{r.units:,.2f}" if r.units else "N/A",
+    "Flags": " | ".join(r.flags) if r.flags else "",
+} for r in rows])
+
+
+def _style(row):
+    if "NO THESIS" in row["Flags"]:
+        return [f"background-color: {T.RED}26"] * len(row)
+    if row["Gate"] == "BLOCKED":
+        return [f"background-color: {T.YELLOW}26"] * len(row)
+    return [""] * len(row)
+
+
+st.dataframe(df.style.apply(_style, axis=1), width="stretch", hide_index=True)
+st.caption(
+    "Red = no written thesis. Yellow = event gate active. "
+    "Units sized so a 2·sigma·sqrt(8d) adverse move = your risk %."
+)
+
+# --- audit log (not a trade_setups signal — see module docstring) ----------
+_log_key = f"{week_start()}_{account}_{risk_pct}"
+_new = NotifyCache("swing_playbook_log").filter_new([f"{r.instrument}_{_log_key}" for r in rows])
+if _new:
+    for r in rows:
+        if f"{r.instrument}_{_log_key}" in _new:
+            log_tool_usage("swing_playbook", {
+                "instrument": r.instrument, "week": str(week_start()),
+                "price": r.price, "bias": r.bias, "cot_pctile": r.cot_pctile,
+                "disconnect_z": r.disconnect_z, "gate": r.gate,
+                "supply": r.supply, "demand": r.demand,
+                "stop_pct": r.stop_pct, "units": r.units, "flags": r.flags,
+            })
+
+# --- weekly thesis entry -----------------------------------------------
+st.subheader("Weekly thesis")
+inst = st.selectbox("Instrument", selected)
+existing = load_thesis(inst)
+bias_options = ["long", "short", "flat"]
+default_bias_idx = bias_options.index(existing["bias"]) if existing and existing.get("bias") in bias_options else 2
+bias = st.radio("Bias", bias_options, index=default_bias_idx, horizontal=True)
+inval = st.text_area(
+    "Invalidation (a condition, not a price)",
+    value=(existing.get("invalidation") or "") if existing else "",
+    placeholder="e.g. short gold invalid if Warsh signals no hike "
+                "and year-end hike odds drop below 60%",
+)
+if st.button("Save thesis"):
+    if bias != "flat" and not inval.strip():
+        st.error("A directional thesis needs an invalidation condition.")
+    elif save_thesis(inst, bias, inval.strip()):
+        st.success(f"{inst} thesis saved for this week.")
+        st.rerun()
+    else:
+        st.warning("Database not configured — thesis wasn't saved. Check the sidebar DB connection.")

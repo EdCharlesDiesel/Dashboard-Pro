@@ -162,6 +162,12 @@ class Store:
             sa.Column("currency", sa.String(6), nullable=False),
             sa.Column("impact", sa.String(10), default="high"),
             sa.Column("title", sa.Text),
+            # Raw as-scraped strings (e.g. "3.8%", "220K") — needed by
+            # pages/surprise_tab.py's surprise-index scoring, which compares
+            # actual vs forecast per release.
+            sa.Column("actual", sa.Text),
+            sa.Column("forecast", sa.Text),
+            sa.Column("previous", sa.Text),
         )
         md.create_all(self.engine)
 

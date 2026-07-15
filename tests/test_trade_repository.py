@@ -260,6 +260,43 @@ class TestSchema:
         statements = " ".join(sql for sql, _ in cur.executed)
         assert "CREATE TABLE IF NOT EXISTS tool_usage_log" in statements
 
+    def test_init_schema_creates_swing_theses_table(self):
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        repo.init_schema()
+        statements = " ".join(sql for sql, _ in cur.executed)
+        assert "CREATE TABLE IF NOT EXISTS swing_theses" in statements
+
+
+# ── swing playbook theses ─────────────────────────────────────────────────────
+class TestSwingThesis:
+    def test_save_swing_thesis_upserts_with_params(self):
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        repo.save_swing_thesis("EUR/USD", "2026-07-13", "long", "invalid below 1.05")
+        sql, params = cur.executed[0]
+        assert "INSERT INTO swing_theses" in sql
+        assert "ON CONFLICT (instrument, week_start) DO UPDATE" in sql
+        assert params == {
+            "instrument": "EUR/USD", "week_start": "2026-07-13",
+            "bias": "long", "invalidation": "invalid below 1.05",
+        }
+        assert conn.committed is True
+
+    def test_load_swing_thesis_returns_dict(self):
+        cur = FakeCursor(fetchone_row={"bias": "short", "invalidation": "invalid above 2400"})
+        repo, _ = _repo(cur)
+        result = repo.load_swing_thesis("XAU/USD", "2026-07-13")
+        assert result == {"bias": "short", "invalidation": "invalid above 2400"}
+        sql, params = cur.executed[0]
+        assert "SELECT bias, invalidation FROM swing_theses" in sql
+        assert params == ("XAU/USD", "2026-07-13")
+
+    def test_load_swing_thesis_returns_none_when_absent(self):
+        cur = FakeCursor(fetchone_row=None)
+        repo, _ = _repo(cur)
+        assert repo.load_swing_thesis("EUR/USD", "2026-07-13") is None
+
 
 # ── tool usage log ──────────────────────────────────────────────────────────
 class TestToolUsageLog:

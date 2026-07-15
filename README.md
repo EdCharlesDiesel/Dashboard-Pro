@@ -4,8 +4,8 @@ A professional **forex & metals day-trading terminal** built on Streamlit. It
 walks you top-down through a single trading decision — scan the market,
 synthesize a composite second opinion, filter the day, establish bias,
 confirm, find the zone, wait for the trigger, size the risk, execute, and
-review — across **29 daily-workflow pages** plus a **13-page weekly/research
-lab** (COT validation, pairs-research, backtests) — 42 active pages total,
+review — across **30 daily-workflow pages** plus a **15-page weekly/research
+lab** (COT validation, pairs-research, backtests, forecasting) — 45 active pages total,
 all sharing one analysis engine and one Bloomberg-style terminal theme.
 (Trimmed from 52 for a leaner daily forex workflow — the retired pages live in
 `archive/pages/`, not deleted; see [Archived pages](#archived-pages) below.)
@@ -32,7 +32,7 @@ scans the identical universe with the identical tickers.
 ```
 Dashboard-Pro/
 ├── app.py                  # Entry point — the 18-point Daily Checklist (master page)
-├── pages/                  # 42 active workflow pages (auto-register as Streamlit multipage)
+├── pages/                  # 45 active workflow pages (auto-register as Streamlit multipage)
 ├── src/
 │   ├── core/               # analyzer, signals, config — the shared analysis engine
 │   ├── indicators/         # EMA/RSI/MACD/ADX/ATR + the 6-condition trend scorer
@@ -136,6 +136,7 @@ there, since all of them are weekly-cadence per their own captions.
 | 07 | [📦 CME FX Futures](pages/cme-futures-volume.py) | Real, exchange-reported volume for FX via CME currency futures (6E=F, 6B=F, …) — OBV/CMF that actually mean something, unlike on zero-volume spot pairs. |
 | 08 | [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |
 | 09 | [🟡 VWAP-EMA Gold](pages/vwap-ema-gold.py) | A dedicated VWAP+EMA strategy view for Gold. |
+| 09a | [🧱 ABR Toolkit](pages/abr_toolkit_tab.py) | Structure (BoS/CHoCH) + order blocks + auto trendlines + MTF EMA bias + quality-graded trade plan (entry/SL/TP1-3, USD sizing) across gold, silver, majors, WTI, BTC. Tries a running Deriv/MT5 terminal first for exact broker candles, falls back to yfinance. |
 
 ### 2 · Synthesize — composite read (NEW)
 | # | Page | What it's for |
@@ -155,6 +156,7 @@ there, since all of them are weekly-cadence per their own captions.
 |---|------|---------------|
 | 15 | [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
 | 16 | [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
+| 16a | [📔 Swing Playbook](pages/swing_playbook_tab.py) | Weekly pre-flight: price, COT crowdedness, gold disconnect, supply/demand zones, vol-scaled sizing, and a written thesis journal per instrument. |
 
 ### 5 · Daily confirm
 | # | Page | What it's for |
@@ -206,6 +208,8 @@ and the occasional stat-arb/backtest research tools — one section for
 | 35 | [🌙 Overnight Drift](pages/overnight_drift_tab.py) | Studies the overnight-session return pattern for index futures. |
 | 36 | [⏱️ Optimal Holding Period](pages/holding_period_tab.py) | Backtests how many days a breakout-style entry should be held, per pair. |
 | 37 | [🧮 Quant Models Lab](pages/quant_models_tab.py) | Engle-Granger cointegration, Kalman dynamic hedge ratio, OU mean-reversion (half-life + z-bands), GARCH(1,1) vol regime + sizing, UIP/carry deviation, GBM null test. Its GARCH regime also feeds the Instrument Predictor's confidence modifier. |
+| 37a | [🔭 Forecast](pages/forecast_tab.py) | GARCH(1,1) volatility cone (1 week / 1 month / 1 quarter) around a random-walk center + a transparent driver score (trend, 200d MA, momentum, breakout, ABR structure) + a narrative (Claude-polished if `ANTHROPIC_API_KEY` is set) — journaled and self-scored against realized outcomes over time. Full registry universe. |
+| 38 | [😲 Surprise Awareness](pages/surprise_tab.py) | Economic surprise index (z-scored actual-vs-forecast per release), an event-proximity gate (suppress signals near red-folder events), and the gold~oil regime-inversion correlation. Full registry universe for the gate/surprise view; Telegram alerts via `[telegram]` in secrets.toml. |
 
 ---
 

@@ -98,6 +98,41 @@ class TradeRepository:
         )
     """
 
+    # Every journaled GARCH-cone forecast (pages/forecast_tab.py) — appended,
+    # not upserted (one row per symbol/horizon/day), so each forecast's
+    # eventual realized outcome can be scored independently.
+    ABR_FORECASTS_SQL = """
+        CREATE TABLE IF NOT EXISTS abr_forecasts (
+            id           SERIAL PRIMARY KEY,
+            symbol       TEXT NOT NULL,
+            made_at      TIMESTAMPTZ NOT NULL,
+            horizon_days INT NOT NULL,
+            spot         DOUBLE PRECISION,
+            score        INT,
+            label        TEXT,
+            drivers      TEXT,
+            lo68 DOUBLE PRECISION, hi68 DOUBLE PRECISION,
+            lo95 DOUBLE PRECISION, hi95 DOUBLE PRECISION,
+            realized     DOUBLE PRECISION,
+            UNIQUE (symbol, horizon_days, made_at)
+        )
+    """
+
+    # One row per instrument+week holding the Swing Playbook's hand-typed
+    # weekly thesis (pages/swing_playbook_tab.py) — upserted so only the
+    # current week's thesis per instrument is kept.
+    SWING_THESES_SQL = """
+        CREATE TABLE IF NOT EXISTS swing_theses (
+            id           SERIAL PRIMARY KEY,
+            instrument   VARCHAR(20) NOT NULL,
+            week_start   DATE NOT NULL,
+            bias         VARCHAR(10),
+            invalidation TEXT,
+            created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+            UNIQUE (instrument, week_start)
+        )
+    """
+
     CREATE_SQL = """
         CREATE TABLE IF NOT EXISTS trade_setups (
             id            SERIAL PRIMARY KEY,
@@ -162,6 +197,8 @@ class TradeRepository:
                 cur.execute(self.APP_STATE_SQL)
                 cur.execute(self.TOOL_USAGE_SQL)
                 cur.execute(self.ABR_SIGNALS_SQL)
+                cur.execute(self.ABR_FORECASTS_SQL)
+                cur.execute(self.SWING_THESES_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
@@ -230,6 +267,115 @@ class TradeRepository:
                 "quality": quality, "grade": grade, "htf_aligned": htf_aligned,
             })
             conn.commit()
+
+    def latest_abr_signal(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Most recent ABR Toolkit read for ``symbol`` (any timeframe), or
+        ``None`` (used by pages/forecast_tab.py as a driver input)."""
+        sql = """
+            SELECT signal, grade, timeframe FROM abr_signals
+            WHERE symbol = %s ORDER BY ts DESC LIMIT 1
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(sql, (symbol,))
+            row = cur.fetchone()
+        return dict(row) if row else None
+
+    # ── ABR Toolkit forecasts (pages/forecast_tab.py) ───────────────────────
+    def save_forecast(
+        self,
+        symbol: str,
+        horizon_days: int,
+        spot: float,
+        score: int,
+        label: str,
+        drivers_json: str,
+        lo68: float,
+        hi68: float,
+        lo95: float,
+        hi95: float,
+    ) -> bool:
+        """Insert one forecast row, at most once per symbol/horizon/day.
+        Returns ``True`` if inserted, ``False`` if today's forecast already
+        exists for this symbol+horizon."""
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM abr_forecasts WHERE symbol = %s AND horizon_days = %s "
+                "AND made_at::date = CURRENT_DATE",
+                (symbol, horizon_days),
+            )
+            if cur.fetchone():
+                return False
+            cur.execute("""
+                INSERT INTO abr_forecasts
+                    (symbol, made_at, horizon_days, spot, score, label, drivers,
+                     lo68, hi68, lo95, hi95)
+                VALUES
+                    (%(symbol)s, NOW(), %(horizon_days)s, %(spot)s, %(score)s,
+                     %(label)s, %(drivers)s, %(lo68)s, %(hi68)s, %(lo95)s, %(hi95)s)
+            """, {
+                "symbol": symbol, "horizon_days": horizon_days, "spot": spot,
+                "score": score, "label": label, "drivers": drivers_json,
+                "lo68": lo68, "hi68": hi68, "lo95": lo95, "hi95": hi95,
+            })
+            conn.commit()
+        return True
+
+    def load_forecasts(self, symbol: str, limit: int = 40) -> List[Dict[str, Any]]:
+        """Recent journaled forecasts for ``symbol``, newest first."""
+        sql = """
+            SELECT id, made_at, horizon_days, spot, score, label,
+                   lo68, hi68, lo95, hi95, realized
+            FROM abr_forecasts WHERE symbol = %s ORDER BY made_at DESC LIMIT %s
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(sql, (symbol, limit))
+            return [dict(r) for r in cur.fetchall()]
+
+    def update_forecast_realized(self, forecast_id: int, realized: float) -> None:
+        """Fill in a matured forecast's realized price (see evaluate_forecasts
+        in pages/forecast_tab.py, which computes it from later price history)."""
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE abr_forecasts SET realized = %s WHERE id = %s",
+                (realized, forecast_id),
+            )
+            conn.commit()
+
+    # ── Swing Playbook weekly theses ────────────────────────────────────────
+    def save_swing_thesis(
+        self, instrument: str, week_start: Any, bias: str, invalidation: str
+    ) -> None:
+        """Upsert the weekly thesis for ``instrument`` — at most one per
+        instrument+week (see ``pages/swing_playbook_tab.py``)."""
+        sql = """
+            INSERT INTO swing_theses (instrument, week_start, bias, invalidation)
+            VALUES (%(instrument)s, %(week_start)s, %(bias)s, %(invalidation)s)
+            ON CONFLICT (instrument, week_start) DO UPDATE SET
+                bias = EXCLUDED.bias, invalidation = EXCLUDED.invalidation
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, {
+                "instrument": instrument, "week_start": week_start,
+                "bias": bias, "invalidation": invalidation,
+            })
+            conn.commit()
+
+    def load_swing_thesis(self, instrument: str, week_start: Any) -> Optional[Dict[str, Any]]:
+        """This week's thesis for ``instrument``, or ``None`` if not yet set."""
+        sql = """
+            SELECT bias, invalidation FROM swing_theses
+            WHERE instrument = %s AND week_start = %s
+        """
+        with closing(self._connect()) as conn, conn, conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(sql, (instrument, week_start))
+            row = cur.fetchone()
+        return dict(row) if row else None
 
     # ── writes ──────────────────────────────────────────────────────────────
     def save_setup(self, row: Dict[str, Any], source: Optional[str] = None) -> None:

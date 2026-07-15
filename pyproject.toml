@@ -35,6 +35,8 @@ omit = [
     "src/services/forecast_service.py", # statsmodels forecasting
     "src/services/mt4_import.py",       # file/HTML parsing
     "src/services/mtf_service.py",      # yfinance fetch
+    "src/services/swing_playbook_service.py",  # yfinance/FRED/COT fetch
+    "src/services/surprise_service.py",  # live SQLAlchemy conn to sentry_news
     "src/services/account_state.py",    # Streamlit session state
     "src/db/connection.py",             # Streamlit session-state + live-DB auto-connect glue
     "src/data_backbone/*",              # SQLAlchemy store, APScheduler worker, yfinance seeder

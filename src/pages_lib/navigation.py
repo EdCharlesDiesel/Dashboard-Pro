@@ -78,6 +78,7 @@ NAV_SECTIONS: List[tuple] = [
     ("4 · WEEKLY BIAS", [
         NavEntry("WEMA", "15. Weekly EMA",           "📉", "pages/weekly-ema.py"),
         NavEntry("WSWG", "16. Weekly Swing",         "🔄", "pages/weekly-swing.py"),
+        NavEntry("SWPB", "16a. Swing Playbook",      "📔", "pages/swing_playbook_tab.py"),
     ]),
     ("5 · DAILY CONFIRM", [
         NavEntry("DTRN", "17. Daily Trend",          "📈", "pages/daily-trend.py"),
@@ -117,6 +118,8 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("ONDR", "35. Overnight Drift",        "🌙", "pages/overnight_drift_tab.py"),
         NavEntry("HOLD", "36. Optimal Holding Period", "⏱️", "pages/holding_period_tab.py"),
         NavEntry("QNTM", "37. Quant Models Lab",       "🧮", "pages/quant_models_tab.py"),
+        NavEntry("FCST", "37a. Forecast",              "🔭", "pages/forecast_tab.py"),
+        NavEntry("SURP", "38. Surprise Awareness",     "😲", "pages/surprise_tab.py"),
     ]),
 ]
 
