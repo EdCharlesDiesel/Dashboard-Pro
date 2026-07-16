@@ -101,6 +101,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("4HCZ", "4H Confluence Zone",    "🎯", "pages/4H-confluence-zone.py"),
         NavEntry("EWKV", "Busy-Week Anatomy",     "📅", "pages/event_week_vol_tab.py"),
         NavEntry("DISC", "Disconnect Monitor",    "🔌", "pages/disconnect_monitor_tab.py"),
+        NavEntry("LQHT", "Liquidity Hunt Lab",    "🎣", "pages/liquidity_hunt_tab.py"),
         NavEntry("ONDR", "Overnight Drift",       "🌙", "pages/overnight_drift_tab.py"),
         NavEntry("HOLD", "Optimal Holding Period","⏱️", "pages/holding_period_tab.py"),
         NavEntry("QNTM", "Quant Models Lab",      "🧮", "pages/quant_models_tab.py"),
