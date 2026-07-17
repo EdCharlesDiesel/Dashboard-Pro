@@ -189,6 +189,12 @@ class TrendController:
         )
         r = results[chosen]
 
+        # Shared house view — flags when this scanner's 50/200-EMA lens
+        # opposes the canonical Weekly/Daily/4H (EMA20/50) read.
+        from src.services.bias_service import show_house_view
+        show_house_view(chosen, page_read=r["direction"],
+                        page_label="Trend Signals")
+
         st.caption(
             f"{r['signal']} · {r['score']}/{r['max_score']} conditions · "
             f"signal bar {r['bar_time'].strftime('%Y-%m-%d %H:%M UTC')} "

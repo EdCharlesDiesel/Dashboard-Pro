@@ -152,7 +152,11 @@
       "Bash(DATABASE_URL=\"postgresql+psycopg2://neondb_owner:npg_I8HBqeKrV7zu@ep-billowing-sky-aip5p12a.c-4.us-east-1.aws.neon.tech/neondb\" PYTHONIOENCODING=utf-8 python -m src.services.news_fetcher --fetch)",
       "Bash(gh run *)",
       "Bash(chromium-cli --help)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(PYTHONPATH=. PYTHONIOENCODING=utf-8 python *)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/services/market_data.py src/core/bias.py src/services/bias_service.py src/ui/components.py src/pages_lib/setup_ranker.py src/pages_lib/daily_trading/trend.py pages/weekly-ema.py pages/daily-trend.py pages/weekly-swing.py pages/daily-macd.py pages/forecast_tab.py pages/market-structure.py pages/4H-confluence-zone.py pages/confluence-checker.py)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest -q)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -)"
     ]
   }
 }

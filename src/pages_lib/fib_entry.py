@@ -238,17 +238,25 @@ class FibEntryPage(BloombergPage):
             'text-transform:uppercase;font-size:11px;">SETUP RANKER FILTER</div>',
             unsafe_allow_html=True,
         )
-        st.session_state.fib_pairs = st.multiselect(
-            "Instruments to scan", list(INSTRUMENTS.keys()),
-            default=[p for p in st.session_state.fib_pairs if p in INSTRUMENTS],
-        )
-        st.session_state.fib_min_score = st.slider(
-            "Min Setup Ranker score", 0, 10, int(st.session_state.fib_min_score),
-            help="Only pairs scoring at/above this are analysed for a fib entry — "
-                 "same multi-timeframe checklist and threshold as Setup Ranker's "
-                 "Min score (out of 10, applied as a percentage since FX pairs "
-                 "score /11 with Currency Strength and commodities score /10).",
-        )
+        # Grouped in a form so ticking instruments on/off doesn't fire the
+        # expensive multi-pair Setup Ranker rescan on every single click —
+        # only "Apply Filter" reruns the scan, so the picker itself never
+        # appears to "reset" mid-selection.
+        with st.form("fib_filter_form"):
+            pairs = st.multiselect(
+                "Instruments to scan", list(INSTRUMENTS.keys()),
+                default=[p for p in st.session_state.fib_pairs if p in INSTRUMENTS],
+            )
+            min_score = st.slider(
+                "Min Setup Ranker score", 0, 10, int(st.session_state.fib_min_score),
+                help="Only pairs scoring at/above this are analysed for a fib entry — "
+                     "same multi-timeframe checklist and threshold as Setup Ranker's "
+                     "Min score (out of 10, applied as a percentage since FX pairs "
+                     "score /11 with Currency Strength and commodities score /10).",
+            )
+            if st.form_submit_button("Apply Filter", width="stretch", type="primary"):
+                st.session_state.fib_pairs = pairs
+                st.session_state.fib_min_score = min_score
         st.divider()
         st.markdown(
             '<div style="color:#00ff41;font-weight:700;letter-spacing:0.15em;'

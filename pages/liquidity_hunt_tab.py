@@ -30,14 +30,16 @@ import streamlit as st
 import yfinance as yf
 from sqlalchemy import text
 
+from src.instruments import INSTRUMENTS
 from src.pages_lib.navigation import render_sidebar_nav
 from src.ui.theme import BloombergTheme
 
 HORIZONS = [5, 15, 60]  # forward horizons, in bars
 SAST = "Africa/Johannesburg"
 
-SYMBOL_MAP = {"XAUUSD": "GC=F", "XAGUSD": "SI=F", "EURUSD": "EURUSD=X",
-              "GBPUSD": "GBPUSD=X", "USDJPY": "USDJPY=X"}
+# Full registry universe (21 forex pairs + Gold/Silver/Platinum/WTI), not a
+# hand-picked subset — same tickers every other page scans against.
+SYMBOL_MAP = {name: inst.ticker for name, inst in INSTRUMENTS.items()}
 
 # ────────────────────────────── data ──────────────────────────────
 

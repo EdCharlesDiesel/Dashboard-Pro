@@ -525,6 +525,12 @@ with tab_detail:
         struct = analyse_structure(df)
         color  = struct["color"]
 
+        # Shared house view — flags when this page's structure lens opposes
+        # the canonical Weekly/Daily/4H read.
+        from src.services.bias_service import show_house_view
+        show_house_view(focus_pair, page_read=struct["trend"],
+                        page_label="Market Structure")
+
         # ── Structure verdict banner ──────────────────────────────
         banner_bg = {"BULLISH": "#0d2f1a", "BEARISH": "#2f0d0d",
                      "CHOCH": "#2a1f00", "NEUTRAL": "#1a1a1a"}.get(struct["trend"], "#1a1a1a")

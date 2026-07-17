@@ -100,53 +100,30 @@ def risk_deviates(mb: dict, tolerance: float = 0.10) -> bool:
 # ── Data fetchers (preserved from original) ───────────────────────────────
 
 class _SetupRankerDataFeed:
-    """Encapsulates the 3 timeframe pulls so the page logic is testable."""
+    """Encapsulates the 3 timeframe pulls so the page logic is testable.
+
+    Delegates to the canonical spine (src/services/market_data.py) — the
+    windows there were lifted from this feed, so behavior is unchanged; the
+    delegation just guarantees every page shares the same bars.
+    """
 
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def daily(ticker: str, days: int = 300) -> pd.DataFrame:
-        from src.db.market_cache import cached_ohlc
-        try:
-            df = cached_ohlc(ticker, period=f"{days}d", interval="1d", ttl=300)
-            if df.empty:
-                return pd.DataFrame()
-            return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-        except Exception:
-            return pd.DataFrame()
+        from src.services.market_data import daily_ohlc
+        return daily_ohlc(ticker, period=f"{days}d")
 
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def four_hour(ticker: str) -> pd.DataFrame:
-        from src.db.market_cache import cached_ohlc
-        try:
-            end = datetime.now(pytz.utc)
-            start = end - timedelta(days=90)
-            df = cached_ohlc(ticker, start=start, end=end, interval="1h", ttl=300)
-            if df.empty:
-                return pd.DataFrame()
-            df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-            return df.resample("4h").agg({
-                "Open": "first", "High": "max", "Low": "min",
-                "Close": "last", "Volume": "sum",
-            }).dropna()
-        except Exception:
-            return pd.DataFrame()
+        from src.services.market_data import h4_ohlc
+        return h4_ohlc(ticker)
 
     @staticmethod
     @st.cache_data(ttl=300, show_spinner=False)
     def weekly(ticker: str) -> pd.DataFrame:
-        from src.db.market_cache import cached_ohlc
-        try:
-            df = cached_ohlc(ticker, period="2y", interval="1d", ttl=300)
-            if df.empty:
-                return pd.DataFrame()
-            df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-            return df.resample("W").agg({
-                "Open": "first", "High": "max", "Low": "min",
-                "Close": "last", "Volume": "sum",
-            }).dropna()
-        except Exception:
-            return pd.DataFrame()
+        from src.services.market_data import weekly_ohlc
+        return weekly_ohlc(ticker)
 
     @staticmethod
     def currency_strength_diff(pair: str) -> Optional[float]:

@@ -80,41 +80,10 @@ span[data-baseweb="tag"] svg{ fill:#000000 !important; }
 # ─────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_4h_data(ticker: str, days: int = 90) -> pd.DataFrame:
-    from src.db.market_cache import cached_ohlc
-    end = datetime.now(pytz.utc)
-    start = end - timedelta(days=days)
-
-    df = cached_ohlc(ticker, start=start, end=end, interval="1h", ttl=300)
-
-    if df.empty:
-        return df
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    required_columns = {"Open", "High", "Low", "Close", "Volume"}
-    missing_columns = required_columns.difference(df.columns)
-
-    if missing_columns:
-        return pd.DataFrame()
-
-    df = df.dropna(subset=["Open", "High", "Low", "Close"])
-
-    df_4h = (
-        df.resample("4h")
-        .agg(
-            {
-                "Open": "first",
-                "High": "max",
-                "Low": "min",
-                "Close": "last",
-                "Volume": "sum",
-            }
-        )
-        .dropna(subset=["Open", "High", "Low", "Close"])
-    )
-
-    return df_4h
+    # Canonical spine: hourly bars resampled to 4H — the same bars the Setup
+    # Ranker / checklist see, so this page can't drift from them.
+    from src.services.market_data import h4_ohlc
+    return h4_ohlc(ticker, days=days)
 
 
 def calc_ema(series: pd.Series, period: int) -> pd.Series:
@@ -516,6 +485,11 @@ with tab_detail:
             detail_ok = False
 
     if detail_ok:
+        # Shared house view — direction context for this non-directional
+        # zone tool (its signals persist as bias='Neutral').
+        from src.services.bias_service import show_house_view
+        show_house_view(selected_pair, page_label="4H Confluence")
+
         # ── Indicators ───────────────────────────
         df["EMA_short"] = calc_ema(df["Close"], int(ema_short))
         df["EMA_mid"]   = calc_ema(df["Close"], int(ema_mid))

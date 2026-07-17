@@ -242,6 +242,81 @@ class HeroHeader(_HTMLWidget):
         )
 
 
+# ── House-view strip ───────────────────────────────────────────────────────
+
+@dataclass
+class HouseViewStrip(_HTMLWidget):
+    """The shared "house view" banner every signal page shows for its focus
+    pair — one canonical Weekly/Daily/4H read (src/core/bias.py) so pages can
+    never silently contradict each other. ``page_read`` is this page's own
+    headline direction in its own vocabulary; when it opposes the house view
+    the strip flags the conflict.
+    """
+    view: object                       # src.core.bias.HouseView
+    page_read: Optional[str] = None
+    page_label: str = "This page"
+
+    _COLOR = {"BULLISH": T.GREEN, "BEARISH": T.RED, "NEUTRAL": T.YELLOW}
+    _ARROW = {"BULLISH": "▲", "BEARISH": "▼", "NEUTRAL": "—"}
+
+    def render(self) -> str:
+        from src.core.bias import is_conflict
+
+        v = self.view
+        color = self._COLOR.get(v.direction, T.YELLOW)
+        arrow = self._ARROW.get(v.direction, "—")
+
+        tf_bits = []
+        for name in ("Weekly", "Daily", "4H"):
+            tf = v.timeframe(name)
+            if tf is None:
+                tf_bits.append(
+                    f'<span style="color:{T.GREY};">{name} ·</span>'
+                )
+            else:
+                c = self._COLOR.get(tf.direction, T.YELLOW)
+                a = self._ARROW.get(tf.direction, "—")
+                tf_bits.append(
+                    f'<span style="color:{T.GREY};">{name}</span> '
+                    f'<span style="color:{c};font-weight:700;">{a}</span>'
+                )
+        tfs = ' <span style="color:{sep};">·</span> '.format(sep=T.BORDER).join(tf_bits)
+
+        asof = v.asof
+        asof_txt = (f"data as of {asof.strftime('%Y-%m-%d %H:%M')} UTC"
+                    if asof is not None else "no data")
+        aligned_txt = (
+            f'<span style="color:{T.GREEN};">ALL TF ALIGNED</span>'
+            if v.aligned else ""
+        )
+
+        conflict_html = ""
+        if self.page_read is not None and is_conflict(v.direction, self.page_read):
+            conflict_html = (
+                f'<span style="color:{T.RED};font-weight:700;border:1px solid {T.RED};'
+                f'padding:1px 8px;margin-left:10px;">'
+                f'⚠ {self.page_label} reads {self.page_read} — opposes house view</span>'
+            )
+
+        return (
+            f'<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;'
+            f'border:1px solid {T.BORDER};background:{T.BG};'
+            f'padding:7px 14px;margin-bottom:12px;font-size:12px;'
+            f'letter-spacing:.04em;">'
+            f'<span style="color:{T.GREY};font-weight:600;">HOUSE VIEW</span>'
+            f'<span style="color:{T.WHITE};font-weight:700;">{v.pair}</span>'
+            f'<span style="color:{color};font-weight:800;">{arrow} {v.direction}</span>'
+            f'<span style="color:{T.GREY};">score {v.score:+.2f}</span>'
+            f'<span style="color:{T.BORDER};">│</span>'
+            f'{tfs}'
+            f'{aligned_txt}'
+            f'<span style="color:{T.BORDER};">│</span>'
+            f'<span style="color:{T.GREY};">{asof_txt}</span>'
+            f'{conflict_html}'
+            f'</div>'
+        )
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def render_metric_row(cells: Iterable[MetricCell]) -> None:

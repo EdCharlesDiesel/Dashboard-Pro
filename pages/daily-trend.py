@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import yfinance as yf
 from datetime import datetime
 
 st.set_page_config(
@@ -110,15 +109,11 @@ def crossover_bars_ago(e20: pd.Series, e50: pd.Series) -> int | None:
 # ── Fetch ──────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily_trend(ticker: str, pip_size: float, days: int = 300):
-    from src.db.market_cache import cached_ohlc
+    from src.services.market_data import daily_ohlc
     try:
-        df = cached_ohlc(ticker, period=f"{days}d", interval="1d", ttl=300)
+        df = daily_ohlc(ticker, period=f"{days}d")
         if df.empty or len(df) < 55:
             return None
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [c[0] for c in df.columns]
-
-        df = df[["Open","High","Low","Close","Volume"]].dropna(subset=["Close"])
 
         for p in ALL_EMAS:
             df[f"ema{p}"] = ema_series(df["Close"], p)
@@ -312,6 +307,14 @@ persist_signals("daily_trend", [{
     "thesis": (f"Daily Trend — EMA20 {'>' if loaded[p]['trend_bull'] else '<'} EMA50, "
                f"gap {loaded[p]['gap_pips']}p"),
 } for p in intact])
+
+# Shared house view for the focus pair — flags when this page's EMA20/50 lens
+# opposes the canonical Weekly/Daily/4H read.
+from src.services.bias_service import show_house_view
+_focus = loaded.get(focus_pair)
+show_house_view(focus_pair,
+                page_read=("Long" if _focus["trend_bull"] else "Short") if _focus else None,
+                page_label="Daily Trend")
 
 # ══════════════════════════════════════════════════════════════════
 # HERO
