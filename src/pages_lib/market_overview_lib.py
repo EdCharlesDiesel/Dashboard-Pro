@@ -467,6 +467,41 @@ def render_overview_tab(daily_data: Dict):
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
+def _persist_house_view_snapshot(views: Dict) -> None:
+    """Journal the consensus board to Postgres (``tool_usage_log``, tool
+    ``'house_view'``) so reports can query what the board said historically —
+    the live computation alone leaves no record. One row per pair per day per
+    direction (NotifyCache dedupe, so Streamlit reruns don't spam rows but a
+    genuine same-day flip IS recorded). Best-effort: DB down → silent no-op
+    without consuming the dedupe ledger."""
+    from src.services.alert_service import NotifyCache
+    from src.services.tool_log import log_tool_usage
+
+    cache = NotifyCache("house_view_snapshot")
+    seen = cache.load()
+    today = datetime.now().strftime("%Y-%m-%d")
+    logged = []
+    for pair, view in views.items():
+        if view is None or not view.timeframes:
+            continue
+        key = f"{pair}|{today}|{view.direction}"
+        if key in seen:
+            continue
+        payload = {
+            "pair": pair,
+            "date": today,
+            "direction": view.direction,
+            "score": round(view.score, 3),
+            "aligned": bool(view.aligned),
+            "timeframes": {tf.timeframe: tf.direction for tf in view.timeframes},
+            "asof": str(view.asof) if view.asof is not None else None,
+        }
+        if log_tool_usage("house_view", payload):
+            logged.append(key)
+    if logged:
+        cache.add(logged)
+
+
 def render_mtf_matrix_tab(data_by_timeframe: Dict):
     import streamlit as st
     st.subheader("🧭 Multi-Timeframe Matrix — House View Consensus")
@@ -482,12 +517,14 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
     _WORD = {"BULLISH": "▲ Bullish", "BEARISH": "▼ Bearish", "NEUTRAL": "— Neutral"}
 
     rows = []
+    views = {}
     latest_asof = None
     prog = st.progress(0, text="Computing house views…")
     pairs = list(INSTRUMENTS.keys())
     for i, pair in enumerate(pairs):
         prog.progress((i + 1) / len(pairs), text=f"House view — {pair}…")
         view = get_house_view(pair)
+        views[pair] = view
         if view is None or not view.timeframes:
             rows.append({"Pair": pair, "House": "N/A", "Score": None,
                          "Weekly": "N/A", "Daily": "N/A", "4H": "N/A",
@@ -519,6 +556,8 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
     st.table(mtf_df.style.map(color_sentiment))
     if latest_asof is not None:
         st.caption(f"data as of {latest_asof.strftime('%Y-%m-%d %H:%M')} UTC")
+
+    _persist_house_view_snapshot(views)
 
     # ── Legacy market-overview sentiment (secondary lens, not the house view) ──
     with st.expander("Market Overview sentiment lens (candle/indicator based — "

@@ -33,7 +33,10 @@ class NavEntry:
 # the single source of truth for both the sidebar and README/System_Guide's
 # walkthroughs — keep those in sync when reordering.
 #
-#   Morning Brief   — 5 min, sets bias, no decisions.
+#   Morning Brief   — 5 min, sets bias, no decisions. MTF Matrix leads: it is
+#                     the house-view consensus board (src/core/bias.py) — the
+#                     canonical direction every other page anchors to — so the
+#                     day starts by reading the board, not by scanning.
 #   Pre-Session     — build the shortlist: Setup Ranker (primary scan) +
 #                     Trend Signals (confirm/deny the top picks) + Currency
 #                     Strength/Correlations (kill conflicted exposure) +
@@ -45,7 +48,7 @@ class NavEntry:
 #   Weekend         — weekly-bias tools (EMA/Swing/Playbook) + the full COT
 #                     suite; having them in the daily path just adds scroll.
 #   Research Lab    — everything else: the other directional scanners (AMD,
-#                     MTF Matrix, 20-Day Breakout — one primary + one
+#                     20-Day Breakout — one primary + one
 #                     confirmer earns the daily-path slot, not all five;
 #                     revisit once there's enough journaled history to know
 #                     which one actually earns it), Daily Trend/MACD/Market
@@ -57,6 +60,7 @@ class NavEntry:
 #   Reference       — System Guide, ABR Toolkit, the 18-point Daily Checklist.
 NAV_SECTIONS: List[tuple] = [
     ("🌅 MORNING BRIEF", [
+        NavEntry("MTFX", "MTF Matrix (House View)", "🧭", "pages/mtf-matrix.py"),
         NavEntry("DCKP", "Daily Cockpit",   "🛫", "pages/daily_cockpit_tab.py"),
         NavEntry("OVRV", "Market Overview", "📊", "pages/market-overview.py"),
         NavEntry("NEWS", "News Filter",     "📰", "pages/news-filter.py"),
@@ -88,7 +92,6 @@ NAV_SECTIONS: List[tuple] = [
     ]),
     ("🔬 RESEARCH LAB — on demand, never mid-session", [
         NavEntry("AMD",  "AMD Scanner",           "📊", "pages/amd-scanner.py"),
-        NavEntry("MTFX", "MTF Matrix",            "🧭", "pages/mtf-matrix.py"),
         NavEntry("20DB", "20-Day Breakout",       "🚀", "pages/twenty_day_breakout_tab.py"),
         NavEntry("CMEF", "CME FX Futures",        "📦", "pages/cme-futures-volume.py"),
         NavEntry("PRED", "Predictive Analytics",  "💱", "pages/predictive.py"),
