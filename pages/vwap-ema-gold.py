@@ -317,6 +317,14 @@ signals = identify_entry_signals(df)
 trades, equity_curve = backtest_strategy(df, signals)
 metrics, df_trades = calculate_metrics(trades, equity_curve)
 
+# Shared house view for gold — flags when this page's VWAP/EMA pullback lens
+# opposes the canonical Weekly/Daily/4H read.
+from src.services.bias_service import show_house_view
+_live = signals[-1] if signals and signals[-1][1] >= len(df) - 2 else None
+show_house_view("XAU/USD",
+                page_read=("Long" if _live[0] == "LONG" else "Short") if _live else None,
+                page_label="VWAP-EMA Gold")
+
 # Persist only a signal firing on the latest bar (a current, actionable read) —
 # the rest of `signals` are historical entries for the backtest. source='vwap_ema_gold'.
 if signals and signals[-1][1] >= len(df) - 2:

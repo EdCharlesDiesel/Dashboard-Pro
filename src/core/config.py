@@ -39,6 +39,20 @@ class AppConfig:
     stoch_os: float = 25.0
     stoch_ob: float = 75.0
 
+    # ── Canonical lens parameters ────────────────────────────────────────────
+    # The cross-page sync contract: page sliders DEFAULT to these values, and a
+    # deviation is labelled a "custom lens" (src/ui/components.py lens_caption).
+    # src/core/bias.py derives its EMA pair from here — edit these, and the
+    # house view, score_setup's trend criteria, and every page's defaults move
+    # together instead of drifting page by page.
+    ema_fast: int = 20      # canonical trend pair (bias engine, daily/weekly trend)
+    ema_slow: int = 50
+    ema_long: int = 200     # long-trend lens (TrendSignalEvaluator, 4H zone pages)
+    macd_fast: int = 12
+    macd_slow: int = 26
+    macd_signal: int = 9
+    swing_strength: int = 3  # pivot bars each side (market-structure, swing pages)
+
     # Keyed to every instrument in the registry (registry order). Existing
     # values are unchanged; the additional pairs/metals follow the same scale.
     pair_atr_multipliers: Dict[str, float] = field(default_factory=lambda: {

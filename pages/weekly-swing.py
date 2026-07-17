@@ -537,8 +537,14 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📆 Daily Settings**")
-    daily_fast = st.number_input("Daily EMA Fast", value=20, min_value=5, max_value=100)
-    daily_slow = st.number_input("Daily EMA Slow", value=50, min_value=10, max_value=200)
+    from src.core.config import default_config as _cfg
+    from src.ui.components import lens_caption
+    daily_fast = st.number_input("Daily EMA Fast", value=_cfg.ema_fast,
+                                 min_value=5, max_value=100)
+    daily_slow = st.number_input("Daily EMA Slow", value=_cfg.ema_slow,
+                                 min_value=10, max_value=200)
+    lens_caption({"EMA fast": _cfg.ema_fast, "EMA slow": _cfg.ema_slow},
+                 {"EMA fast": daily_fast, "EMA slow": daily_slow})
     daily_n = st.slider("Daily candles shown", 30, 180, 90, step=15)
 
     st.divider()

@@ -156,7 +156,8 @@
       "Bash(PYTHONPATH=. PYTHONIOENCODING=utf-8 python *)",
       "Bash(./.venv/Scripts/python.exe -m py_compile src/services/market_data.py src/core/bias.py src/services/bias_service.py src/ui/components.py src/pages_lib/setup_ranker.py src/pages_lib/daily_trading/trend.py pages/weekly-ema.py pages/daily-trend.py pages/weekly-swing.py pages/daily-macd.py pages/forecast_tab.py pages/market-structure.py pages/4H-confluence-zone.py pages/confluence-checker.py)",
       "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest -q)",
-      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -)"
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/core/config.py src/core/bias.py src/ui/components.py src/pages_lib/market_overview_lib.py src/pages_lib/dxy_gold.py src/pages_lib/instrument_predictor.py pages/vwap-ema-gold.py pages/predictive.py pages/twenty_day_breakout_tab.py pages/amd-scanner.py pages/daily_cockpit_tab.py pages/weekly-swing.py pages/market-structure.py pages/daily-macd.py pages/4H-confluence-zone.py pages/confluence-checker.py)"
     ]
   }
 }

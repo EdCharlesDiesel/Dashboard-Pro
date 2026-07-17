@@ -20,14 +20,17 @@ from typing import Dict, Optional, Tuple
 
 import pandas as pd
 
+from src.core.config import default_config as _config
 from src.indicators.technical import TechnicalIndicators
 
 BULLISH = "BULLISH"
 BEARISH = "BEARISH"
 NEUTRAL = "NEUTRAL"
 
-EMA_FAST = 20
-EMA_SLOW = 50
+# Derived from the canonical lens parameters (src/core/config.py) — one home
+# for the numbers, so sliders, score_setup and the house view move together.
+EMA_FAST = _config.ema_fast
+EMA_SLOW = _config.ema_slow
 
 # Higher timeframes carry more weight in the composite (weekly bias is the
 # regime; 4H is timing). Renormalized over the *available* timeframes so a

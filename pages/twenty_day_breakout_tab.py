@@ -262,6 +262,15 @@ def render():
         from src.services.signal_store import persist_signals
         from src.instruments import INSTRUMENTS
         _name = next((n for n, i in INSTRUMENTS.items() if i.ticker == ticker), ticker)
+
+        # Shared house view — flags when the latest OPEN setup's direction
+        # opposes the canonical Weekly/Daily/4H read (registry pairs only).
+        from src.services.bias_service import show_house_view
+        _open = [s for s in setups if s.get("outcome") == "open"]
+        show_house_view(
+            _name,
+            page_read=("Long" if _open[-1]["side"] == "long" else "Short") if _open else None,
+            page_label="20-Day Breakout")
         persist_signals("twenty_day_breakout", [{
             "pair": _name,
             "bias": "Long" if s["side"] == "long" else "Short",
