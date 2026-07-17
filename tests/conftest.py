@@ -36,6 +36,28 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_slow)
 
 
+# ── live-DB isolation ─────────────────────────────────────────────────────────
+# The fast suite must never reach a real Postgres — but every DB-optional code
+# path (NotifyCache mirroring, tool_log, signal_store, market_cache) resolves
+# its target from .streamlit/secrets.toml, and a developer machine may carry
+# LIVE credentials there. Force the secrets-based resolution to "unconfigured"
+# (empty password → _resolve_cfg() → None) for every test; tests that need a
+# DBConfig construct one explicitly or monkeypatch their own, which overrides
+# this autouse patch. Slow AppTest smoke runs (--runslow) are exempt — they
+# exercise the real app on purpose.
+@pytest.fixture(autouse=True)
+def _no_live_db(request, monkeypatch):
+    if "slow" in request.keywords:
+        yield
+        return
+    from src.core import secrets as _secrets
+    monkeypatch.setattr(_secrets, "db_config", lambda: {
+        "host": "localhost", "port": 5432, "dbname": "trading",
+        "user": "postgres", "password": "",
+    })
+    yield
+
+
 def _ohlc_from_close(close: "list[float] | np.ndarray") -> pd.DataFrame:
     """Wrap a close-price array in a minimal OHLCV frame.
 

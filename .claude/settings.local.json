@@ -164,7 +164,13 @@
       "Bash(./.venv/Scripts/python.exe -m py_compile src/services/house_view_backtest.py pages/mtf-matrix.py tests/test_house_view_backtest.py)",
       "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe docs/generate_guide_pdf.py)",
       "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/navigation.py)",
-      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/market_overview_lib.py)"
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/market_overview_lib.py)",
+      "Bash(./.venv/Scripts/python.exe \"C:\\\\Users\\\\KMOKHE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--x-Practice-Dashboard-Pro\\\\f26ce1a0-e5a4-4537-ba03-660f51888f1a\\\\scratchpad\\\\db_diag.py\")",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/daily_trading/checklist.py)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_notify_cache.py::TestConcurrency::test_concurrent_add_loses_no_keys --no-cov -q)",
+      "Bash(./.venv/Scripts/python.exe \"C:\\\\Users\\\\KMOKHE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--x-Practice-Dashboard-Pro\\\\f26ce1a0-e5a4-4537-ba03-660f51888f1a\\\\scratchpad\\\\clean_test_key.py\")",
+      "Bash(./.venv/Scripts/python.exe -c \"import anthropic; print\\('anthropic', anthropic.__version__\\)\")",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/setup_ranker.py)"
     ]
   }
 }

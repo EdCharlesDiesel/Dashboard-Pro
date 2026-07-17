@@ -5,6 +5,7 @@ from the original `pages/setup-ranker.py`; only presentation is refactored.
 """
 from __future__ import annotations
 
+import html as _html
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
@@ -95,6 +96,74 @@ def risk_deviates(mb: dict, tolerance: float = 0.10) -> bool:
     if not target or actual is None:
         return False
     return abs(actual - target) / target > tolerance
+
+
+# ── "Why this trade" rationale (same pattern as pages/forecast_tab.py) ────
+
+def trade_rationale_template(r: dict, lv: dict, rr_ratio: float) -> str:
+    """Deterministic 'why this trade' facts built from the scored criteria —
+    the source of truth the optional Claude polish must preserve verbatim.
+    Pure: no Streamlit, no network."""
+    scores = r.get("scores", {})
+    passed = [k for k, v in scores.items() if v and k not in _QUALITY_CRITERIA]
+    failed = [k for k, v in scores.items() if not v and k not in _QUALITY_CRITERIA]
+    q_fail = [k for k, v in scores.items() if not v and k in _QUALITY_CRITERIA]
+
+    parts = [
+        f"{r['pair']} {r['direction']} ranks Grade {r['grade']} with "
+        f"{r['score']}/{r.get('max_score', 7)} direction criteria met "
+        f"({r.get('pct', 0):.0f}%)."
+    ]
+    if passed:
+        parts.append("In favour: " + "; ".join(passed) + ".")
+    if failed:
+        parts.append("Missing: " + "; ".join(failed) + ".")
+    parts.append(
+        f"Tradeability gate {r.get('quality_score', 0)}/{r.get('quality_max', 3)}"
+        + (f" — fails {', '.join(q_fail)}." if q_fail else " — all clear.")
+    )
+    if lv.get("sl_price") is not None and lv.get("tp_price") is not None:
+        parts.append(
+            f"Plan: entry {fmt_price(r['close'])}, stop {fmt_price(lv['sl_price'])} "
+            f"({r.get('sl_pips')}p), target {fmt_price(lv['tp_price'])} at "
+            f"{rr_ratio:.1f}R."
+        )
+    spread = r.get("spread_pct")
+    if spread is not None:
+        parts.append(f"Spread is {spread:.1f}% of ATR.")
+    return " ".join(parts)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def polished_rationale(template: str) -> Optional[str]:
+    """Optional Claude API polish of the rationale facts (fail soft to the
+    template — same contract as forecast_tab.polished_narrative). Cached for
+    an hour keyed on the template text, so Streamlit reruns and unchanged
+    setups never re-bill the API."""
+    from src.core.secrets import anthropic_api_key
+    key = anthropic_api_key()
+    if not key:
+        return None
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=key)
+        msg = client.messages.create(
+            model="claude-opus-4-8",
+            max_tokens=300,
+            system=(
+                "You are a forex desk analyst. Rewrite the given checklist "
+                "facts as one short flowing paragraph explaining why this "
+                "setup ranks where it does — lead with the strongest "
+                "evidence, be honest about what's missing, keep every "
+                "number, level and criterion exactly as given, add no new "
+                "data and no financial advice."
+            ),
+            messages=[{"role": "user", "content": template}],
+        )
+        text = "".join(b.text for b in msg.content if b.type == "text").strip()
+        return text or None
+    except Exception:
+        return None
 
 
 # ── Data fetchers (preserved from original) ───────────────────────────────
@@ -1130,6 +1199,22 @@ class SetupRankerPage(BloombergPage):
                     f'<div style="margin-top:4px;font-size:10px;'
                     f'font-family:\'JetBrains Mono\',monospace;color:{cockpit_color};">'
                     f'{cockpit_txt}</div>'
+                )
+            # "Why this trade" — deterministic facts for the actionable grades;
+            # Grade A additionally gets the Claude-polished analyst paragraph
+            # (fail-soft to the template, cached — see polished_rationale).
+            if r["grade"] in ("A", "B"):
+                rationale = trade_rationale_template(r, lv, rr_ratio)
+                polished = polished_rationale(rationale) if r["grade"] == "A" else None
+                via = (f' <span style="color:{T.GREY};font-size:9px;">✦ Claude</span>'
+                       if polished else "")
+                body += (
+                    f'<div style="margin-top:8px;padding:6px 10px;'
+                    f'border-left:2px solid {color};color:{T.WHITE};'
+                    f'font-size:11px;line-height:1.5;">'
+                    f'<span style="color:{T.GREY};font-size:9px;'
+                    f'letter-spacing:0.1em;">WHY THIS TRADE</span>{via}<br>'
+                    f'{_html.escape(polished or rationale)}</div>'
                 )
             Panel(
                 title=f"{r['pair']} · {r['direction']}",

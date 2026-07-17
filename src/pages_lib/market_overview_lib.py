@@ -526,9 +526,9 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
         view = get_house_view(pair)
         views[pair] = view
         if view is None or not view.timeframes:
-            rows.append({"Pair": pair, "House": "N/A", "Score": None,
-                         "Weekly": "N/A", "Daily": "N/A", "4H": "N/A",
-                         "Aligned": ""})
+            rows.append({"Pair": pair, "Score": None, "Aligned": "",
+                         "House": "N/A", "Weekly": "N/A", "Daily": "N/A",
+                         "4H": "N/A"})
             continue
         if view.asof is not None and (latest_asof is None or view.asof > latest_asof):
             latest_asof = view.asof
@@ -536,12 +536,14 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
         for name in ("Weekly", "Daily", "4H"):
             tf = view.timeframe(name)
             tf_cell[name] = _WORD.get(tf.direction, "N/A") if tf else "N/A"
+        # Column order (user preference): Score first, next to Aligned; then
+        # House and the three timeframes grouped together.
         rows.append({
             "Pair": pair,
-            "House": _WORD.get(view.direction, "N/A"),
             "Score": round(view.score, 2),
-            **tf_cell,
             "Aligned": "✅" if view.aligned else "",
+            "House": _WORD.get(view.direction, "N/A"),
+            **tf_cell,
         })
     prog.empty()
 
