@@ -78,6 +78,15 @@ class ChecklistController:
             side=direction,
         ).show()
 
+        # ── Shared house view for the selected instrument ─────────────────
+        # The routine starts at the MTF Matrix consensus board; the master
+        # checklist shows the same canonical read inline and flags a trade
+        # direction that opposes it.
+        from src.services.bias_service import show_house_view
+        show_house_view(inst_name,
+                        page_read="Long" if direction == "LONG" else "Short",
+                        page_label="Checklist direction")
+
         # ── Command bar (account snapshot) ────────────────────────────────
         CommandBar(
             label="ACCT",
@@ -229,20 +238,23 @@ class ChecklistController:
             "Fetch ATR data from sidebar"
         )
 
-        # Section headers and the per-check OPEN ▸ deep-links are kept in sync
-        # with the 8-step workflow in src/pages_lib/navigation.py — every check
-        # that has a matching nav page links to it, and the section names mirror
-        # the nav step labels. The check numbers (1–18) are unchanged: they are
-        # already in workflow order, so CRITICAL_CHECKS (11–16), the radar and
-        # autofill indices stay valid.
+        # Section headers and the per-check OPEN ▸ deep-links mirror the daily
+        # routine in src/pages_lib/navigation.py (Morning Brief → Weekend bias
+        # → Pre-Session → Session) — every check that has a live nav page links
+        # to it. The check numbers (1–18) are unchanged: they are already in
+        # workflow order, so CRITICAL_CHECKS (11–16), the radar and autofill
+        # indices stay valid. Dead links to archived/merged pages (Macro Bias,
+        # Stop Structure, R:R Calculator) were remapped to their living homes
+        # (Daily Cockpit / MTF Matrix, Risk Suite).
         def link(slug: str, label: str = "OPEN ▸") -> str:
             return (f" · <a href='/{slug}' target='_self' "
                     f"style='color:#00e0ff;'>{label}</a>")
 
         sections = [
-            ("2 · FILTER THE DAY", [
-                (1, "Macro bias confirmed",
-                 "Rates, GDP, inflation favour direction"),
+            ("🌅 MORNING BRIEF — house view & day filter", [
+                (1, "House view & macro bias confirmed",
+                 "MTF Matrix house view + Cockpit rate bias/regime favour direction"
+                 + link("mtf-matrix", "HOUSE ▸") + link("daily_cockpit_tab", "COCKPIT ▸")),
                 (2, "No red-folder news",
                  "No high-impact news within 1 hour" + link("news-filter")
                  + link("surprise_tab", "GATE ▸")),
@@ -250,7 +262,7 @@ class ChecklistController:
                  f"Expected: {inst['corr']}" + link("correlations")),
                 (4, "ATR above 20-period avg", atr_hint),
             ]),
-            ("3 · WEEKLY BIAS", [
+            ("📅 WEEKLY BIAS — weekend homework", [
                 (5, "Weekly EMA aligned",
                  "Weekly EMA direction matches trade direction" + link("weekly-ema")),
                 (6, "Weekly RSI has room",
@@ -258,7 +270,7 @@ class ChecklistController:
                 (7, "Weekly Swing aligned",
                  "Daily confirmation shows aligned" + link("weekly-swing")),
             ]),
-            ("4 · DAILY CONFIRM", [
+            ("📋 PRE-SESSION — daily confirm", [
                 (8, "Daily trend intact",
                  "EMA20 > EMA50 for longs / inverse for shorts" + link("daily-trend")),
                 (9, "Daily MACD momentum",
@@ -266,24 +278,24 @@ class ChecklistController:
                 (10, "Entry in kill zone",
                  f"NOW: {sess['icon']} {sess['window']} ({sess['time']}) — {sess['desc']}"),
             ]),
-            ("5 · 4H ZONE", [
+            ("📋 PRE-SESSION — 4H zone (final gate)", [
                 (11, "Price at 4H zone",
                  "Overlap of Fib + Pivot + EMA on 4H" + link("4H-confluence-zone")),
                 (12, "Min 2/3 confluence",
                  "≥2 of 3 elements confirmed" + link("confluence-checker")),
             ]),
-            ("6 · 15M TRIGGER", [
+            ("⚡ SESSION — 15M trigger", [
                 (13, "15M rejection",
                  "Rejection into the 15M fib golden zone" + link("15m-fib-entry")),
                 (14, "15M entry fired",
                  "Confirmed fib golden-zone entry" + link("15m-fib-entry")),
             ]),
-            ("7 · RISK & EXECUTE", [
+            ("⚡ SESSION — risk & execute", [
                 (15, "Stop below/above structure",
-                 f"SL = {sl_pips} pips (1.5×ATR14)" + link("stop-structure")),
+                 f"SL = {sl_pips} pips (1.5×ATR14)" + link("risk-suite")),
                 (16, "R:R ≥ 2:1 to TP1",
                  f"TP1 = {tp1_pips} pips → R:R {risk.rr_tp1:.2f}:1 "
-                 f"{'✓' if risk.rr_tp1 >= 2 else '✗'}" + link("rr-calculator")),
+                 f"{'✓' if risk.rr_tp1 >= 2 else '✗'}" + link("risk-suite")),
                 (17, "Partial TP + BE rule set",
                  f"50% close TP1 → SL to BE; runner trails to TP2"),
                 (18, "Position within limit",
