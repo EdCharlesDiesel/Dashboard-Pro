@@ -52,16 +52,49 @@ demand, never mid-session):
 | 🔬 Research Lab | On demand | The other scanners, deeper single-timeframe analysis, stat-arb research, backtests — visited when building or validating, never during a session |
 | 📖 Reference | As needed | System Guide, ABR Toolkit, the 18-point Daily Checklist |
 
-Of the five scanners that produce directional opinions (Setup Ranker, AMD
-Scanner, Trend Signals, 20-Day Breakout, MTF Matrix), only **Setup Ranker**
-(primary) and **Trend Signals** (confirmer) hold a Pre-Session slot — the
-other three live in Research Lab until there's enough journaled history to
-know which one actually earns a slot. **Daily Trend / Daily MACD / Market
-Structure** do more analysis than the Setup Ranker's checklist booleans
-(histogram momentum, EMA100/200 stack + slope, CHoCH/BOS) so they're kept as
-full pages in Research Lab, not folded into the Ranker. **Stop Structure, R:R
-Calculator, and Account Risk** were one decision spread across three pages —
-merged into one **Risk Suite** page (three tabs) in the Session section.
+**MTF Matrix leads the Morning Brief** (moved from Research Lab, 2026-07): it
+is now the **house-view consensus board**, not another scanner opinion — see
+the subsection below. Of the remaining scanners that produce directional
+opinions (Setup Ranker, AMD Scanner, Trend Signals, 20-Day Breakout), only
+**Setup Ranker** (primary) and **Trend Signals** (confirmer) hold a
+Pre-Session slot — the others live in Research Lab until the Trade Journal's
+Source Scorecard shows which one actually earns a slot. **Daily Trend / Daily
+MACD / Market Structure** do more analysis than the Setup Ranker's checklist
+booleans (histogram momentum, EMA100/200 stack + slope, CHoCH/BOS) so they're
+kept as full pages in Research Lab, not folded into the Ranker. **Stop
+Structure, R:R Calculator, and Account Risk** were one decision spread across
+three pages — merged into one **Risk Suite** page (three tabs) in the Session
+section.
+
+### The house view — one canonical direction (2026-07)
+
+Pages used to each define "trend" their own way on their own private data
+windows, so the same pair could read BUY on one page and SELL on the next.
+The sync architecture removes that:
+
+- **One data spine** (`src/services/market_data.py`) — every page fetches
+  OHLC through the same canonical windows (weekly = 2y of daily bars
+  resampled, daily = 300d, 4H = 90d of hourly resampled).
+- **One bias engine** (`src/core/bias.py`) — per timeframe, three unanimous
+  votes (EMA20 vs EMA50, price vs each) give BULLISH / BEARISH / NEUTRAL; a
+  Weekly-weighted composite (Weekly 3, Daily 2, 4H 1) is the instrument's
+  **house view**.
+- **The strip** — every directional page shows the house view for its focus
+  pair and flags in red when its own lens opposes it. A page's read is a
+  *lens*; the house view is the reference. Market Overview's trading ideas
+  and the Daily Cockpit's aligned ideas carry the same conflict flag inline.
+- **One parameter home** — indicator defaults (EMA 20/50/200, MACD 12/26/9,
+  swing strength) live on `AppConfig`; sliders default from them and label
+  any deviation a "custom lens".
+
+**What the house view is NOT:** an entry signal. The walk-forward Validation
+tab on MTF Matrix (no-lookahead, unit-test-proven equivalent to the live
+engine) showed on its first 5-year run (EUR/USD, XAU/USD, WTI/USD) that hit
+rates sat below 50% and trend-alignment was actively harmful on oil. Use it
+as the consistency/regime filter it is — it keeps the pages (and you) from
+contradicting each other and keeps you out of counter-trend trades in
+trending instruments; the edge must come from the setup layer (location,
+trigger, risk management).
 
 ---
 
@@ -86,7 +119,7 @@ look. Run these, don't act on any of them alone.
 | **🎰 Setup Ranker** | The multi-timeframe checklist (`src/core/signals.score_setup`) run for every registry pair, both LONG and SHORT: 10 technical criteria (weekly EMA alignment, weekly RSI room, weekly/daily/4H structure, daily EMA/MACD, ATR expansion, 4H confluence-zone proximity, spread/ATR ratio), plus an 11th **Currency Strength** criterion for FX pairs (20-day base-vs-quote return differential; commodities have no single driving currency and stay on the 10-point scale — the "Min score" filter and email threshold are both applied as a percentage of whichever scale a pair is on, not a raw count). | Auto-refreshes every 5 min. **70%+ = today's candidates; 90%+ fires an email alert.** The grade (A–D) is the score bucketed as a percentage — grade A is ≥80%. |
 | **📊 AMD Scanner** | Accumulation / Manipulation / Distribution phases on 1H bars over the current trading week, with a true-range activity proxy substituting for spot FX's meaningless zero-volume data. | Tells you whether a pair is still ranging (Accumulation), about to fake out (Manipulation), or already trending (Distribution) — context for *when* in the AMD cycle a breakout is more or less likely to hold. |
 | **📡 Trend Signals** | The 6-condition trend scorer (`TrendSignalEvaluator`): price vs 200 EMA, 50/200 EMA cross, price vs 50 EMA, RSI band, MACD vs signal, ADX > 25. | ≥4/6 conditions = BUY/SELL; ≥5/6 = STRONG BUY/SELL. This is the same evaluator the new Instrument Predictor (Section 8) uses as one of its four votes. |
-| **🧭 MTF Matrix** | A grid of the trend read across multiple timeframes at once for every pair. | Look for a pair where several timeframes agree — that's alignment, the opposite of "conflicting timeframes," which is a checklist fail. |
+| **🧭 MTF Matrix** (now first in Morning Brief) | The **house-view consensus board**: the canonical Weekly/Daily/4H direction (`src/core/bias.py`) for every registry pair — composite score, per-timeframe arrows, ALIGNED flag — plus a **🧪 Validation** tab that walk-forward-backtests the house view with no lookahead. The legacy candle-sentiment grid survives in an expander as a secondary lens. | Start the day here. ALIGNED rows are where every timeframe agrees; contested rows are the market telling you there's no trend trade. Remember the validation finding: this is a consistency/regime filter, not an entry signal. |
 | **🚀 20-Day Breakout** | Donchian-style: is price making a new 20-day high/low? | A breakout candidate list. Cross-reference with AMD (is this leaving Accumulation?) before trusting it. |
 | **📦 CME FX Futures** | Real, exchange-reported volume via CME currency futures (`6E=F`, `6B=F`, …) — OBV/CMF that actually mean something, unlike on zero-volume spot pairs. | Volume confirming a move (OBV rising with price) is a stronger read than price alone; volume divergence is a warning. |
 | **💱 Predictive Analytics** | A standalone statistical/ML directional read (price vs SMA-style) per pair. | A single model's opinion — treat it as one more vote, not the final word. (Don't confuse this with the Instrument Predictor in Section 8, which combines *several* of this system's own tools rather than being its own model.) |
@@ -169,7 +202,7 @@ tool's original math preserved exactly.
 ### 9 · Review
 | Page | What it tracks |
 |---|---|
-| **📓 Trade Journal** | Equity curve, win rate vs a 66% target, MT4 statement import. Also where you close a trade (updates the Checklist's daily-loss counter). Every open signal is checked against live price for a crossed stop level — 🔴 INVALIDATED is a visibility badge only; it never changes Outcome/Close/Open, which still require an actual close. |
+| **📓 Trade Journal** | Equity curve, win rate vs a 66% target, MT4 statement import. Also where you close a trade (updates the Checklist's daily-loss counter). Every open signal is checked against live price for a crossed stop level — 🔴 INVALIDATED is a visibility badge only; it never changes Outcome/Close/Open, which still require an actual close. The **🏆 Source Scorecard** tab resolves every persisted signal against what price did afterwards (recorded R for closed trades; conservative TP/SL bar replay, stop-only horizon marks, or 10-bar directional hit/miss for open signals) and ranks every signal source by realized expectancy. Check it monthly: demote sources with negative expectancy, trust the positive ones — but only once a source has ~20+ resolved signals. |
 
 ---
 

@@ -525,8 +525,9 @@ if n_closed == 0:
 # ══════════════════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════════════════
-tab_equity, tab_session, tab_pair, tab_dir, tab_log = st.tabs([
-    "📈 Equity Curve", "🕐 By Session", "💱 By Pair", "↕️ By Direction", "📋 Trade Log"
+tab_equity, tab_session, tab_pair, tab_dir, tab_src, tab_log = st.tabs([
+    "📈 Equity Curve", "🕐 By Session", "💱 By Pair", "↕️ By Direction",
+    "🏆 Source Scorecard", "📋 Trade Log"
 ])
 
 # ──────────────────────────────────────────────────────────────────
@@ -898,7 +899,90 @@ with tab_dir:
             st.plotly_chart(fig_dir, width="stretch", config=dict(displayModeBar=False))
 
 # ──────────────────────────────────────────────────────────────────
-# TAB 5 — TRADE LOG
+# TAB 5 — SOURCE SCORECARD
+# ──────────────────────────────────────────────────────────────────
+with tab_src:
+    st.markdown("#### 🏆 Which signal sources actually work?")
+    st.caption(
+        "Every persisted signal, resolved against what price did afterwards: "
+        "closed trades use their recorded R; open signals with SL+TP are "
+        "replayed bar-by-bar (a bar spanning both levels counts as the loss); "
+        "stop-only signals are marked to the close 10 bars later; level-less "
+        "signals score a directional hit/miss at 10 bars. Nothing is guessed — "
+        "Neutral or data-less rows stay unresolved. Judge a source only once "
+        "its resolved count is meaningful (≥20 is a reasonable floor)."
+    )
+
+    from src.services.market_data import daily_ohlc
+    from src.services.source_scorecard import build_scorecard
+
+    _sc_rows = df_all.to_dict("records")
+    _sc_tickers = sorted({r.get("ticker") for r in _sc_rows if r.get("ticker")})
+    _sc_bars = {}
+    _sc_prog = st.progress(0, text="Loading price history…")
+    for _i, _t in enumerate(_sc_tickers):
+        _sc_prog.progress((_i + 1) / max(len(_sc_tickers), 1),
+                          text=f"Loading price history — {_t}…")
+        _sc_bars[_t] = daily_ohlc(_t, period="1y")
+    _sc_prog.empty()
+
+    scorecard = build_scorecard(_sc_rows, _sc_bars)
+    if scorecard.empty:
+        st.info("No evaluable signals yet — signals accumulate here as the "
+                "pages persist their reads.")
+    else:
+        _ranked = scorecard.reset_index()
+        st.dataframe(
+            _ranked, width="stretch", hide_index=True,
+            column_config={
+                "source":       st.column_config.TextColumn("Source"),
+                "signals":      st.column_config.NumberColumn("Signals"),
+                "resolved":     st.column_config.NumberColumn(
+                    "Resolved", help="Closed + replayed + horizon-marked rows"),
+                "wins":         st.column_config.NumberColumn("Wins"),
+                "losses":       st.column_config.NumberColumn("Losses"),
+                "win_rate":     st.column_config.NumberColumn("Win %", format="%.1f"),
+                "avg_r":        st.column_config.NumberColumn("Avg R", format="%.2f"),
+                "total_r":      st.column_config.NumberColumn("Total R", format="%.2f"),
+                "expectancy_r": st.column_config.NumberColumn(
+                    "Expectancy (R)", format="%.2f",
+                    help="Mean R per resolved signal — the ranking metric"),
+                "dir_calls":    st.column_config.NumberColumn(
+                    "Dir calls", help="Level-less signals scored as hit/miss at 10 bars"),
+                "dir_hit_rate": st.column_config.NumberColumn("Dir hit %", format="%.1f"),
+                "open":         st.column_config.NumberColumn("Open"),
+                "unresolved":   st.column_config.NumberColumn("N/A"),
+            },
+        )
+
+        _plot = scorecard.dropna(subset=["expectancy_r"])
+        if not _plot.empty:
+            _colors = ["#00ff66" if v > 0 else "#ff3344"
+                       for v in _plot["expectancy_r"]]
+            fig_src = go.Figure(go.Bar(
+                x=_plot.index, y=_plot["expectancy_r"],
+                marker_color=_colors,
+                text=[f"{v:+.2f}R" for v in _plot["expectancy_r"]],
+                textposition="outside",
+            ))
+            fig_src.add_hline(y=0, line_color="#555555", line_width=1)
+            fig_src.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#0a0a0a", height=320,
+                yaxis=dict(title="Expectancy (R)", gridcolor="#2a2a2a"),
+                xaxis=dict(showgrid=False, tickangle=-30),
+                margin=dict(l=10, r=10, t=20, b=10), showlegend=False,
+            )
+            st.plotly_chart(fig_src, width="stretch",
+                            config=dict(displayModeBar=False))
+            st.caption(
+                "⚠️ Open-signal replays assume the signal was taken at its "
+                "saved entry with its saved stop — no spread, slippage or "
+                "sizing. Treat this as relative evidence between sources, "
+                "not a P&L statement."
+            )
+
+# ──────────────────────────────────────────────────────────────────
+# TAB 6 — TRADE LOG
 # ──────────────────────────────────────────────────────────────────
 with tab_log:
     st.markdown("""

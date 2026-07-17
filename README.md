@@ -27,6 +27,41 @@ scans the identical universe with the identical tickers.
 
 ---
 
+## The house view — one direction, everywhere (2026-07 sync architecture)
+
+Pages used to each define "trend" their own way, on their own private data
+windows — so the same pair could read BUY on one page and SELL on the next.
+That's gone. Four layers keep every page telling one story:
+
+1. **One data spine** (`src/services/market_data.py`) — every page fetches
+   OHLC through canonical windows (weekly = 2y daily resampled, daily = 300d,
+   4H = 90d hourly resampled, one shared TTL), Postgres read-through cached.
+2. **One bias engine** (`src/core/bias.py`) — the canonical BULLISH / BEARISH
+   / NEUTRAL per timeframe (EMA20 vs EMA50 + price position, unanimous votes)
+   and a Weekly-weighted composite **house view** per instrument.
+3. **Visible everywhere** — every directional page shows a house-view strip
+   for its focus pair and flags in red when its own lens opposes it; Market
+   Overview's ideas and the Daily Cockpit's aligned ideas carry inline
+   conflict flags. **[MTF Matrix](pages/mtf-matrix.py) is the consensus
+   board**: the whole universe's house view in one grid, with a
+   **walk-forward Validation tab** (no-lookahead, unit-test-proven) to check
+   what the house view was actually worth historically.
+4. **One parameter home** — indicator defaults (EMA 20/50/200, MACD 12/26/9,
+   swing strength) live on `AppConfig`; page sliders default from them and
+   label any deviation a "custom lens".
+
+**Read the validation honestly:** the first 5-year walk-forward (EUR/USD,
+XAU/USD, WTI/USD) showed the house view has **no standalone entry edge** —
+hit rates sat below 50% and trend-alignment was actively harmful on oil. Use
+it as what it is: a *consistency and regime filter* that stops pages (and
+you) from contradicting each other — the edge must come from the setup layer
+(location, trigger, risk) below. The **Source Scorecard** tab in the
+[Trade Journal](pages/trade-journal.py) closes the loop: it resolves every
+persisted signal against what price did next and ranks each signal source by
+realized expectancy — over time it tells you which pages have earned trust.
+
+---
+
 ## Project structure
 
 ```
@@ -41,7 +76,7 @@ Dashboard-Pro/
 │   ├── pages_lib/          # BloombergPage framework + navigation (the workflow order)
 │   ├── db/                 # Postgres journal (trade_repository) + cache/pool layer
 │   └── ui/                 # terminal theme & HTML components
-├── tests/                  # pytest suite (logic + DB layer ~92% cov; page smoke tests)
+├── tests/                  # pytest suite (logic + DB layer, 80% coverage floor; page smoke tests)
 └── archive/                # legacy experiments + 21 retired pages (archive/pages/) — not imported, do not touch
 ```
 
@@ -112,11 +147,13 @@ min, sets bias, no decisions) → Pre-Session (build the shortlist, ~20 min,
 frozen once the session opens) → Session (execution only — nothing here
 generates a new opinion) → Weekend (weekly-bias tools + the full COT suite)
 → Research Lab (everything else, visited when building or validating, never
-during a session) → Reference. Of the five scanners that produce directional
-opinions (Setup Ranker, AMD Scanner, Trend Signals, 20-Day Breakout, MTF
-Matrix), only Setup Ranker (primary) and Trend Signals (confirmer) hold a
-daily-path slot — the other three move to Research Lab until there's enough
-journaled history to know which one actually earns it. Daily Trend / Daily
+during a session) → Reference. MTF Matrix leads the Morning Brief since
+becoming the house-view consensus board (2026-07) — it's the canonical
+direction, not another scanner opinion. Of the remaining scanners that
+produce directional opinions (Setup Ranker, AMD Scanner, Trend Signals,
+20-Day Breakout), only Setup Ranker (primary) and Trend Signals (confirmer)
+hold a daily-path slot — the others stay in Research Lab until the Trade
+Journal's Source Scorecard shows which one actually earns it. Daily Trend / Daily
 MACD / Market Structure do more analysis than the Ranker's checklist booleans
 (histogram momentum, EMA100/200 stack + slope, CHoCH/BOS) so they're kept as
 full pages, just relocated out of the 7-touch day. Stop Structure, R:R
@@ -127,6 +164,7 @@ separate re-entries of the same instrument/balance/risk inputs.
 ### 🌅 Morning Brief — 5 min with coffee, sets bias, no decisions
 | Page | What it's for |
 |------|---------------|
+| [🧭 MTF Matrix (House View)](pages/mtf-matrix.py) | **First stop.** The consensus board — the canonical Weekly/Daily/4H house view for the whole universe, plus the walk-forward Validation tab. Every other page anchors to this read. |
 | [🛫 Daily Cockpit](pages/daily_cockpit_tab.py) | Regime → rate bias → events → fresh setups, one screen. Covers the full registry. |
 | [📊 Market Overview](pages/market-overview.py) | Headline KPIs + price table across FX, metals, indices. |
 | [📰 News Filter](pages/news-filter.py) | Today's landmines, in SAST — wait or skip. |
@@ -148,7 +186,7 @@ how a flat day becomes a revenge trade.
 |------|---------------|
 | [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Optional email alerts. |
 | [🛡️ Risk Suite](pages/risk-suite.py) | Stop Structure + R:R Calculator + Account Risk, one page, three tabs — where's the stop, is R:R ≥2:1, what's the size. |
-| [📓 Trade Journal](pages/trade-journal.py) | Log at entry, not after. Also the 19:00 post-session review stop — equity curve, win rate vs 66% target. |
+| [📓 Trade Journal](pages/trade-journal.py) | Log at entry, not after. Also the 19:00 post-session review stop — equity curve, win rate vs 66% target, and the **Source Scorecard** tab ranking every signal source by realized expectancy. |
 
 ### 📅 Weekend — weekly bias & the full COT suite
 Having these in the daily path just adds scroll — check once a week, not
@@ -172,7 +210,6 @@ Visited when building or validating, not part of the routine.
 | Page | What it's for |
 |------|---------------|
 | [📊 AMD Scanner](pages/amd-scanner.py) | Accumulation / Manipulation / Distribution scanner (1H × 1 month). |
-| [🧭 MTF Matrix](pages/mtf-matrix.py) | The trend read across multiple timeframes at once, in one grid. |
 | [🚀 20-Day Breakout](pages/twenty_day_breakout_tab.py) | Donchian-style 20-day breakout candidates. |
 | [📦 CME FX Futures](pages/cme-futures-volume.py) | Real, exchange-reported volume for FX via CME currency futures — OBV/CMF that actually mean something. |
 | [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |
@@ -348,8 +385,10 @@ Seven touches, in order — analysis is fully done before the session opens;
 the shortlist is frozen at 17:00.
 
 **🌅 Morning Brief — 5 min with coffee, sets bias, no decisions.**
-[Daily Cockpit](pages/daily_cockpit_tab.py) (regime → rate bias → events →
-setups, one screen) → [Market Overview](pages/market-overview.py) →
+[MTF Matrix](pages/mtf-matrix.py) first (the house-view consensus board —
+which pairs are aligned, which are contested) → [Daily
+Cockpit](pages/daily_cockpit_tab.py) (regime → rate bias → events → setups,
+one screen) → [Market Overview](pages/market-overview.py) →
 [News Filter](pages/news-filter.py) (today's landmines, in SAST).
 
 **📋 Pre-Session — 16:30 SAST, build the shortlist (~20 min).**
@@ -381,7 +420,9 @@ check (2 losses → stop) → **log the trade at entry** in
 
 **🌙 19:00 — Post-session review.** [Trade Journal](pages/trade-journal.py)
 again — equity curve, win rate vs 66% target, tag outcomes (aligned score,
-grade, no-trade days). The 18-point [Daily Checklist](app.py) remains
+grade, no-trade days). Monthly, open its **Source Scorecard** tab: it ranks
+every signal source by realized expectancy — demote what's negative, trust
+what's positive. The 18-point [Daily Checklist](app.py) remains
 available as a detailed audit trail if you want the full 18-point gate on a
 specific trade.
 
@@ -399,6 +440,9 @@ specific trade.
   strip flags it as a conflict.
 - **High-vol GARCH regime** → the Instrument Predictor caps its own confidence
   at Medium even when its four components otherwise agree unanimously.
+- **A page's lens opposes the house view** → the shared strip flags it in red
+  (and Market Overview / Daily Cockpit flag conflicted ideas inline) — the
+  system won't let one page's opinion masquerade as the canonical read.
 
 One focused trade in the London window, reviewed that evening — done consistently,
 that is the path to a 66% win rate.
