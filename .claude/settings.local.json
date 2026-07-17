@@ -163,7 +163,8 @@
       "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_house_view_backtest.py --no-cov -q)",
       "Bash(./.venv/Scripts/python.exe -m py_compile src/services/house_view_backtest.py pages/mtf-matrix.py tests/test_house_view_backtest.py)",
       "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe docs/generate_guide_pdf.py)",
-      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/navigation.py)"
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/navigation.py)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/market_overview_lib.py)"
     ]
   }
 }
