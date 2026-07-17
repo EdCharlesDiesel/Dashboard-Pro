@@ -2,8 +2,9 @@ import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 from src.services.signal_store import persist_signals
+from src.services.bias_service import show_house_view
+from src.services.market_data import weekly_ohlc
 from src.instruments.registry import INSTRUMENTS
-from src.core.data_provider import fetch_data
 from src.indicators.technical import TechnicalIndicators
 import pandas as pd
 import numpy as np
@@ -112,14 +113,11 @@ def slope_label(pct: float):
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_weekly(ticker: str, pip_size: float, lookback: str = "2y"):
     try:
-        df = fetch_data(ticker, "1wk", lookback)
+        # Canonical spine: daily bars resampled to weekly — the same bars the
+        # Setup Ranker / checklist see, so this page can't drift from them.
+        df = weekly_ohlc(ticker, period=lookback)
         if df is None or df.empty or len(df) < 55:
             return None
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [c[0] for c in df.columns]
-        if df.index.tz is not None:
-            df.index = df.index.tz_localize(None)   # match prior tz-naive index
 
         close = df["Close"]
 
@@ -233,6 +231,13 @@ persist_signals("weekly_ema", [{
 # Alignment with user's direction
 aligned     = bull if trade_direction == "LONG" else bear
 not_aligned = bear if trade_direction == "LONG" else bull
+
+# Shared house view for the focus pair — flags when this page's weekly-slope
+# lens opposes the canonical Weekly/Daily/4H read.
+_focus = loaded.get(focus_pair)
+show_house_view(focus_pair,
+                page_read=_focus["overall"] if _focus else None,
+                page_label="Weekly EMA")
 
 # ══════════════════════════════════════════════════════════════════
 # HERO

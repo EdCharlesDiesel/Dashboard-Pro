@@ -72,6 +72,25 @@ class MarketDataRepository:
         )
     """
 
+    # Dukascopy historical archive (src/data/dukascopy_backfill.py) for the
+    # local debug mode's source="duka" replay/time-machine (src/debug/) — a
+    # separate table from market_bars, not the same one, since this data is
+    # deliberately never touched by normal live-fetch traffic, only by the
+    # backfill script running on demand.
+    CREATE_DUKA_BARS_SQL = """
+        CREATE TABLE IF NOT EXISTS dukascopy_bars (
+            symbol   VARCHAR(30) NOT NULL,
+            interval VARCHAR(10) NOT NULL,
+            ts       TIMESTAMP   NOT NULL,
+            open     FLOAT,
+            high     FLOAT,
+            low      FLOAT,
+            close    FLOAT,
+            volume   FLOAT,
+            PRIMARY KEY (symbol, interval, ts)
+        )
+    """
+
     def __init__(
         self,
         cfg: DBConfig,
@@ -88,12 +107,13 @@ class MarketDataRepository:
 
     # ── schema ──────────────────────────────────────────────────────────────
     def init_schema(self) -> tuple[bool, str]:
-        """Create all three market tables. Returns (ok, message)."""
+        """Create all four market tables. Returns (ok, message)."""
         try:
             with closing(self._connect()) as conn, conn, conn.cursor() as cur:
                 cur.execute(self.CREATE_BARS_SQL)
                 cur.execute(self.CREATE_META_SQL)
                 cur.execute(self.CREATE_BLOBS_SQL)
+                cur.execute(self.CREATE_DUKA_BARS_SQL)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:
@@ -169,6 +189,62 @@ class MarketDataRepository:
         """
         sql = (
             "SELECT ts, open, high, low, close, volume FROM market_bars "
+            "WHERE symbol = %s AND interval = %s"
+        )
+        params: list = [symbol, interval]
+        if start is not None:
+            sql += " AND ts >= %s"
+            params.append(start)
+        sql += " ORDER BY ts ASC"
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall()
+        idx_name = _index_name(interval)
+        if not rows:
+            empty = pd.DataFrame(columns=list(_OHLC_COLS))
+            empty.index = pd.DatetimeIndex([], name=idx_name)
+            return empty
+        df = pd.DataFrame(rows, columns=["ts", "Open", "High", "Low", "Close", "Volume"])
+        df["ts"] = pd.to_datetime(df["ts"])
+        df = df.set_index("ts")
+        df.index.name = idx_name
+        return df
+
+    # ── Dukascopy archive (backfill writes, debug-mode source="duka" reads) ──
+    def upsert_dukascopy_bars(self, symbol: str, interval: str, df: pd.DataFrame) -> int:
+        """Persist a Dukascopy OHLC frame. Same shape/overwrite semantics as
+        :meth:`upsert_bars`, separate table — see dukascopy_backfill.py."""
+        if df is None or df.empty:
+            return 0
+        bar_sql = """
+            INSERT INTO dukascopy_bars (symbol, interval, ts, open, high, low, close, volume)
+            VALUES (%(symbol)s, %(interval)s, %(ts)s, %(open)s, %(high)s, %(low)s, %(close)s, %(volume)s)
+            ON CONFLICT (symbol, interval, ts) DO UPDATE SET
+                open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
+                close = EXCLUDED.close, volume = EXCLUDED.volume
+        """
+        payload: List[dict] = []
+        for ts, row in df.iterrows():
+            payload.append({
+                "symbol": symbol, "interval": interval,
+                "ts": pd.Timestamp(ts).to_pydatetime(),
+                "open": _f(row.get("Open")), "high": _f(row.get("High")),
+                "low": _f(row.get("Low")), "close": _f(row.get("Close")),
+                "volume": _f(row.get("Volume")),
+            })
+        with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+            psycopg2.extras.execute_batch(cur, bar_sql, payload)
+            conn.commit()
+        return len(payload)
+
+    def load_dukascopy_bars(
+        self, symbol: str, interval: str, start: Optional[datetime] = None
+    ) -> pd.DataFrame:
+        """Return archived Dukascopy bars as a flattened OHLCV frame — same
+        contract as :meth:`load_bars`. Empty frame when nothing is archived
+        for this symbol (e.g. GBP/ZAR, which Dukascopy doesn't carry)."""
+        sql = (
+            "SELECT ts, open, high, low, close, volume FROM dukascopy_bars "
             "WHERE symbol = %s AND interval = %s"
         )
         params: list = [symbol, interval]

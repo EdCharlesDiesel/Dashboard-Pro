@@ -131,16 +131,9 @@ INSTRUMENTS = {
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily(ticker: str) -> pd.DataFrame:
-    from src.db.market_cache import cached_ohlc
-    try:
-        df = cached_ohlc(ticker, interval="1d", period="1y", ttl=300)
-        if df.empty:
-            return pd.DataFrame()
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        return df[["Open","High","Low","Close","Volume"]].dropna()
-    except Exception:
-        return pd.DataFrame()
+    # Canonical spine (1y kept for chart depth; interval/TTL/source are shared).
+    from src.services.market_data import daily_ohlc
+    return daily_ohlc(ticker, period="1y")
 
 
 def calc_ema(series: pd.Series, span: int) -> pd.Series:
@@ -526,6 +519,13 @@ with tab_scan:
     bear_s      = [p for p, v in loaded_s.items() if v["verdict"] == "BEARISH"]
     flat_s      = [p for p, v in loaded_s.items() if v["verdict"] == "FLAT"]
     no_data_s   = [p for p in INSTRUMENTS if p not in loaded_s]
+
+    # Shared house view for the selected pair — flags when this page's MACD
+    # momentum lens opposes the canonical Weekly/Daily/4H read.
+    from src.services.bias_service import show_house_view
+    _sel = loaded_s.get(selected_pair)
+    _sel_read = _sel["verdict"] if _sel and _sel["verdict"] in ("BULLISH", "BEARISH") else None
+    show_house_view(selected_pair, page_read=_sel_read, page_label="Daily MACD")
 
     # Persist firm BULLISH/BEARISH MACD verdicts as directional signals
     # (deduped per pair/direction/price, tagged source='daily_macd').

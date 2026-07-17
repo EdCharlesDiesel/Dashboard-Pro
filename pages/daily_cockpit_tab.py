@@ -295,9 +295,12 @@ def load_fred(sid):
 
 @_cache(ttl=1800)
 def load_yf(ticker, period="3y", ohlc=False):
-    if yf is None:
-        return pd.DataFrame() if ohlc else pd.Series(dtype=float)
-    d = yf.download(ticker, period=period, interval="1d", progress=False)
+    # Routed through cached_ohlc (the shared Postgres read-through seam)
+    # rather than yf.download directly — this is what makes the cockpit
+    # debug-aware (source='duka'/asof time-machine, see src/debug/panel.py)
+    # without changing this function's own signature or callers.
+    from src.db.market_cache import cached_ohlc
+    d = cached_ohlc(ticker, period=period, interval="1d")
     if d is None or d.empty:
         return pd.DataFrame() if ohlc else pd.Series(dtype=float)
     if isinstance(d.columns, pd.MultiIndex):
@@ -479,6 +482,12 @@ def render():
     else:
         st.info("Nothing fully aligned today. Often the correct number of trades is "
                 "zero — the cockpit earning its keep by keeping you out.")
+
+    from src.debug import debug_panel
+    debug_panel("Daily Cockpit", {
+        "XAU/USD": ohlc_cache.get("XAU/USD"),
+        "EUR/USD": ohlc_cache.get("EUR/USD"),
+    })
 
 
 # ===========================================================================

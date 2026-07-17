@@ -17,13 +17,16 @@ truth and the real staleness gate is Postgres.
 """
 from __future__ import annotations
 
+import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 import pandas as pd
 import streamlit as st
 import yfinance as yf
+
+logger = logging.getLogger("ForexDashboard")
 
 from src.core import secrets
 from src.db.cache import _get_pool, _LeasedConnection  # reuse the one pool-per-target cache
@@ -154,8 +157,27 @@ def _ohlc_impl(
     ttl: int,
     auto_adjust: bool,
     repo_factory: Callable[[DBConfig], MarketDataRepository] = pooled_market_repository,
+    source: str = "live",
 ) -> pd.DataFrame:
     cfg = _resolve_cfg()
+    if source == "duka":
+        if cfg is None:
+            logger.warning("[market_cache] source='duka' requested but DB not "
+                           "configured — falling back to live for %s", symbol)
+        else:
+            try:
+                repo = repo_factory(cfg)
+                df = repo.load_dukascopy_bars(symbol, interval, start=_window_start(period, start))
+                if not df.empty:
+                    return df
+                logger.warning("[market_cache] source='duka' has no archived bars "
+                               "for %s (%s) — falling back to live. Run "
+                               "src/data/dukascopy_backfill.py to backfill it.",
+                               symbol, interval)
+            except Exception as exc:
+                logger.warning("[market_cache] source='duka' read failed for %s: "
+                               "%s — falling back to live", symbol, exc)
+        # Falls through to the live/cache path below on any duka miss.
     if cfg is None:
         return _fetch_yf(symbol, period, interval, start, end, auto_adjust)
     try:
@@ -190,8 +212,34 @@ def _blob_impl(
         return fetch_fn()
 
 
+# ── debug-mode source/asof resolution ──────────────────────────────────────
+def _resolve_debug_defaults(
+    source: Optional[str], asof: Optional[date]
+) -> tuple[str, Optional[date]]:
+    """Fill unspecified source/asof from the debug panel's session_state.
+
+    This is what makes every existing ``cached_ohlc`` call site debug-aware
+    for free — resolved *outside* the ``@st.cache_data``-decorated function,
+    because ``st.cache_data`` keys on its arguments, not on global state read
+    inside the function body. If this resolution happened inside the cached
+    function instead, toggling the debug panel's source/date would never
+    bust the cache and every page would keep serving whatever it first
+    computed. See src/debug/panel.py.
+    """
+    if source is None:
+        try:
+            source = st.session_state.get("dbg_source", "live")
+        except Exception:
+            source = "live"
+    if asof is None:
+        try:
+            asof = st.session_state.get("dbg_asof")
+        except Exception:
+            asof = None
+    return source, asof
+
+
 # ── public read-through API (thin @st.cache_data wrappers) ────────────────────
-@st.cache_data(ttl=_MEM_TTL, show_spinner=False)
 def cached_ohlc(
     symbol: str,
     *,
@@ -201,13 +249,62 @@ def cached_ohlc(
     end: Optional[datetime] = None,
     ttl: int = 300,
     auto_adjust: bool = True,
-) -> pd.DataFrame:  # pragma: no cover - thin @st.cache_data wrapper over _ohlc_impl
+    source: Optional[str] = None,
+    asof: Optional[date] = None,
+) -> pd.DataFrame:
     """Read-through OHLC fetch. Serves fresh Postgres data, else fetches live and
     persists. Returns a flattened ``Open/High/Low/Close/Volume`` frame indexed by
     timestamp — the same shape ``yf.download`` produces after MultiIndex flatten,
     so existing page processing is unchanged.
+
+    ``source``/``asof`` default to the debug panel's session_state
+    (``dbg_source``/``dbg_asof``) when not passed explicitly — a page needs
+    no changes to become debug-aware. ``asof`` truncates the returned frame
+    to ``index <= asof`` (the "time machine" — replay a page as of a past
+    date). ``source="duka"`` reads the Dukascopy archive
+    (``src/data/dukascopy_backfill.py``, the ``dukascopy_bars`` table) keyed
+    by the same yfinance ticker as ``symbol`` here — any symbol/interval not
+    yet backfilled (or with no Dukascopy mapping, e.g. GBP/ZAR) falls back to
+    live with a warning rather than erroring. Provenance (source/asof/rows/
+    date range/NaN count) is attached to the returned frame's
+    ``.attrs["provenance"]`` for the debug panel to show.
     """
-    return _ohlc_impl(symbol, period, interval, start, end, ttl, auto_adjust)
+    source, asof = _resolve_debug_defaults(source, asof)
+    return _cached_ohlc_impl(symbol, period, interval, start, end, ttl, auto_adjust, source, asof)
+
+
+@st.cache_data(ttl=_MEM_TTL, show_spinner=False)
+def _cached_ohlc_impl(
+    symbol: str,
+    period: Optional[str],
+    interval: str,
+    start: Optional[datetime],
+    end: Optional[datetime],
+    ttl: int,
+    auto_adjust: bool,
+    source: str,
+    asof: Optional[date],
+) -> pd.DataFrame:  # pragma: no cover - thin @st.cache_data wrapper over _ohlc_impl
+    df = _ohlc_impl(symbol, period, interval, start, end, ttl, auto_adjust, source=source)
+    df = _apply_asof(df, asof)
+    df.attrs["provenance"] = {
+        "source": source, "asof": str(asof) if asof else "live",
+        "rows": len(df),
+        "start": str(df.index.min()) if len(df) else None,
+        "end": str(df.index.max()) if len(df) else None,
+        "nans": int(df.isna().sum().sum()) if len(df) else 0,
+    }
+    return df
+
+
+def _apply_asof(df: pd.DataFrame, asof: Optional[date]) -> pd.DataFrame:
+    """Truncate to bars at or before ``asof`` — the replay/backtest time machine."""
+    if asof is None or df.empty:
+        return df
+    cutoff = pd.Timestamp(asof)
+    if isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
+        cutoff = cutoff.tz_localize(df.index.tz)
+    return df[df.index <= cutoff]
 
 
 @st.cache_data(ttl=_MEM_TTL, show_spinner=False)
@@ -240,8 +337,11 @@ def cached_closes(
     return pd.concat(frames, axis=1)
 
 
-# Every cached read fn — one place so invalidation can't drift.
-_MARKET_CACHES = (cached_ohlc, cached_blob)
+# Every cached read fn — one place so invalidation can't drift. cached_ohlc
+# itself is a plain resolver wrapper now (so debug-mode source/asof toggles
+# actually bust the cache — see _resolve_debug_defaults); the real
+# @st.cache_data-decorated function underneath it is _cached_ohlc_impl.
+_MARKET_CACHES = (_cached_ohlc_impl, cached_blob)
 
 
 def clear_market_caches() -> None:

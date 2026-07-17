@@ -27,7 +27,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 from arch import arch_model
 
 from src.core.secrets import anthropic_api_key
@@ -46,6 +45,11 @@ _SYMBOL_OVERRIDES = {"WTI/USD": "WTI"}  # crude isn't quoted as "WTI/USD" by con
 INSTRUMENTS: dict[str, str] = {
     _SYMBOL_OVERRIDES.get(name, name.replace("/", "")): inst.ticker
     for name, inst in _REGISTRY.items()
+}
+# Compact symbol → registry pair name, for the shared house-view strip.
+_COMPACT_TO_REGISTRY: dict[str, str] = {
+    _SYMBOL_OVERRIDES.get(name, name.replace("/", "")): name
+    for name in _REGISTRY.keys()
 }
 
 HORIZONS = {"1 week": 5, "1 month": 21, "1 quarter": 63}
@@ -81,11 +85,13 @@ def compute_drivers(df: pd.DataFrame, abr_row: dict | None) -> list[dict]:
     close = df["Close"]
     drivers: list[dict] = []
 
-    ema21 = close.ewm(span=21, adjust=False).mean().iloc[-1]
+    # EMA20/50 — the canonical fast/slow pair (src/core/bias.py), so this
+    # driver can never disagree with the house view about the daily trend.
+    ema20 = close.ewm(span=20, adjust=False).mean().iloc[-1]
     ema50 = close.ewm(span=50, adjust=False).mean().iloc[-1]
-    v = 1 if ema21 > ema50 else -1
-    drivers.append({"name": "Trend (EMA21 vs EMA50)", "value": v,
-                    "why": f"EMA21 {'above' if v > 0 else 'below'} EMA50 on the daily"})
+    v = 1 if ema20 > ema50 else -1
+    drivers.append({"name": "Trend (EMA20 vs EMA50)", "value": v,
+                    "why": f"EMA20 {'above' if v > 0 else 'below'} EMA50 on the daily"})
 
     ma200 = close.rolling(200).mean().iloc[-1]
     if not np.isnan(ma200):
@@ -223,13 +229,9 @@ def evaluate_forecasts(repo, sym: str, close: pd.Series) -> pd.DataFrame:
 # ============================================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_daily(ticker: str) -> pd.DataFrame:
-    raw = yf.download(ticker, period="5y", interval="1d",
-                      progress=False, auto_adjust=False)
-    if raw is None or raw.empty:
-        return pd.DataFrame()
-    if isinstance(raw.columns, pd.MultiIndex):
-        raw.columns = raw.columns.get_level_values(0)
-    return raw[["Open", "High", "Low", "Close"]].dropna()
+    # Canonical spine (5y kept for the GARCH fit; interval/source are shared).
+    from src.services.market_data import daily_ohlc
+    return daily_ohlc(ticker, period="5y")
 
 
 def build_chart(df: pd.DataFrame, cone: dict, horizon: int, sym: str) -> go.Figure:
@@ -284,6 +286,15 @@ def render_instrument(repo, sym: str, ticker: str, horizon_lbl: str) -> None:
     drivers = compute_drivers(df, _latest_abr_signal(repo, sym))
     score, label = score_drivers(drivers)
     chg_1m = float(close.iloc[-1] / close.iloc[-22] - 1)
+
+    # Shared house view — flags when this page's driver score opposes the
+    # canonical Weekly/Daily/4H read.
+    registry_pair = _COMPACT_TO_REGISTRY.get(sym)
+    if registry_pair:
+        from src.services.bias_service import show_house_view
+        _read = ("Bullish" if "bullish" in label else
+                 "Bearish" if "bearish" in label else None)
+        show_house_view(registry_pair, page_read=_read, page_label="Forecast")
 
     st.plotly_chart(build_chart(df, cone, horizon, sym),
                     use_container_width=True, key=f"fc_{sym}")

@@ -138,32 +138,18 @@ INSTRUMENTS = {
 # DATA FETCHING
 # ══════════════════════════════════════════════════════════════════
 
+# Canonical spine — the same weekly (daily bars resampled to W) and daily
+# windows the Setup Ranker / checklist see, so this page can't drift from them.
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_weekly(ticker: str) -> pd.DataFrame:
-    from src.db.market_cache import cached_ohlc
-    try:
-        df = cached_ohlc(ticker, interval="1wk", period="2y", ttl=600)
-        if df.empty:
-            return pd.DataFrame()
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-    except Exception:
-        return pd.DataFrame()
+    from src.services.market_data import weekly_ohlc
+    return weekly_ohlc(ticker)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_daily(ticker: str) -> pd.DataFrame:
-    from src.db.market_cache import cached_ohlc
-    try:
-        df = cached_ohlc(ticker, interval="1d", period="6mo", ttl=300)
-        if df.empty:
-            return pd.DataFrame()
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-    except Exception:
-        return pd.DataFrame()
+    from src.services.market_data import daily_ohlc
+    return daily_ohlc(ticker)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -776,6 +762,12 @@ with tab_detail:
         sw  = classify_weekly_swing(df_w, pivot_lb=int(pivot_lb))
         dt  = classify_daily_trend(df_d, fast=int(daily_fast), slow=int(daily_slow))
         aln = determine_alignment(sw["bias"], dt["trend"])
+
+        # Shared house view — flags when this page's swing-structure lens
+        # opposes the canonical Weekly/Daily/4H read.
+        from src.services.bias_service import show_house_view
+        show_house_view(selected_pair, page_read=sw["bias"],
+                        page_label="Weekly Swing")
 
         GRADE_CSS = {
             "aligned":  "verdict-aligned",

@@ -82,7 +82,7 @@ def _ohlc_frame():
 
 # ── schema ────────────────────────────────────────────────────────────────────
 class TestSchema:
-    def test_init_schema_creates_all_three_tables(self):
+    def test_init_schema_creates_all_four_tables(self):
         cur = FakeCursor()
         repo, conn = _repo(cur)
         ok, msg = repo.init_schema()
@@ -91,6 +91,7 @@ class TestSchema:
         assert "CREATE TABLE IF NOT EXISTS market_bars" in sql
         assert "CREATE TABLE IF NOT EXISTS market_fetch_meta" in sql
         assert "CREATE TABLE IF NOT EXISTS market_blobs" in sql
+        assert "CREATE TABLE IF NOT EXISTS dukascopy_bars" in sql
 
     def test_init_schema_reports_failure(self):
         repo = MarketDataRepository(DBConfig(), connect_factory=lambda: (_ for _ in ()).throw(RuntimeError("refused")))
@@ -203,6 +204,57 @@ class TestReads:
         assert _index_name("1h") == "Datetime"
         assert _index_name("1d") == "Date"
         assert _index_name("1wk") == "Date"
+
+
+# ── Dukascopy archive (backfill writes / debug-mode reads) ──────────────────────
+class TestDukascopyBars:
+    def test_upsert_writes_to_dukascopy_bars_not_market_bars(self, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(
+            "src.db.market_data_repository.psycopg2.extras.execute_batch",
+            lambda cur, sql, payload: captured.update(sql=sql, payload=payload),
+        )
+        cur = FakeCursor()
+        repo, conn = _repo(cur)
+        n = repo.upsert_dukascopy_bars("EUR/USD", "1d", _ohlc_frame())
+
+        assert n == 3
+        assert "INSERT INTO dukascopy_bars" in captured["sql"]
+        assert "ON CONFLICT (symbol, interval, ts) DO UPDATE" in captured["sql"]
+        assert captured["payload"][0]["symbol"] == "EUR/USD"
+        assert conn.committed is True
+        # unlike upsert_bars, no market_fetch_meta stamp — this archive isn't
+        # part of the live-fetch staleness gate.
+        assert not any("market_fetch_meta" in sql for sql, _ in cur.executed)
+
+    def test_empty_frame_is_noop(self, monkeypatch):
+        called = {"batch": False}
+        monkeypatch.setattr(
+            "src.db.market_data_repository.psycopg2.extras.execute_batch",
+            lambda *a, **k: called.__setitem__("batch", True),
+        )
+        repo, _ = _repo(FakeCursor())
+        n = repo.upsert_dukascopy_bars("EUR/USD", "1d", pd.DataFrame())
+        assert n == 0 and called["batch"] is False
+
+    def test_load_builds_frame_with_named_index(self):
+        rows = [
+            (datetime(2026, 6, 20), 1.10, 1.12, 1.09, 1.11, 0.0),
+            (datetime(2026, 6, 21), 1.11, 1.13, 1.10, 1.12, 0.0),
+        ]
+        cur = FakeCursor(fetchall_rows=rows)
+        repo, _ = _repo(cur)
+        df = repo.load_dukascopy_bars("EUR/USD", "1d")
+        assert "FROM dukascopy_bars" in cur.executed[0][0]
+        assert list(df.columns) == ["Open", "High", "Low", "Close", "Volume"]
+        assert len(df) == 2
+
+    def test_load_missing_symbol_returns_empty_frame(self):
+        # e.g. GBP/ZAR — never archived because Dukascopy doesn't carry it.
+        repo, _ = _repo(FakeCursor(fetchall_rows=[]))
+        df = repo.load_dukascopy_bars("GBP/ZAR", "1d")
+        assert df.empty
+        assert list(df.columns) == ["Open", "High", "Low", "Close", "Volume"]
 
 
 # ── blob cache ──────────────────────────────────────────────────────────────────
