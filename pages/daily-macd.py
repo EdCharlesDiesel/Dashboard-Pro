@@ -431,9 +431,14 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**📐 MACD Settings**")
-    fast = st.number_input("Fast EMA",   value=12, min_value=2,  max_value=50)
-    slow = st.number_input("Slow EMA",   value=26, min_value=5,  max_value=100)
-    sig  = st.number_input("Signal EMA", value=9,  min_value=2,  max_value=30)
+    from src.core.config import default_config as _cfg
+    from src.ui.components import lens_caption
+    fast = st.number_input("Fast EMA",   value=_cfg.macd_fast,   min_value=2,  max_value=50)
+    slow = st.number_input("Slow EMA",   value=_cfg.macd_slow,   min_value=5,  max_value=100)
+    sig  = st.number_input("Signal EMA", value=_cfg.macd_signal, min_value=2,  max_value=30)
+    lens_caption({"MACD fast": _cfg.macd_fast, "MACD slow": _cfg.macd_slow,
+                  "MACD signal": _cfg.macd_signal},
+                 {"MACD fast": fast, "MACD slow": slow, "MACD signal": sig})
     lb   = st.slider("Momentum lookback (bars)", 2, 10, 4,
                      help="How many recent histogram bars to assess direction over")
 

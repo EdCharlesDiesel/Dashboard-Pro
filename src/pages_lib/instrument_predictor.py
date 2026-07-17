@@ -244,6 +244,12 @@ class InstrumentPredictorPage(BloombergPage):
         label_disp, label_color = _LABEL_DISPLAY[pred.label]
         conf_color = _CONFIDENCE_COLOR[pred.confidence]
 
+        # Shared house view — flags when this composite second opinion opposes
+        # the canonical Weekly/Daily/4H read.
+        from src.services.bias_service import show_house_view
+        show_house_view(pair, page_read=pred.label,
+                        page_label="Instrument Predictor")
+
         CommandBar(label="PRDX", cells=[
             (f"PAIR {pair}", ""),
             (f"READ {label_disp}", label_color),

@@ -328,3 +328,23 @@ def render_metric_row(cells: Iterable[MetricCell]) -> None:
 def render_data_rows(rows: Iterable[DataRow]) -> str:
     """Returns the HTML for a stack of DataRows (useful inside a Panel)."""
     return "".join(r.render() for r in rows)
+
+
+def lens_caption(canonical: dict, current: dict) -> None:
+    """Label a page's sliders as a "custom lens" when they deviate from the
+    canonical defaults (src/core/config.py AppConfig lens parameters).
+
+    Silent when everything matches — the page is on the house settings. When a
+    value differs, say so explicitly so a tweaked slider can't masquerade as
+    the canonical read.
+    """
+    diffs = {k: (canonical[k], current.get(k)) for k in canonical
+             if current.get(k) != canonical[k]}
+    if not diffs:
+        return
+    detail = ", ".join(f"{k} = {cur} (canonical {canon})"
+                       for k, (canon, cur) in diffs.items())
+    st.caption(
+        f"⚠️ Custom lens — {detail}. This page's own read now differs from the "
+        f"canonical defaults; the house-view strip stays canonical."
+    )

@@ -474,8 +474,18 @@ def render():
     # ---- 5. Today's aligned ideas ----
     st.markdown("#### 🎯 Today's aligned ideas")
     if ideas:
-        for i in ideas:
-            st.markdown("- " + i)
+        # Cross-check each idea against the canonical house view: an idea that
+        # cleared the rate/regime gate but opposes the Weekly/Daily/4H read
+        # gets flagged instead of silently contradicting the other pages.
+        from src.core.bias import is_conflict
+        from src.services.bias_service import get_house_view
+        for i, sig in zip(ideas, aligned_signals):
+            note = ""
+            view = get_house_view(sig["pair"])
+            if view is not None and is_conflict(view.direction, sig["bias"]):
+                note = (f" ⚠️ **opposes the house view "
+                        f"({view.direction.title()})** — see MTF Matrix.")
+            st.markdown("- " + i + note)
         st.caption("These are where regime + rate bias + a fresh setup agree — the "
                    "highest-conviction confluence. Still size at fixed small risk and "
                    "check events before entering.")

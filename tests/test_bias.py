@@ -142,6 +142,26 @@ class TestHouseView:
         assert not hv.aligned
 
 
+# ── canonical parameter drift guard ─────────────────────────────────────────
+
+class TestCanonicalParams:
+    def test_bias_emas_derive_from_config(self):
+        from src.core.bias import EMA_FAST, EMA_SLOW
+        from src.core.config import default_config as cfg
+        assert (EMA_FAST, EMA_SLOW) == (cfg.ema_fast, cfg.ema_slow)
+
+    def test_config_matches_score_setup_literals(self):
+        # score_setup (src/core/signals.py) hard-codes ema(close, 20)/ema(close, 50)
+        # for its weekly/daily trend criteria. If the canonical pair is ever
+        # retuned, those literals must move with it — this guard makes the
+        # drift loud instead of silent.
+        from src.core.config import default_config as cfg
+        assert cfg.ema_fast == 20
+        assert cfg.ema_slow == 50
+        assert cfg.ema_long == 200
+        assert (cfg.macd_fast, cfg.macd_slow, cfg.macd_signal) == (12, 26, 9)
+
+
 # ── vocabulary + conflict helpers ───────────────────────────────────────────
 
 class TestVocabulary:

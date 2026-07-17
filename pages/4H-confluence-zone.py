@@ -260,9 +260,14 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**EMA Periods**")
 
-    ema_short = st.number_input("EMA Short", value=20, min_value=5, max_value=200, step=1)
-    ema_mid = st.number_input("EMA Mid", value=50, min_value=10, max_value=500, step=1)
-    ema_long = st.number_input("EMA Long", value=200, min_value=20, max_value=800, step=5)
+    from src.core.config import default_config as _cfg
+    from src.ui.components import lens_caption
+    ema_short = st.number_input("EMA Short", value=_cfg.ema_fast, min_value=5, max_value=200, step=1)
+    ema_mid = st.number_input("EMA Mid", value=_cfg.ema_slow, min_value=10, max_value=500, step=1)
+    ema_long = st.number_input("EMA Long", value=_cfg.ema_long, min_value=20, max_value=800, step=5)
+    lens_caption({"EMA short": _cfg.ema_fast, "EMA mid": _cfg.ema_slow,
+                  "EMA long": _cfg.ema_long},
+                 {"EMA short": ema_short, "EMA mid": ema_mid, "EMA long": ema_long})
 
     st.markdown("---")
 

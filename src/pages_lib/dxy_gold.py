@@ -111,6 +111,13 @@ class DxyGoldPage(BloombergPage):
         # Who's stronger + what to do about it
         sig = self._strength_signal(closes)
 
+        # Shared house view for gold — flags when this page's DXY-strength lens
+        # opposes the canonical Weekly/Daily/4H read.
+        from src.services.bias_service import show_house_view
+        _read = ("Long" if sig["action"].startswith("BUY")
+                 else "Short" if sig["action"].startswith("SELL") else None)
+        show_house_view("XAU/USD", page_read=_read, page_label="DXY vs Gold")
+
         # Persist a directional XAU/USD read when there's a clear side
         # (source='dxy_gold'); "NO CLEAR SIDE — WAIT" is not saved.
         if sig["action"].startswith(("BUY", "SELL")):

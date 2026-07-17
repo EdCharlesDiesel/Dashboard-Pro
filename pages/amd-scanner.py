@@ -681,6 +681,11 @@ if df_raw is not None and not df_raw.empty:
         # --- Persist a directional AMD read to the journal DB ---
         _bias = str(assess.get("bias", "")).lower()
         _dir = "Long" if "bull" in _bias else "Short" if "bear" in _bias else None
+
+        # Shared house view — flags when the AMD sweep read opposes the
+        # canonical Weekly/Daily/4H read.
+        from src.services.bias_service import show_house_view
+        show_house_view(instrument, page_read=_dir, page_label="AMD Scanner")
         if _dir and last_phase in ("manipulation", "distribution"):
             persist_signals("amd_scanner", [{
                 "pair": instrument,

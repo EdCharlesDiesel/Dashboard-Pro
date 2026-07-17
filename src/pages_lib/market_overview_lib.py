@@ -469,43 +469,86 @@ def render_overview_tab(daily_data: Dict):
 
 def render_mtf_matrix_tab(data_by_timeframe: Dict):
     import streamlit as st
-    st.subheader("🧭 Multi-Timeframe Matrix")
-    mtf_rows = []
-    # Explicitly requested timeframes
-    target_tfs = ["Weekly", "Daily", "4 Hour", "Hourly"]
+    st.subheader("🧭 Multi-Timeframe Matrix — House View Consensus")
+    st.caption(
+        "The canonical read every page anchors to (src/core/bias.py): EMA20 vs "
+        "EMA50 + price position per timeframe, Weekly-weighted composite. This "
+        "board is the single place to see the whole universe's house view."
+    )
 
-    for pair in config.assets.keys():
-        sentiments = analyzer.get_mtf_sentiment(data_by_timeframe, pair)
-        tf_vals = {tf: sentiments.get(tf, "N/A") for tf in target_tfs}
+    from src.instruments.registry import INSTRUMENTS
+    from src.services.bias_service import get_house_view
 
-        # Overall = net score across the timeframes (+1 Bullish, -1 Bearish,
-        # 0 for Neutral/N/A). Sign of the net decides the bias label; the score
-        # is shown alongside so a 4/0 read is distinguishable from a 2/1.
-        bull = sum(1 for v in tf_vals.values() if v == "Bullish")
-        bear = sum(1 for v in tf_vals.values() if v == "Bearish")
-        net = bull - bear
-        if net > 0:
-            overall = f"🟢 {net:+d}"
-        elif net < 0:
-            overall = f"🔴 {net:+d}"
-        else:
-            overall = "⚪ 0"
+    _WORD = {"BULLISH": "▲ Bullish", "BEARISH": "▼ Bearish", "NEUTRAL": "— Neutral"}
 
-        # "Overall" sits right after the Pair index (dict insertion order).
-        row = {"Pair": pair, "Overall": overall, **tf_vals}
-        mtf_rows.append(row)
+    rows = []
+    latest_asof = None
+    prog = st.progress(0, text="Computing house views…")
+    pairs = list(INSTRUMENTS.keys())
+    for i, pair in enumerate(pairs):
+        prog.progress((i + 1) / len(pairs), text=f"House view — {pair}…")
+        view = get_house_view(pair)
+        if view is None or not view.timeframes:
+            rows.append({"Pair": pair, "House": "N/A", "Score": None,
+                         "Weekly": "N/A", "Daily": "N/A", "4H": "N/A",
+                         "Aligned": ""})
+            continue
+        if view.asof is not None and (latest_asof is None or view.asof > latest_asof):
+            latest_asof = view.asof
+        tf_cell = {}
+        for name in ("Weekly", "Daily", "4H"):
+            tf = view.timeframe(name)
+            tf_cell[name] = _WORD.get(tf.direction, "N/A") if tf else "N/A"
+        rows.append({
+            "Pair": pair,
+            "House": _WORD.get(view.direction, "N/A"),
+            "Score": round(view.score, 2),
+            **tf_cell,
+            "Aligned": "✅" if view.aligned else "",
+        })
+    prog.empty()
 
-    mtf_df = pd.DataFrame(mtf_rows).set_index("Pair")
+    mtf_df = pd.DataFrame(rows).set_index("Pair")
 
     def color_sentiment(val):
-        # Matches both the per-timeframe word cells ("Bullish"/"Bearish") and the
-        # icon-based "Overall" cell ("🟢 +3" / "🔴 -2") so all colour consistently.
         text = str(val)
-        if text.startswith("Bullish") or "🟢" in text: return "background-color: #249d53; color: white;"
-        if text.startswith("Bearish") or "🔴" in text: return "background-color: #ca2427; color: white;"
+        if "Bullish" in text or "🟢" in text: return "background-color: #249d53; color: white;"
+        if "Bearish" in text or "🔴" in text: return "background-color: #ca2427; color: white;"
         return ""
 
     st.table(mtf_df.style.map(color_sentiment))
+    if latest_asof is not None:
+        st.caption(f"data as of {latest_asof.strftime('%Y-%m-%d %H:%M')} UTC")
+
+    # ── Legacy market-overview sentiment (secondary lens, not the house view) ──
+    with st.expander("Market Overview sentiment lens (candle/indicator based — "
+                     "may differ in nuance from the house view)"):
+        mtf_rows = []
+        target_tfs = ["Weekly", "Daily", "4 Hour", "Hourly"]
+
+        for pair in config.assets.keys():
+            sentiments = analyzer.get_mtf_sentiment(data_by_timeframe, pair)
+            tf_vals = {tf: sentiments.get(tf, "N/A") for tf in target_tfs}
+
+            # Overall = net score across the timeframes (+1 Bullish, -1 Bearish,
+            # 0 for Neutral/N/A). Sign of the net decides the bias label; the score
+            # is shown alongside so a 4/0 read is distinguishable from a 2/1.
+            bull = sum(1 for v in tf_vals.values() if v == "Bullish")
+            bear = sum(1 for v in tf_vals.values() if v == "Bearish")
+            net = bull - bear
+            if net > 0:
+                overall = f"🟢 {net:+d}"
+            elif net < 0:
+                overall = f"🔴 {net:+d}"
+            else:
+                overall = "⚪ 0"
+
+            # "Overall" sits right after the Pair index (dict insertion order).
+            row = {"Pair": pair, "Overall": overall, **tf_vals}
+            mtf_rows.append(row)
+
+        legacy_df = pd.DataFrame(mtf_rows).set_index("Pair")
+        st.table(legacy_df.style.map(color_sentiment))
 
 
 # ── Perfect Order (Lien, Ch.16) ──────────────────────────────────────────────
@@ -832,11 +875,21 @@ def render_trading_ideas_tab():
 
         st.success(f"✅ {len(ideas)} setup{'s' if len(ideas) != 1 else ''} found")
 
+        # Cross-check each idea against the canonical house view so the landing
+        # scan can't silently contradict the rest of the app.
+        from src.core.bias import is_conflict
+        from src.services.bias_service import get_house_view
+
         for idx, idea in enumerate(ideas):
             direction = "📈" if idea["bias"] == "Long" else "📉"
             color     = "green" if idea["bias"] == "Long" else "red"
             header    = (f"### {idx + 1}. {idea['pair']} — "
                          f"<span style='color:{color}'>{idea['bias'].upper()} {direction}</span>")
+            _view = get_house_view(idea["pair"])
+            if _view is not None and is_conflict(_view.direction, idea["bias"]):
+                header += (f" &nbsp;<span style='color:#ff3344;border:1px solid #ff3344;"
+                           f"padding:1px 8px;font-size:12px'>⚠ opposes house view "
+                           f"({_view.direction.title()})</span>")
 
             if idea["conviction"] == "High":
                 st.markdown(

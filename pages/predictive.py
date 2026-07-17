@@ -71,8 +71,17 @@ try:
         col2.metric(label="Session Change", value=f"{price_change:+.4f}", delta=f"{pct_change:+.2f}%")
         col3.metric(label="Highest in Period", value=f"{df['High'].max():.4f}")
 
-        # Persist a price-vs-SMA directional read (source='predictive').
+        # Shared house view — flags when this page's price-vs-SMA lens opposes
+        # the canonical Weekly/Daily/4H read.
+        from src.services.bias_service import show_house_view
         _sma_last = df['Close'].rolling(sma_period).mean().iloc[-1]
+        show_house_view(
+            selected_pair_label,
+            page_read=(("Long" if latest_price > _sma_last else "Short")
+                       if pd.notna(_sma_last) else None),
+            page_label="Analytics")
+
+        # Persist a price-vs-SMA directional read (source='predictive').
         if pd.notna(_sma_last):
             _bull = latest_price > _sma_last
             persist_signals("predictive", [{

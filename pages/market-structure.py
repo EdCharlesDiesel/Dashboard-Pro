@@ -319,8 +319,13 @@ with st.sidebar:
     selected_tf  = st.selectbox("Timeframe", list(tf_options.keys()), index=0)
     interval, days, resample = tf_options[selected_tf]
 
-    swing_strength = st.slider("Swing strength (bars each side)", 2, 8, 3, step=1,
-                                help="Higher = fewer but more significant swing points")
+    from src.core.config import default_config as _cfg
+    from src.ui.components import lens_caption
+    swing_strength = st.slider("Swing strength (bars each side)", 2, 8,
+                               _cfg.swing_strength, step=1,
+                               help="Higher = fewer but more significant swing points")
+    lens_caption({"swing strength": _cfg.swing_strength},
+                 {"swing strength": swing_strength})
     show_candles   = st.slider("Candles on chart", 60, 200, 100, step=20)
 
     inst_keys = list(INSTRUMENTS.keys())
