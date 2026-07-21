@@ -150,7 +150,11 @@ class MarketDataRepository:
                 "volume": _f(row.get("Volume")),
             })
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
-            psycopg2.extras.execute_batch(cur, bar_sql, payload)
+            # page_size: execute_batch's default of 100 costs one DB round-trip
+            # per 100 bars — a 500-bar hourly refresh over a ~200ms WAN link to
+            # a remote Postgres (Neon) spent most of its time waiting. 1000
+            # covers every canonical window (max ~730 bars) in one round-trip.
+            psycopg2.extras.execute_batch(cur, bar_sql, payload, page_size=1000)
             cur.execute(self._META_UPSERT_SQL, (symbol, interval, len(payload)))
             conn.commit()
         return len(payload)
@@ -233,7 +237,7 @@ class MarketDataRepository:
                 "volume": _f(row.get("Volume")),
             })
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
-            psycopg2.extras.execute_batch(cur, bar_sql, payload)
+            psycopg2.extras.execute_batch(cur, bar_sql, payload, page_size=1000)
             conn.commit()
         return len(payload)
 

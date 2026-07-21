@@ -21,6 +21,7 @@ import smtplib
 import ssl
 import tempfile
 import threading
+import time
 from email.message import EmailMessage
 from typing import Iterable, List, Optional, Tuple
 
@@ -86,6 +87,14 @@ def send_email(subject: str, html_body: str,
 # merge instead of clobbering one another.
 _LOCKS: dict = {}
 _LOCKS_GUARD = threading.Lock()
+
+# In-process mirror of each ledger, keyed by cache path and mutated only under
+# that path's lock. Windows file I/O can transiently fail around an atomic
+# replace (antivirus/indexer briefly holding the file) — without this mirror a
+# failed read returns an empty set and the next writer persists a ledger with
+# keys silently dropped. The mirror makes in-process dedupe immune to any
+# transient file error; the JSON file and Postgres remain the durable layers.
+_MEM_KEYS: dict = {}
 
 
 def _lock_for(path: str) -> threading.Lock:
@@ -176,9 +185,11 @@ class NotifyCache:
         return set()
 
     def load(self) -> set:
-        """Union of the local file and Postgres, so a key saved while the DB
-        (or the local file) was unreachable is never lost from dedupe."""
-        local = self._local_read()
+        """Union of the in-process mirror, the local file and Postgres, so a
+        key saved while any one layer was unreachable is never lost from
+        dedupe."""
+        mem = _MEM_KEYS.get(self.path, set())
+        local = self._local_read() | mem
         db = self._db_read()
         return local if db is None else local | db
 
@@ -193,15 +204,29 @@ class NotifyCache:
             try:
                 with os.fdopen(fd, "w") as fh:
                     json.dump({"keys": sorted(keys)}, fh)
-                os.replace(tmp, self.path)  # atomic on the same filesystem
+                # os.replace is atomic on the same filesystem, but on Windows
+                # it can transiently fail with a sharing violation while an
+                # antivirus/indexer briefly holds the target open. Swallowing
+                # that (the outer except) silently DROPS this merge — the next
+                # writer then persists a set without these keys. Retry briefly
+                # before giving up so a transient lock can't lose ledger keys.
+                for attempt in range(5):
+                    try:
+                        os.replace(tmp, self.path)
+                        break
+                    except PermissionError:
+                        if attempt == 4:
+                            raise
+                        time.sleep(0.01 * (attempt + 1))
             except Exception:
                 try:
                     os.remove(tmp)
                 except OSError:
                     pass
                 raise
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("NotifyCache write failed for %s: %s", self.path, exc)
+        _MEM_KEYS[self.path] = set(keys)
         self._db_write(keys)
 
     def save(self, keys: Iterable[str]) -> None:
@@ -233,6 +258,7 @@ class NotifyCache:
 
     def reset(self) -> None:
         with self._lock:
+            _MEM_KEYS.pop(self.path, None)
             try:
                 if os.path.exists(self.path):
                     os.remove(self.path)

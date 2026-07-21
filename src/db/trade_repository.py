@@ -184,9 +184,28 @@ class TradeRepository:
             return self._connect_factory()
         return psycopg2.connect(**self.cfg.as_kwargs())
 
+    # Secondary indexes (idempotent, same version-controlled pattern as the
+    # ADD COLUMN IF NOT EXISTS migrations). Deliberately minimal — a live
+    # pg_stat_user_tables audit showed the only large table (market_bars,
+    # ~153k rows) is already served entirely by its composite PK, and every
+    # other table is small enough that the planner correctly prefers a seq
+    # scan. `trade_setups` is the one table that grows without bound (every
+    # trade + every persisted signal from 25+ auto-save sources), and its
+    # dominant read pattern across load_setups / load_open / performance_stats
+    # / the journal is `ORDER BY logged_at DESC LIMIT n`. A descending index on
+    # logged_at serves that ordering directly (no sort) once the table grows
+    # past a few thousand rows; at current size the planner may still seq-scan,
+    # and that's fine — the index is free insurance, not a fix for a problem
+    # that exists today. Do NOT add speculative indexes on the tiny/static
+    # tables: an unused index is pure write-time and storage cost.
+    INDEX_DDL = (
+        "CREATE INDEX IF NOT EXISTS idx_trade_setups_logged_at "
+        "ON trade_setups (logged_at DESC)",
+    )
+
     # ── schema ──────────────────────────────────────────────────────────────
     def init_schema(self) -> Tuple[bool, str]:
-        """Create the table + outcome columns. Returns (ok, message)."""
+        """Create the table + outcome columns + indexes. Returns (ok, message)."""
         try:
             with closing(self._connect()) as conn, conn, conn.cursor() as cur:
                 cur.execute(self.CREATE_SQL)
@@ -199,6 +218,8 @@ class TradeRepository:
                 cur.execute(self.ABR_SIGNALS_SQL)
                 cur.execute(self.ABR_FORECASTS_SQL)
                 cur.execute(self.SWING_THESES_SQL)
+                for ddl in self.INDEX_DDL:
+                    cur.execute(ddl)
                 conn.commit()
             return True, "Connected"
         except Exception as exc:

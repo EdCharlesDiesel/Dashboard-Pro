@@ -210,6 +210,7 @@ Visited when building or validating, not part of the routine.
 | Page | What it's for |
 |------|---------------|
 | [📊 AMD Scanner](pages/amd-scanner.py) | Accumulation / Manipulation / Distribution scanner (1H × 1 month). |
+| [🧲 Leading Indicators](pages/leading-indicators.py) | DeMarker exhaustion, volume-delta flow proxy, Stoch/Williams %R/CCI context, prior-bar pivots, and the **RSI divergence + pivot confluence** read tuned for hard-trending metals. Audit-only context lens, not a signal source. |
 | [🚀 20-Day Breakout](pages/twenty_day_breakout_tab.py) | Donchian-style 20-day breakout candidates. |
 | [📦 CME FX Futures](pages/cme-futures-volume.py) | Real, exchange-reported volume for FX via CME currency futures — OBV/CMF that actually mean something. |
 | [💱 Predictive Analytics](pages/predictive.py) | Statistical/ML directional read. |

@@ -170,7 +170,19 @@
       "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_notify_cache.py::TestConcurrency::test_concurrent_add_loses_no_keys --no-cov -q)",
       "Bash(./.venv/Scripts/python.exe \"C:\\\\Users\\\\KMOKHE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--x-Practice-Dashboard-Pro\\\\f26ce1a0-e5a4-4537-ba03-660f51888f1a\\\\scratchpad\\\\clean_test_key.py\")",
       "Bash(./.venv/Scripts/python.exe -c \"import anthropic; print\\('anthropic', anthropic.__version__\\)\")",
-      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/setup_ranker.py)"
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/setup_ranker.py)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/ui/theme.py)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_notify_cache.py --no-cov -q)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_notify_cache.py --no-cov -q --count)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_notify_cache.py::TestConcurrency --no-cov -q)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_leading.py --no-cov -q)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile pages/leading-indicators.py src/indicators/leading.py src/pages_lib/navigation.py)",
+      "Bash(./.venv/Scripts/python.exe \"C:\\\\Users\\\\KMOKHE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--x-Practice-Dashboard-Pro\\\\f26ce1a0-e5a4-4537-ba03-660f51888f1a\\\\scratchpad\\\\db_diag_indexes.py\")",
+      "Bash(./.venv/Scripts/python.exe \"C:\\\\Users\\\\KMOKHE~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--x-Practice-Dashboard-Pro\\\\f26ce1a0-e5a4-4537-ba03-660f51888f1a\\\\scratchpad\\\\apply_and_verify_index.py\")",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_trade_repository.py tests/test_db_cache.py -q --no-cov)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/db/market_cache.py src/db/market_data_repository.py src/pages_lib/market_overview_lib.py pages/weekly-ema.py pages/daily-trend.py pages/daily-macd.py)",
+      "Bash(PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe -m pytest tests/test_market_data_repository.py -q --no-cov)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile src/pages_lib/market_overview_lib.py pages/mtf-matrix.py)"
     ]
   }
 }

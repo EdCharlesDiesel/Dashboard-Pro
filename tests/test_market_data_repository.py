@@ -104,7 +104,7 @@ class TestUpsertBars:
     def test_upserts_bars_and_stamps_meta(self, monkeypatch):
         captured = {}
 
-        def fake_execute_batch(cur, sql, payload):
+        def fake_execute_batch(cur, sql, payload, **kwargs):
             captured["sql"] = sql
             captured["payload"] = payload
 
@@ -147,7 +147,7 @@ class TestUpsertBars:
         captured = {}
         monkeypatch.setattr(
             "src.db.market_data_repository.psycopg2.extras.execute_batch",
-            lambda cur, sql, payload: captured.__setitem__("payload", payload),
+            lambda cur, sql, payload, **kw: captured.__setitem__("payload", payload),
         )
         df = _ohlc_frame()
         df.loc[df.index[0], "Volume"] = float("nan")
@@ -212,7 +212,7 @@ class TestDukascopyBars:
         captured = {}
         monkeypatch.setattr(
             "src.db.market_data_repository.psycopg2.extras.execute_batch",
-            lambda cur, sql, payload: captured.update(sql=sql, payload=payload),
+            lambda cur, sql, payload, **kw: captured.update(sql=sql, payload=payload),
         )
         cur = FakeCursor()
         repo, conn = _repo(cur)

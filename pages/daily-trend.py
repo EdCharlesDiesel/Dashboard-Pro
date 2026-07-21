@@ -283,9 +283,22 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════
 prog = st.progress(0, text="📡 Fetching daily EMA data…")
 all_data = {}
-for idx, (pair, cfg) in enumerate(INSTRUMENTS.items()):
-    prog.progress((idx+1)/len(INSTRUMENTS), text=f"📡 {pair} ({idx+1}/{len(INSTRUMENTS)})…")
-    all_data[pair] = fetch_daily_trend(cfg["ticker"], cfg["pip_size"], lookback_days)
+_items = list(INSTRUMENTS.items())
+
+def _fetch_one(item):
+    pair, cfg = item
+    return pair, fetch_daily_trend(cfg["ticker"], cfg["pip_size"], lookback_days)
+
+def _on_done(item, res):
+    all_data[res[0]] = res[1]
+    prog.progress(len(all_data) / len(_items),
+                  text=f"📡 {res[0]} ({len(all_data)}/{len(_items)})…")
+
+# Thread-pool fan-out (run_parallel copies the Streamlit context, so the
+# cached fetcher behaves exactly as in the old serial loop).
+from src.services.parallel_fetch import run_parallel
+run_parallel(_fetch_one, _items, on_result=_on_done,
+             on_error=lambda item, exc: all_data.setdefault(item[0], None))
 prog.empty()
 
 loaded  = {p: d for p, d in all_data.items() if d is not None}

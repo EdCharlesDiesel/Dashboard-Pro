@@ -220,13 +220,47 @@ section[data-testid="stSidebar"] h4 {{
 
 /* anything sitting on the green fill gets BLACK text — readability first.
    (The sidebar `*` rule above paints inner spans white, which made green
-   primary buttons and the active page link unreadable.) */
-.stButton button[kind="primary"],
-.stButton button[kind="primary"] *,
-section[data-testid="stSidebar"] .stButton button[kind="primary"],
-section[data-testid="stSidebar"] .stButton button[kind="primary"] * {{
+   primary buttons and the active page link unreadable.) This must cover
+   EVERY primary-variant widget, not just .stButton: st.form_submit_button
+   renders kind="primaryFormSubmit" inside stFormSubmitButton (the "Apply
+   Filter" white-on-green bug), and st.download_button has its own wrapper.
+   `kind^="primary"` matches all of them, in and out of the sidebar. */
+button[kind^="primary"],
+button[kind^="primary"] *,
+[data-testid^="stBaseButton-primary"],
+[data-testid^="stBaseButton-primary"] *,
+section[data-testid="stSidebar"] button[kind^="primary"],
+section[data-testid="stSidebar"] button[kind^="primary"] *,
+[data-testid="stFormSubmitButton"] button[kind^="primary"],
+[data-testid="stFormSubmitButton"] button[kind^="primary"] *,
+.stDownloadButton button[kind^="primary"],
+.stDownloadButton button[kind^="primary"] * {{
     color: {cls.BG} !important;
 }}
+/* …and give the form-submit primary the same flat green treatment as
+   .stButton primary so the two button kinds are visually identical. */
+[data-testid="stFormSubmitButton"] button[kind^="primary"] {{
+    background: {cls.AMBER} !important;
+    border: 1px solid {cls.AMBER} !important;
+    border-radius: 0 !important;
+    font-family: {cls.FONT_MONO} !important;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 11px !important;
+}}
+/* multiselect / tag chips sit on the green accent too — black text and a
+   black ✕ icon everywhere (previously only patched page-locally). */
+span[data-baseweb="tag"] {{
+    background: {cls.AMBER} !important;
+}}
+span[data-baseweb="tag"],
+span[data-baseweb="tag"] *,
+section[data-testid="stSidebar"] span[data-baseweb="tag"],
+section[data-testid="stSidebar"] span[data-baseweb="tag"] * {{
+    color: {cls.BG} !important;
+}}
+span[data-baseweb="tag"] svg {{ fill: {cls.BG} !important; }}
 
 /* sidebar page navigation links */
 section[data-testid="stSidebar"] [data-testid="stPageLink-NavLink"] {{
