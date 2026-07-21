@@ -75,6 +75,7 @@ NAV_SECTIONS: List[tuple] = [
     ("⚡ SESSION — execution only", [
         NavEntry("15FB", "15M Fib Entry", "⚡", "pages/15m-fib-entry.py"),
         NavEntry("RSKS", "Risk Suite",    "🛡️", "pages/risk-suite.py"),
+        NavEntry("THRT", "Threat Board",  "🚨", "pages/threat_board_tab.py"),
         NavEntry("JRNL", "Trade Journal", "📓", "pages/trade-journal.py"),
     ]),
     ("📅 WEEKEND — weekly bias & COT", [
@@ -92,6 +93,7 @@ NAV_SECTIONS: List[tuple] = [
     ]),
     ("🔬 RESEARCH LAB — on demand, never mid-session", [
         NavEntry("AMD",  "AMD Scanner",           "📊", "pages/amd-scanner.py"),
+        NavEntry("LEAD", "Leading Indicators",    "🧲", "pages/leading-indicators.py"),
         NavEntry("20DB", "20-Day Breakout",       "🚀", "pages/twenty_day_breakout_tab.py"),
         NavEntry("CMEF", "CME FX Futures",        "📦", "pages/cme-futures-volume.py"),
         NavEntry("PRED", "Predictive Analytics",  "💱", "pages/predictive.py"),

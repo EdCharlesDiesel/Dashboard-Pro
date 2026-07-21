@@ -206,9 +206,22 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════════
 bar = st.progress(0, text="📡 Loading weekly EMA data…")
 results = {}
-for idx, (pair, cfg) in enumerate(INSTRUMENTS.items()):
-    bar.progress((idx + 1) / len(INSTRUMENTS), text=f"📡 Fetching weekly data — {pair}…")
-    results[pair] = fetch_weekly(cfg.ticker, cfg.pip_size, lookback)
+_items = list(INSTRUMENTS.items())
+
+def _fetch_one(item):
+    pair, cfg = item
+    return pair, fetch_weekly(cfg.ticker, cfg.pip_size, lookback)
+
+def _on_done(item, res):
+    results[res[0]] = res[1]
+    bar.progress(len(results) / len(_items),
+                 text=f"📡 Weekly data — {res[0]} ({len(results)}/{len(_items)})")
+
+# Thread-pool fan-out (run_parallel copies the Streamlit context, so the
+# cached fetcher behaves exactly as in the old serial loop).
+from src.services.parallel_fetch import run_parallel
+run_parallel(_fetch_one, _items, on_result=_on_done,
+             on_error=lambda item, exc: results.setdefault(item[0], None))
 bar.empty()
 
 loaded  = {p: d for p, d in results.items() if d}

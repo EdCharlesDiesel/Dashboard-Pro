@@ -503,18 +503,26 @@ tab_scan, tab_detail = st.tabs(["📊 All-Pairs Scanner", "🔍 Pair Detail"])
 with tab_scan:
     scan_results = {}
     prog = st.progress(0, text="📡 Scanning MACD momentum for all pairs…")
-    for idx, (scan_pair, cfg) in enumerate(INSTRUMENTS.items()):
-        prog.progress((idx + 1) / len(INSTRUMENTS),
-                      text=f"📡 {scan_pair} ({idx+1}/{len(INSTRUMENTS)})…")
-        try:
-            df_s = fetch_daily(cfg["ticker"])
-            if df_s.empty or len(df_s) < int(slow) + int(sig) + 5:
-                scan_results[scan_pair] = None
-                continue
-            scan_results[scan_pair] = analyse_momentum(
-                df_s, int(fast), int(slow), int(sig), int(lb))
-        except Exception:
-            scan_results[scan_pair] = None
+    _items = list(INSTRUMENTS.items())
+
+    def _scan_one(item):
+        scan_pair, cfg = item
+        df_s = fetch_daily(cfg["ticker"])
+        if df_s.empty or len(df_s) < int(slow) + int(sig) + 5:
+            return scan_pair, None
+        return scan_pair, analyse_momentum(df_s, int(fast), int(slow),
+                                           int(sig), int(lb))
+
+    def _on_done(item, res):
+        scan_results[res[0]] = res[1]
+        prog.progress(len(scan_results) / len(_items),
+                      text=f"📡 {res[0]} ({len(scan_results)}/{len(_items)})…")
+
+    # Thread-pool fan-out (run_parallel copies the Streamlit context, so the
+    # cached fetcher behaves exactly as in the old serial loop).
+    from src.services.parallel_fetch import run_parallel
+    run_parallel(_scan_one, _items, on_result=_on_done,
+                 on_error=lambda item, exc: scan_results.setdefault(item[0], None))
     prog.empty()
 
     loaded_s    = {p: v for p, v in scan_results.items() if v is not None}

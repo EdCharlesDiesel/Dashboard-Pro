@@ -101,7 +101,9 @@ def _render_validation_tab() -> None:
 
 tab_board, tab_validate = st.tabs(["🧭 Consensus Board", "🧪 Validation"])
 with tab_board:
-    data = mol.ensure_loaded()
-    mol.render_mtf_matrix_tab(data)
+    # No eager ensure_loaded(): the consensus board renders from the spine
+    # alone; the legacy sentiment expander lazy-loads the Market Overview
+    # dataset itself if (and only if) the user asks for it.
+    mol.render_mtf_matrix_tab()
 with tab_validate:
     _render_validation_tab()

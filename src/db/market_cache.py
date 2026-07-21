@@ -33,9 +33,19 @@ from src.db.cache import _get_pool, _LeasedConnection  # reuse the one pool-per-
 from src.db.market_data_repository import MarketDataRepository, _OHLC_COLS
 from src.db.trade_repository import DBConfig
 
-# In-process cache lifetime — short, just to coalesce reruns. The Postgres layer
-# enforces the real per-caller staleness via the ``ttl`` argument.
-_MEM_TTL = 60
+# In-process cache lifetimes. The Postgres layer enforces the real per-caller
+# staleness via the ``ttl`` argument; the in-process layer only decides how
+# long a rerun is served from memory before re-consulting Postgres. With a
+# remote DB (Neon us-east-1 from SAST ≈ 200ms/round-trip, 2 round-trips per
+# symbol×interval check), a 60s memory TTL meant every interaction after a
+# minute re-paid the full network cost — 20-30s on universe-wide pages. Two
+# lanes keep intraday freshness intact while making the heavy daily/weekly
+# pages rerun instantly:
+#   • standard lane (caller ttl ≥ 300 — the canonical spine and slower): 300s
+#   • fast lane (caller ttl < 300 — 15M fib, predictive): 60s, unchanged
+_MEM_TTL_FAST = 60
+_MEM_TTL_STD = 300
+_FAST_LANE_BELOW = 300
 
 _OHLC_COL_LIST = list(_OHLC_COLS)
 
@@ -270,11 +280,11 @@ def cached_ohlc(
     ``.attrs["provenance"]`` for the debug panel to show.
     """
     source, asof = _resolve_debug_defaults(source, asof)
-    return _cached_ohlc_impl(symbol, period, interval, start, end, ttl, auto_adjust, source, asof)
+    impl = _cached_ohlc_impl_fast if ttl < _FAST_LANE_BELOW else _cached_ohlc_impl
+    return impl(symbol, period, interval, start, end, ttl, auto_adjust, source, asof)
 
 
-@st.cache_data(ttl=_MEM_TTL, show_spinner=False)
-def _cached_ohlc_impl(
+def _ohlc_with_provenance(
     symbol: str,
     period: Optional[str],
     interval: str,
@@ -284,7 +294,7 @@ def _cached_ohlc_impl(
     auto_adjust: bool,
     source: str,
     asof: Optional[date],
-) -> pd.DataFrame:  # pragma: no cover - thin @st.cache_data wrapper over _ohlc_impl
+) -> pd.DataFrame:  # pragma: no cover - exercised via the cached wrappers
     df = _ohlc_impl(symbol, period, interval, start, end, ttl, auto_adjust, source=source)
     df = _apply_asof(df, asof)
     df.attrs["provenance"] = {
@@ -297,6 +307,38 @@ def _cached_ohlc_impl(
     return df
 
 
+@st.cache_data(ttl=_MEM_TTL_STD, show_spinner=False)
+def _cached_ohlc_impl(
+    symbol: str,
+    period: Optional[str],
+    interval: str,
+    start: Optional[datetime],
+    end: Optional[datetime],
+    ttl: int,
+    auto_adjust: bool,
+    source: str,
+    asof: Optional[date],
+) -> pd.DataFrame:  # pragma: no cover - thin @st.cache_data wrapper
+    return _ohlc_with_provenance(symbol, period, interval, start, end, ttl,
+                                 auto_adjust, source, asof)
+
+
+@st.cache_data(ttl=_MEM_TTL_FAST, show_spinner=False)
+def _cached_ohlc_impl_fast(
+    symbol: str,
+    period: Optional[str],
+    interval: str,
+    start: Optional[datetime],
+    end: Optional[datetime],
+    ttl: int,
+    auto_adjust: bool,
+    source: str,
+    asof: Optional[date],
+) -> pd.DataFrame:  # pragma: no cover - thin @st.cache_data wrapper
+    return _ohlc_with_provenance(symbol, period, interval, start, end, ttl,
+                                 auto_adjust, source, asof)
+
+
 def _apply_asof(df: pd.DataFrame, asof: Optional[date]) -> pd.DataFrame:
     """Truncate to bars at or before ``asof`` — the replay/backtest time machine."""
     if asof is None or df.empty:
@@ -307,7 +349,7 @@ def _apply_asof(df: pd.DataFrame, asof: Optional[date]) -> pd.DataFrame:
     return df[df.index <= cutoff]
 
 
-@st.cache_data(ttl=_MEM_TTL, show_spinner=False)
+@st.cache_data(ttl=_MEM_TTL_STD, show_spinner=False)
 def cached_blob(cache_key: str, ttl: int, _fetch_fn: Callable[[], Any]) -> Any:  # pragma: no cover - thin @st.cache_data wrapper over _blob_impl
     """Read-through cache for non-OHLC payloads (FRED macro, news, forecasts).
 
@@ -340,8 +382,8 @@ def cached_closes(
 # Every cached read fn — one place so invalidation can't drift. cached_ohlc
 # itself is a plain resolver wrapper now (so debug-mode source/asof toggles
 # actually bust the cache — see _resolve_debug_defaults); the real
-# @st.cache_data-decorated function underneath it is _cached_ohlc_impl.
-_MARKET_CACHES = (_cached_ohlc_impl, cached_blob)
+# @st.cache_data-decorated functions underneath it are the two lane impls.
+_MARKET_CACHES = (_cached_ohlc_impl, _cached_ohlc_impl_fast, cached_blob)
 
 
 def clear_market_caches() -> None:

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -502,7 +502,7 @@ def _persist_house_view_snapshot(views: Dict) -> None:
         cache.add(logged)
 
 
-def render_mtf_matrix_tab(data_by_timeframe: Dict):
+def render_mtf_matrix_tab(data_by_timeframe: Optional[Dict] = None):
     import streamlit as st
     st.subheader("🧭 Multi-Timeframe Matrix — House View Consensus")
     st.caption(
@@ -516,15 +516,25 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
 
     _WORD = {"BULLISH": "▲ Bullish", "BEARISH": "▼ Bearish", "NEUTRAL": "— Neutral"}
 
-    rows = []
-    views = {}
-    latest_asof = None
-    prog = st.progress(0, text="Computing house views…")
+    # Fan the 24 house-view computations out across the thread pool (same
+    # run_parallel idiom as Setup Ranker's scan) — each view is 3 network/DB
+    # round-trips, so sequential wall time was the *sum* of the universe.
     pairs = list(INSTRUMENTS.keys())
-    for i, pair in enumerate(pairs):
-        prog.progress((i + 1) / len(pairs), text=f"House view — {pair}…")
-        view = get_house_view(pair)
+    views = {}
+    prog = st.progress(0, text="Computing house views…")
+
+    def _on_view(pair, view):
         views[pair] = view
+        prog.progress(len(views) / len(pairs),
+                      text=f"House view — {pair} ({len(views)}/{len(pairs)})")
+
+    run_parallel(lambda p: get_house_view(p), pairs,
+                 on_result=_on_view, on_error=lambda p, exc: views.setdefault(p, None))
+
+    rows = []
+    latest_asof = None
+    for pair in pairs:  # registry order, regardless of completion order
+        view = views.get(pair)
         if view is None or not view.timeframes:
             rows.append({"Pair": pair, "Score": None, "Aligned": "",
                          "House": "N/A", "Weekly": "N/A", "Daily": "N/A",
@@ -562,8 +572,19 @@ def render_mtf_matrix_tab(data_by_timeframe: Dict):
     _persist_house_view_snapshot(views)
 
     # ── Legacy market-overview sentiment (secondary lens, not the house view) ──
+    # LAZY: this lens needs the full Market Overview dataset (5 timeframes ×
+    # the whole universe ≈ 120 fetches) — eagerly loading it made the MTF page
+    # take minutes for an expander most sessions never open. The board above
+    # renders from the spine alone; the dataset loads only on request.
     with st.expander("Market Overview sentiment lens (candle/indicator based — "
                      "may differ in nuance from the house view)"):
+        if not st.toggle("Load sentiment lens (fetches the full Market "
+                         "Overview dataset — slow on a cold cache)",
+                         key="mtf_legacy_lens"):
+            st.caption("Toggle on to compute the legacy candle-sentiment grid.")
+            return
+        if data_by_timeframe is None:
+            data_by_timeframe = ensure_loaded()
         mtf_rows = []
         target_tfs = ["Weekly", "Daily", "4 Hour", "Hourly"]
 
