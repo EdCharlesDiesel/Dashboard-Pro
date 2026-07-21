@@ -69,6 +69,9 @@ with st.sidebar:
     st.divider()
     render_sidebar_nav()
 
+from src.ui import tv_charts
+_tv_engine = tv_charts.engine_toggle("swingpb")
+
 st.markdown(f"""
 <div style="background:linear-gradient(135deg,#000000 0%,#0a0a0a 50%,#000000 100%);
             border:1px solid {T.BORDER}; border-radius:16px; padding:24px 28px;
@@ -118,6 +121,56 @@ st.caption(
     "Red = no written thesis. Yellow = event gate active. "
     "Units sized so a 2·sigma·sqrt(8d) adverse move = your risk %."
 )
+
+# --- price & supply/demand chart -------------------------------------------
+# Visualises the row's swing zones on the actual candles so the numbers in the
+# table above become actionable levels. Dual engine (TradingView pilot /
+# Terminal Plotly) — same opt-in toggle as the other price-action pages.
+st.subheader("📊 Price & swing zones")
+chart_inst = st.selectbox("Chart instrument", selected, key="pb_chart_inst")
+_crow = next((r for r in rows if r.instrument == chart_inst), None)
+from src.services.market_data import daily_ohlc
+_cdf = daily_ohlc(INSTRUMENTS[chart_inst]["ticker"])
+if _cdf is None or _cdf.empty:
+    st.info(f"No price history available for {chart_inst}.")
+else:
+    _view = _cdf.tail(120)
+    _sup = _crow.supply if _crow else None
+    _dem = _crow.demand if _crow else None
+    _px = _crow.price if _crow else None
+    _times = list(_view.index)
+    _used_tv = False
+    if _tv_engine:
+        try:
+            _series = [tv_charts.candle_series(_view)]
+            if _sup:
+                _series.append(tv_charts.level_series(_times, _sup, T.RED,
+                               f"Supply {_sup:,.5f}", dash="dash"))
+            if _dem:
+                _series.append(tv_charts.level_series(_times, _dem, T.GREEN,
+                               f"Demand {_dem:,.5f}", dash="dash"))
+            if _px:
+                _series.append(tv_charts.level_series(_times, _px, T.WHITE,
+                               f"{_px:,.5f}", dash="solid"))
+            tv_charts.render([tv_charts.price_chart(_series, height=460)],
+                             key=f"tv_swingpb_{chart_inst}")
+            st.caption("🅣 TradingView pilot · daily candles + supply (red) / "
+                       "demand (green) swing zones + current price.")
+            _used_tv = True
+        except Exception as exc:
+            st.warning(f"TradingView render failed ({exc}); showing Terminal chart.")
+    if not _used_tv:
+        from src.ui.charts import ChartKit
+        _fig = ChartKit.panels([f"{chart_inst} — Daily + swing zones"])
+        ChartKit.candles(_fig, _view)
+        if _sup:
+            ChartKit.hline(_fig, _sup, T.RED, label=f"Supply {_sup:,.5f}")
+        if _dem:
+            ChartKit.hline(_fig, _dem, T.GREEN, label=f"Demand {_dem:,.5f}")
+        if _px:
+            ChartKit.hline(_fig, _px, T.WHITE, dash="solid", label=f"{_px:,.5f}")
+        st.plotly_chart(ChartKit.finish(_fig, height=460), width="stretch",
+                        config=ChartKit.PLOTLY_CONFIG)
 
 # --- audit log (not a trade_setups signal — see module docstring) ----------
 _log_key = f"{week_start()}_{account}_{risk_pct}"

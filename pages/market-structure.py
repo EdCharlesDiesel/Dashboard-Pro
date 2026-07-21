@@ -1,5 +1,6 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.ui.theme import BloombergTheme as T
 from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
 from src.services.signal_store import persist_signals
@@ -336,6 +337,10 @@ with st.sidebar:
                                index=inst_keys.index(default_inst))
 
     st.divider()
+from src.ui import tv_charts
+_tv_engine = tv_charts.engine_toggle("mstruct")
+with st.sidebar:
+    st.divider()
     if st.button("🔄 Refresh All", width="stretch", type="primary"):
         st.cache_data.clear()
         st.rerun()
@@ -602,8 +607,43 @@ with tab_detail:
 
         # ── Chart ─────────────────────────────────────────────────
         st.markdown('<div class="section-title">📊 Structure Chart</div>', unsafe_allow_html=True)
-        fig = build_structure_chart(df, focus_pair, struct, show_candles)
-        st.plotly_chart(fig, width="stretch")
+        if _tv_engine:
+            try:
+                _plot = df.tail(show_candles)
+                _in = set(_plot.index)
+                _sh = [(d, p) for d, p in zip(struct["sh_dates"], struct["sh_prices"]) if d in _in]
+                _sl = [(d, p) for d, p in zip(struct["sl_dates"], struct["sl_prices"]) if d in _in]
+                _markers = (
+                    [tv_charts.marker(d, "aboveBar", T.GREEN, "arrowDown", "SH") for d, _ in _sh]
+                    + [tv_charts.marker(d, "belowBar", T.RED, "arrowUp", "SL") for d, _ in _sl]
+                )
+                _markers.sort(key=lambda m: m["time"])
+                _series = [tv_charts.candle_series(_plot, markers=_markers)]
+                if len(_sh) >= 2:
+                    _series.append(tv_charts.line_series(
+                        [d for d, _ in _sh], pd.Series([p for _, p in _sh]),
+                        T.GREEN, "SH", width=1, dash="dot", last_value=False))
+                if len(_sl) >= 2:
+                    _series.append(tv_charts.line_series(
+                        [d for d, _ in _sl], pd.Series([p for _, p in _sl]),
+                        T.RED, "SL", width=1, dash="dot", last_value=False))
+                _series.append(tv_charts.level_series(
+                    list(_plot.index), struct["close"], T.WHITE,
+                    f"{struct['close']:.5f}", dash="solid"))
+                charts = [tv_charts.price_chart(_series, height=460),
+                          tv_charts.price_chart(
+                              [tv_charts.histogram_series(_plot.index, _plot["Close"] - _plot["Open"])],
+                              height=130)]
+                tv_charts.render(charts, key=f"tv_mstruct_{focus_pair}")
+                st.caption("🅣 TradingView pilot · candles + swing points (SH/SL) + "
+                           "structure lines. Volume-direction histogram below.")
+            except Exception as exc:
+                st.warning(f"TradingView render failed ({exc}); showing Terminal chart.")
+                st.plotly_chart(build_structure_chart(df, focus_pair, struct, show_candles),
+                                width="stretch")
+        else:
+            fig = build_structure_chart(df, focus_pair, struct, show_candles)
+            st.plotly_chart(fig, width="stretch")
 
         # ── Interpretation ────────────────────────────────────────
         with st.expander("📖 Structure Interpretation Guide"):

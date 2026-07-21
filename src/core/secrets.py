@@ -187,7 +187,18 @@ def email_config() -> Dict[str, Any]:
     """
     g = gmail_config()
     e = _section("email")
-    host = str(e.get("smtp_host") or os.environ.get("EMAIL_SMTP_HOST", "smtp.gmail.com"))
+    # Auto-detect the SMTP host from the sender's domain when no explicit
+    # override is given — a Hotmail/Outlook sender can't authenticate against
+    # smtp.gmail.com. An [email] smtp_host / EMAIL_SMTP_HOST override always
+    # wins; Gmail remains the default for everything unrecognized.
+    sender_domain = g["sender"].rsplit("@", 1)[-1].lower() if "@" in g["sender"] else ""
+    if sender_domain in ("hotmail.com", "outlook.com", "live.com", "msn.com"):
+        auto_host = "smtp-mail.outlook.com"
+    elif sender_domain in ("yahoo.com",):
+        auto_host = "smtp.mail.yahoo.com"
+    else:
+        auto_host = "smtp.gmail.com"
+    host = str(e.get("smtp_host") or os.environ.get("EMAIL_SMTP_HOST") or auto_host)
     port = int(e.get("smtp_port") or os.environ.get("EMAIL_SMTP_PORT", "587"))
     return {
         "smtp_host": host,

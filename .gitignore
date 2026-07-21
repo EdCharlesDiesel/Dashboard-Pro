@@ -30,3 +30,7 @@ src/services/cot_cache/
 *.tmp.*
 .streamlit/secrets.toml
 .streamlit/secrets.toml
+.coverage
+logs/
+.claude/settings.local.json
+.streamlit/secrets.toml

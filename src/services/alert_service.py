@@ -70,7 +70,9 @@ def send_email(subject: str, html_body: str,
         logger.info("Alert email sent to %s", c["recipient"])
         return True, f"Sent to {c['recipient']}"
     except smtplib.SMTPAuthenticationError:
-        return False, "Auth failed — check the Gmail address / 16-char app password in secrets.toml."
+        return False, ("Auth failed — check the sender address / app password in "
+                       "secrets.toml (Gmail and Outlook/Hotmail both require an "
+                       "app password, not the account password).")
     except Exception as exc:  # noqa: BLE001 — report any SMTP/network failure to the UI
         logger.error("Email send failed: %s", exc)
         return False, f"Send failed: {exc}"
