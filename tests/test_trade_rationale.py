@@ -1,5 +1,33 @@
-"""Unit tests for the Setup Ranker's 'why this trade' rationale template."""
-from src.pages_lib.setup_ranker import trade_rationale_template
+"""Unit tests for the Setup Ranker's 'why this trade' rationale template
+and the alert-dedupe price bucket."""
+import math
+
+from src.pages_lib.setup_ranker import alert_price_bucket, trade_rationale_template
+
+
+class TestAlertPriceBucket:
+    def test_small_drift_collapses_to_one_bucket(self):
+        # EUR/USD drifting a few pips must NOT change bucket (was chatty at :.4f).
+        assert alert_price_bucket(1.1050) == alert_price_bucket(1.1053)
+        # gold drifting a couple dollars stays one bucket too.
+        assert alert_price_bucket(2400.0) == alert_price_bucket(2403.0)
+
+    def test_meaningful_move_changes_bucket(self):
+        # A move well beyond the band (~0.35%) is a genuinely new zone.
+        assert alert_price_bucket(1.1000) != alert_price_bucket(1.1100)
+        assert alert_price_bucket(2400.0) != alert_price_bucket(2430.0)
+
+    def test_bucket_is_int_and_band_is_percentage_uniform(self):
+        b = alert_price_bucket(1.10)
+        assert isinstance(b, int)
+        # Same fractional move → same number of buckets crossed on any scale.
+        fx = alert_price_bucket(1.10 * 1.01) - alert_price_bucket(1.10)
+        au = alert_price_bucket(2400 * 1.01) - alert_price_bucket(2400)
+        assert abs(fx - au) <= 1  # log-space: constant % width
+
+    def test_zero_or_negative_price_is_safe(self):
+        assert alert_price_bucket(0) == 0
+        assert alert_price_bucket(-5) == 0
 
 
 def _result(**over):

@@ -44,19 +44,47 @@ def email_recipient() -> str:
     return secrets.email_config().get("recipient", "")
 
 
+def _log_email(source: str, subject: str, recipient: str,
+               ok: bool, error: Optional[str]) -> None:
+    """Audit one email send to Postgres ``tool_usage_log`` (tool ``email_alert``).
+
+    One append-only row per attempted send — success or failure — so Reports can
+    answer "how many alerts did I get, from where, and did any fail?". The
+    subject already carries the pairs (e.g. "🎰 2 new setups ≥90% — XAU/USD, …"),
+    so no separate per-setup breakdown is needed. Best-effort and never raises:
+    a logging problem must not break the send it's recording (mirrors the rest of
+    the tool_log/signal_store DB-optional contract)."""
+    try:
+        from src.services.tool_log import log_tool_usage
+        log_tool_usage("email_alert", {
+            "source": source, "subject": subject, "recipient": recipient,
+            "ok": bool(ok), "error": error,
+        })
+    except Exception:
+        pass
+
+
 def send_email(subject: str, html_body: str,
-               plain_body: Optional[str] = None) -> Tuple[bool, str]:
+               plain_body: Optional[str] = None,
+               source: str = "alert") -> Tuple[bool, str]:
     """Send one multipart (plain + HTML) email. Returns (ok, status_message) so
-    the caller can surface the result in the UI instead of only logging it."""
+    the caller can surface the result in the UI instead of only logging it.
+
+    ``source`` tags the audit row (``setup_ranker`` / ``market_overview`` /
+    ``amd_scanner`` / ``test`` / …) so the email log is filterable by origin.
+    Every actual send attempt (success or SMTP failure) is written to
+    ``tool_usage_log`` via :func:`_log_email`; the not-configured early-return
+    is not a send attempt and is not logged."""
     c = secrets.email_config()
     if not (c.get("user") and c.get("password") and c.get("recipient")):
         return False, "Email not configured — set [gmail] in secrets.toml or GMAIL_* env vars."
 
+    recipient = c["recipient"]
     try:
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = c.get("sender") or c["user"]
-        msg["To"] = c["recipient"]
+        msg["To"] = recipient
         msg.set_content(plain_body or "This alert is best viewed as HTML.")
         msg.add_alternative(html_body, subtype="html")
 
@@ -67,15 +95,18 @@ def send_email(subject: str, html_body: str,
             server.login(c["user"], c["password"])
             server.send_message(msg)
 
-        logger.info("Alert email sent to %s", c["recipient"])
-        return True, f"Sent to {c['recipient']}"
+        logger.info("Alert email sent to %s", recipient)
+        ok, message = True, f"Sent to {recipient}"
     except smtplib.SMTPAuthenticationError:
-        return False, ("Auth failed — check the sender address / app password in "
-                       "secrets.toml (Gmail and Outlook/Hotmail both require an "
-                       "app password, not the account password).")
+        ok, message = False, ("Auth failed — check the sender address / app password "
+                              "in secrets.toml (Gmail and Outlook/Hotmail both require "
+                              "an app password, not the account password).")
     except Exception as exc:  # noqa: BLE001 — report any SMTP/network failure to the UI
         logger.error("Email send failed: %s", exc)
-        return False, f"Send failed: {exc}"
+        ok, message = False, f"Send failed: {exc}"
+
+    _log_email(source, subject, recipient, ok, None if ok else message)
+    return ok, message
 
 
 # ══════════════════════════════════════════════════════════════════
