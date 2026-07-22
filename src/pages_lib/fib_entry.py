@@ -308,7 +308,7 @@ class FibEntryPage(BloombergPage):
                     "15M Fib Entry — test alert",
                     "<p style='font-family:monospace;color:#0a0;'>✅ Fib-entry email "
                     "alerts are wired up correctly.</p>",
-                    "Fib-entry email alerts are wired up correctly.")
+                    "Fib-entry email alerts are wired up correctly.", source="test")
                 (st.success if ok else st.error)(msg)
         with c_reset:
             if st.button("↺ Reset", width="stretch",
@@ -469,7 +469,7 @@ class FibEntryPage(BloombergPage):
         pairs_txt = ", ".join(r["sig"]["pair"] for r in to_send[:3])
         subject = (f"⚡ {len(to_send)} fib entr{'y' if len(to_send) == 1 else 'ies'} — "
                    f"{pairs_txt}{'…' if len(to_send) > 3 else ''}")
-        ok, msg = alert_service.send_email(subject, html, plain)
+        ok, msg = alert_service.send_email(subject, html, plain, source="fib_entry")
         if ok:
             cache.filter_new(keys)
             st.toast(f"📧 Emailed {len(to_send)} fib entr"

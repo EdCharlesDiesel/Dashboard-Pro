@@ -286,6 +286,10 @@ with st.sidebar:
 
     st.divider()
     render_sidebar_nav()
+
+from src.ui import tv_charts
+from src.ui.theme import BloombergTheme as T
+_tv_engine = tv_charts.engine_toggle("conf4h")
 # ─────────────────────────────────────────────
 #  Hero card
 # ─────────────────────────────────────────────
@@ -793,7 +797,52 @@ with tab_detail:
             yaxis2=dict(showgrid=False, side="right"),
         )
 
-        st.plotly_chart(fig, width="stretch")
+        if _tv_engine:
+            try:
+                _times = list(df.index)
+                _series = [tv_charts.candle_series(df)]
+                _ema_cols = [("EMA_short", T.YELLOW, f"EMA{int(ema_short)}"),
+                             ("EMA_mid", T.PURPLE, f"EMA{int(ema_mid)}"),
+                             ("EMA_long", T.GREEN, f"EMA{int(ema_long)}")]
+                for col, colr, ttl in _ema_cols:
+                    _series.append(tv_charts.line_series(df.index, df[col], colr,
+                                                         ttl, width=1.2))
+                _fib_c = {"0.0%": T.WHITE, "23.6%": T.CYAN, "38.2%": T.PURPLE,
+                          "50.0%": T.YELLOW, "61.8%": "#ff6b35", "78.6%": T.RED,
+                          "100%": T.WHITE}
+                for lbl, val in fib_levels.items():
+                    _series.append(tv_charts.level_series(
+                        _times, val, _fib_c.get(lbl, T.GREY), f"Fib {lbl}",
+                        dash="dot", last_value=False))
+                for lbl, val in pivots.items():
+                    _series.append(tv_charts.level_series(
+                        _times, val, T.CYAN, lbl, dash="dash", last_value=False))
+                # confluence zones → top/bottom bounds + centre (approximates the
+                # Plotly shaded band; this component has no rectangle shape).
+                for z in zones:
+                    _band = z["value"] * confluence_tol
+                    _zc = "#ff6b35" if z["strength"] >= 3 else T.CYAN
+                    _series.append(tv_charts.level_series(_times, z["value"] + _band, _zc, "", dash="dot", last_value=False))
+                    _series.append(tv_charts.level_series(_times, z["value"] - _band, _zc, "", dash="dot", last_value=False))
+                    _series.append(tv_charts.level_series(_times, z["value"], _zc, "zone", dash="longdash", last_value=False))
+                _series.append(tv_charts.level_series(_times, current_price, T.WHITE,
+                                                      f"{current_price:,.4f}", dash="solid"))
+                if pdh_pdl:
+                    _series.append(tv_charts.level_series(_times, pdh_pdl["pdh"], T.CYAN, "PDH", dash="dash", last_value=False))
+                    _series.append(tv_charts.level_series(_times, pdh_pdl["pdl"], T.YELLOW, "PDL", dash="dash", last_value=False))
+                charts = [tv_charts.price_chart(_series, height=520),
+                          tv_charts.price_chart(
+                              [tv_charts.histogram_series(df.index, df["Close"] - df["Open"])],
+                              height=130)]
+                tv_charts.render(charts, key=f"tv_conf4h_{ticker}")
+                st.caption("🅣 TradingView pilot · candles + EMAs + Fib/Pivot/PDH-PDL "
+                           "levels + confluence-zone bounds. Zones are top/centre/"
+                           "bottom lines (this engine has no shaded rectangle).")
+            except Exception as exc:
+                st.warning(f"TradingView render failed ({exc}); showing Terminal chart.")
+                st.plotly_chart(fig, width="stretch")
+        else:
+            st.plotly_chart(fig, width="stretch")
 
         # ── Raw level table ───────────────────────
         with st.expander("📋 All Levels Reference Table"):

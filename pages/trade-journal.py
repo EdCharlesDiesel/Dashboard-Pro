@@ -302,15 +302,30 @@ def _render_manual_import(cfg, offset: float) -> None:
 
 
 def _render_auto_import(cfg, offset: float) -> None:
-    st.caption("Point this at a file MT4 saves its report to (configure MT4 to export on a "
-               "schedule, or re-save over the same path). Every 5 minutes the app re-reads it "
-               "**if it changed** and imports any new closed trades. Uses automatic symbol mapping.")
+    st.caption("Point this at a file MT4 saves its report to (re-save over the same path "
+               "at end of session, or configure a scheduled export). Every 5 minutes the app "
+               "re-reads it **if it changed** and imports any new closed trades + your latest "
+               "balance. Uses automatic symbol mapping. The path and toggle are **saved** — "
+               "set them once and the balance link survives restarts.")
+    # Seed the widgets from durable storage once per session so the path and
+    # auto-on toggle are remembered across restarts (was session-only before).
+    from src.services import mt4_watch
+    if "mt4_watch_seeded" not in st.session_state:
+        _stored = mt4_watch.load()
+        st.session_state.setdefault("mt4_watch_path", _stored["path"])
+        st.session_state.setdefault("mt4_auto_on", _stored["auto_on"])
+        st.session_state["mt4_watch_seeded"] = True
+
     path = st.text_input(
-        "MT4 report file path", value=st.session_state.get("mt4_watch_path", ""),
-        key="mt4_watch_path",
+        "MT4 report file path", key="mt4_watch_path",
         placeholder=r"C:\Users\you\AppData\Roaming\MetaQuotes\Terminal\<id>\reports\history.htm")
-    auto_on = st.toggle("🔄 Auto-import every 5 minutes",
-                        value=st.session_state.get("mt4_auto_on", False), key="mt4_auto_on")
+    auto_on = st.toggle("🔄 Auto-import every 5 minutes", key="mt4_auto_on")
+
+    # Persist any change so it's there next launch (best-effort; never blocks UI).
+    _cfg_now = (path, bool(auto_on), float(offset))
+    if st.session_state.get("mt4_watch_last_saved") != _cfg_now:
+        mt4_watch.save(path, bool(auto_on), float(offset))
+        st.session_state["mt4_watch_last_saved"] = _cfg_now
 
     b1, b2 = st.columns(2)
     if b1.button("Import now", key="mt4_auto_now", disabled=not path, width="stretch"):

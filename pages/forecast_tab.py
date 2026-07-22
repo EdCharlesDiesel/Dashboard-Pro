@@ -235,30 +235,19 @@ def fetch_daily(ticker: str) -> pd.DataFrame:
 
 
 def build_chart(df: pd.DataFrame, cone: dict, horizon: int, sym: str) -> go.Figure:
+    # Built from the ChartKit stencil so this chart matches the house look.
+    from src.ui.charts import ChartKit
+
     view = df.tail(250)
-    fig = go.Figure(go.Candlestick(
-        x=view.index, open=view["Open"], high=view["High"],
-        low=view["Low"], close=view["Close"], name=sym, showlegend=False,
-        increasing_line_color=T.GREEN, decreasing_line_color=T.RED))
+    fig = ChartKit.panels([f"{sym} — daily + GARCH volatility cone"])
+    ChartKit.candles(fig, view, name=sym)
     fut = pd.bdate_range(df.index[-1], periods=horizon + 1)[1:]
     for hi, lo, alpha in (("hi95", "lo95", 0.10), ("hi68", "lo68", 0.18)):
-        fig.add_trace(go.Scatter(x=fut, y=cone[hi], mode="lines",
-                                 line=dict(width=0), showlegend=False,
-                                 hoverinfo="skip"))
-        fig.add_trace(go.Scatter(x=fut, y=cone[lo], mode="lines",
-                                 line=dict(width=0), fill="tonexty",
-                                 fillcolor=f"rgba(0,224,255,{alpha})",
-                                 showlegend=False, hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=fut, y=cone["center"], mode="lines",
-                             line=dict(color=T.GREY, dash="dot", width=1),
-                             showlegend=False))
-    fig.update_layout(
-        height=520, margin=dict(l=10, r=10, t=25, b=10),
-        xaxis_rangeslider_visible=False,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family=T.FONT_MONO, color=T.WHITE, size=10),
-        xaxis=dict(showgrid=True, gridcolor=T.BORDER, tickfont=dict(color=T.GREY)),
-        yaxis=dict(showgrid=True, gridcolor=T.BORDER, tickfont=dict(color=T.GREY)))
+        ChartKit.band(fig, fut, cone[hi], cone[lo],
+                      fillcolor=f"rgba(0,224,255,{alpha})")
+    ChartKit.line(fig, fut, cone["center"], "center", color=T.GREY,
+                  width=1, dash="dot")
+    ChartKit.finish(fig, height=520)
     return fig
 
 

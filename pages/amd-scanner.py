@@ -597,6 +597,10 @@ with st.sidebar:
 
     st.divider()
     render_sidebar_nav()
+
+from src.ui import tv_charts
+from src.ui.theme import BloombergTheme as T
+_tv_engine = tv_charts.engine_toggle("amd")
 # ---- load data (auto, cached 5 min) ----
 df_raw = None
 try:
@@ -713,8 +717,30 @@ if df_raw is not None and not df_raw.empty:
                     "(Gold, Silver, Platinum)."
                 )
             week_view = _this_week(labeled)
-            st.plotly_chart(make_chart(week_view, symbol, INTERVAL),
-                            width="stretch")
+            if _tv_engine:
+                try:
+                    _mk = []
+                    for _ph, _c in PHASE_COLORS.items():
+                        if _ph == "neutral":
+                            continue
+                        for _t in week_view[week_view["phase"] == _ph].index:
+                            _mk.append(tv_charts.marker(_t, "aboveBar", _c,
+                                                        "arrowDown", _ph[:4].upper()))
+                    _mk.sort(key=lambda m: m["time"])
+                    charts = [tv_charts.price_chart(
+                        [tv_charts.candle_series(week_view, markers=_mk)], height=480)]
+                    tv_charts.render(charts, key=f"tv_amd_{symbol}")
+                    st.caption("🅣 TradingView pilot · candles + AMD phase markers "
+                               "(Accumulation/Manipulation/Distribution). The "
+                               "volume-by-price profile is Plotly-only (this "
+                               "engine has no horizontal histogram) — switch to "
+                               "Terminal for it.")
+                except Exception as exc:
+                    st.warning(f"TradingView render failed ({exc}); showing Terminal chart.")
+                    st.plotly_chart(make_chart(week_view, symbol, INTERVAL), width="stretch")
+            else:
+                st.plotly_chart(make_chart(week_view, symbol, INTERVAL),
+                                width="stretch")
             st.caption(
                 f"Chart shows **this trading week** ({len(week_view)} × 1H bars "
                 f"since {week_view.index[0]:%a %d %b}); phase detection still "

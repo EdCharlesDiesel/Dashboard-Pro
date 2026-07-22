@@ -27,10 +27,7 @@ BloombergTheme.apply()
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
-from src.core.config import CANDLE_STYLE, default_config as cfg
 from src.indicators.leading import (
     cci, demarker, divergence_pivot_read, stochastic, volume_delta, williams_r,
 )
@@ -48,6 +45,20 @@ with st.sidebar:
     rsi_period = st.number_input("RSI period", 5, 50, 14)
     lookback = st.slider("Divergence lookback (bars)", 30, 120, 60, step=10)
     tol = st.slider("Pivot tolerance (%)", 0.05, 0.50, 0.15, step=0.05)
+    st.markdown("**📊 Chart engine**")
+    from src.ui import tv_charts
+    _tv_ok = tv_charts.available()
+    chart_engine = st.radio(
+        "Renderer", ["Terminal (Plotly)", "TradingView (pilot)"],
+        index=0, label_visibility="collapsed",
+        help=("TradingView pilot uses the open-source lightweight-charts engine "
+              "— crosshair OHLC readout, smooth pan/zoom. Terminal is the "
+              "system-wide Plotly look." if _tv_ok else
+              "Install streamlit-lightweight-charts to enable the TradingView "
+              "pilot; Terminal (Plotly) works regardless."))
+    if chart_engine.startswith("TradingView") and not _tv_ok:
+        st.warning("`streamlit-lightweight-charts` not installed — using Terminal.")
+        chart_engine = "Terminal (Plotly)"
     st.divider()
     render_sidebar_nav()
 
@@ -157,46 +168,43 @@ Panel(
 
 # ── Chart: candles + pivots · RSI · flow ────────────────────────────────────
 view = df.tail(120)
-fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
-                    row_heights=[0.55, 0.22, 0.23], vertical_spacing=0.03,
-                    subplot_titles=[f"{pair} {timeframe} + prior-bar pivots",
-                                    f"RSI ({int(rsi_period)})",
-                                    "Volume-delta flow (imbalance ±1)"])
-fig.add_trace(go.Candlestick(
-    x=view.index, open=view["Open"], high=view["High"],
-    low=view["Low"], close=view["Close"], name="Price",
-    showlegend=False, **CANDLE_STYLE), row=1, col=1)
+_rsi_view = rsi_s.tail(120)
+_flow_view = vd["imbalance"].tail(120)
 _pivot_colors = {"P": T.AMBER, "R1": T.RED, "S1": T.GREEN, "R2": T.RED,
                  "S2": T.GREEN, "R3": T.RED, "S3": T.GREEN}
-for name, level in read["pivots"].items():
-    fig.add_hline(y=level, line_dash="dot", line_width=1,
-                  line_color=_pivot_colors.get(name, T.GREY),
-                  annotation_text=name, annotation_position="right",
-                  annotation_font_color=_pivot_colors.get(name, T.GREY),
-                  row=1, col=1)
-fig.add_trace(go.Scatter(x=view.index, y=rsi_s.tail(120), name="RSI",
-                         line=dict(color=T.CYAN, width=1.5),
-                         showlegend=False), row=2, col=1)
-fig.add_hline(y=70, line_dash="dot", line_color=T.RED, line_width=1, row=2, col=1)
-fig.add_hline(y=30, line_dash="dot", line_color=T.GREEN, line_width=1, row=2, col=1)
-imb = vd["imbalance"].tail(120)
-fig.add_trace(go.Bar(
-    x=view.index, y=imb, name="Flow",
-    marker_color=[T.GREEN if (v or 0) > 0 else T.RED for v in imb],
-    showlegend=False), row=3, col=1)
-fig.add_hline(y=0, line_color=T.BORDER, line_width=1, row=3, col=1)
-fig.update_layout(
-    height=680, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=T.BG,
-    margin=dict(l=10, r=60, t=30, b=10), xaxis_rangeslider_visible=False,
-    font=dict(family="JetBrains Mono, monospace", color=T.WHITE, size=10),
-)
-for row in (1, 2, 3):
-    fig.update_xaxes(showgrid=False, linecolor=T.BORDER,
-                     tickfont=dict(color=T.GREY, size=9), row=row, col=1)
-    fig.update_yaxes(showgrid=True, gridcolor=T.BORDER,
-                     tickfont=dict(color=T.GREY, size=9), row=row, col=1)
-fig.update_annotations(font_color=T.GREY, font_size=10)
-st.plotly_chart(fig, width="stretch", config=dict(displayModeBar=False))
+
+if chart_engine.startswith("TradingView"):
+    # TradingView pilot (lightweight-charts). Pure builder → component render;
+    # on any component failure fall back to the terminal Plotly chart.
+    try:
+        charts = tv_charts.leading_charts(
+            view, read["pivots"], _pivot_colors, _rsi_view, _flow_view,
+            rsi_period=int(rsi_period), direction=read["direction"],
+            at_level=read["at_level"])
+        tv_charts.render(charts, key=f"tv_{pair}_{timeframe}")
+        st.caption("🅣 TradingView pilot (lightweight-charts) · price · RSI · "
+                   "flow. Crosshairs are per-pane (not synced across panes) — "
+                   "a known limit of this component vs the Plotly view.")
+    except Exception as exc:
+        st.warning(f"TradingView render failed ({exc}); showing Terminal chart.")
+        chart_engine = "Terminal (Plotly)"
+
+if chart_engine.startswith("Terminal"):
+    from src.ui.charts import ChartKit
+    fig = ChartKit.panels(
+        [f"{pair} {timeframe} + prior-bar pivots", f"RSI ({int(rsi_period)})",
+         "Volume-delta flow (imbalance ±1)"],
+        heights=[0.55, 0.22, 0.23],
+    )
+    ChartKit.candles(fig, view)
+    ChartKit.levels(fig, read["pivots"], colors=_pivot_colors, row=1)
+    ChartKit.line(fig, view.index, _rsi_view, "RSI", color=T.CYAN, row=2)
+    ChartKit.hline(fig, 70, T.RED, row=2)
+    ChartKit.hline(fig, 30, T.GREEN, row=2)
+    ChartKit.bars(fig, view.index, _flow_view, row=3, name="Flow")
+    ChartKit.hline(fig, 0, T.BORDER, row=3)
+    st.plotly_chart(ChartKit.finish(fig, height=680), width="stretch",
+                    config=ChartKit.PLOTLY_CONFIG)
 
 st.caption(
     "DeMarker >0.70 = buying exhausted / <0.30 = selling exhausted · "

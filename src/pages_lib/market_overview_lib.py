@@ -198,7 +198,7 @@ def send_email_alert(new_ideas: List[Dict]) -> None:
         plain_lines.append("")
 
     ok, msg = alert_service.send_email(subject, _build_email_html(new_ideas),
-                                       "\n".join(plain_lines))
+                                       "\n".join(plain_lines), source="market_overview")
     if ok:
         logger.info("Signal email sent (%d ideas)", len(new_ideas))
     else:
@@ -380,7 +380,7 @@ def render_full_sidebar(fred_api_key: str = "") -> str:
                     "Market Overview — test alert",
                     "<p style='font-family:monospace;color:#4af0c4;'>✅ Market Overview email "
                     "alerts are wired up correctly.</p>",
-                    "Market Overview email alerts are wired up correctly.")
+                    "Market Overview email alerts are wired up correctly.", source="test")
                 (st.success if ok else st.error)(msg)
         else:
             st.warning("⚠️ Email not configured — add [gmail] to .streamlit/secrets.toml "
@@ -894,14 +894,18 @@ def render_macro_pro_tab(fred_key: str):
 def render_trading_ideas_tab():
     """Live, auto-refreshed trading ideas.
 
-    Decorated with @st.fragment(run_every=300, parallel=True) so Streamlit
-    re-executes this block automatically every 5 minutes without re-running the
-    full page, and runs the fragment concurrently for a more responsive UI.
-    Reads data from session_state so each auto-run picks up the current dataset.
+    Decorated with @st.fragment(run_every=300) so Streamlit re-executes this
+    block automatically every 5 minutes without re-running the full page. Reads
+    data from session_state so each auto-run picks up the current dataset.
+
+    NOT parallel=True: the body calls check_and_notify → st.toast (a
+    global-container write), which is disallowed from a parallel fragment's
+    worker thread on initial load. parallel=True only benefits *several*
+    independent fragments run concurrently, not this single one.
     """
     import streamlit as st
 
-    @st.fragment(run_every=300, parallel=True)
+    @st.fragment(run_every=300)
     def _fragment():
         st.subheader("🎯 Live Trading Ideas")
 

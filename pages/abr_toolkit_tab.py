@@ -487,6 +487,68 @@ def build_chart(df: pd.DataFrame, r: ABRResult, symbol: str) -> go.Figure:
     return fig
 
 
+def _render_abr_tv(df: pd.DataFrame, r: "ABRResult", symbol: str) -> None:
+    """TradingView (lightweight-charts) view of the ABR chart.
+
+    Honest degradation vs the Plotly `build_chart`: order blocks are the
+    toolkit's signature feature and are *filled rectangles* there — this engine
+    has no rectangle primitive, so each active block is drawn as its top+bottom
+    bound lines (spanning from where the block formed to now) instead of a
+    shaded box. Structure events become markers; trendlines and the risk-plan
+    levels map cleanly. Switch to Terminal for the filled order-block boxes."""
+    from src.ui import tv_charts
+    view = df.tail(300)
+    off = len(df) - len(view)
+
+    # structure-event markers on the candles (arrow up/down by direction)
+    _markers = []
+    for ev in [e for e in r.events if e.idx >= off][-8:]:
+        up = ev.direction > 0
+        _markers.append(tv_charts.marker(
+            df.index[ev.idx], "belowBar" if up else "aboveBar",
+            T.CYAN if up else T.YELLOW, "arrowUp" if up else "arrowDown",
+            f"{ev.kind}"))
+    _markers.sort(key=lambda m: m["time"])
+    series = [tv_charts.candle_series(view, markers=_markers or None)]
+
+    # order blocks (active, in view) → top+bottom bound lines from block origin
+    for ob in r.obs:
+        if ob.mitigated or ob.idx < off:
+            continue
+        _obt = list(df.index[ob.idx:])
+        _oc = T.GREEN if ob.bullish else T.RED
+        series.append(tv_charts.level_series(_obt, ob.top, _oc, "OB", dash="dot", last_value=False))
+        series.append(tv_charts.level_series(_obt, ob.bottom, _oc, "", dash="dot", last_value=False))
+
+    # trendlines (2-point lines)
+    for tl, col in ((r.tl_hi, T.RED), (r.tl_lo, T.CYAN)):
+        if tl and tl[0][0] >= off:
+            (b1, p1), (b2, p2) = tl
+            series.append(tv_charts.line_series(
+                [df.index[b1], df.index[b2]], pd.Series([p1, p2]), col, "TL",
+                width=2, last_value=False))
+
+    # risk-plan levels
+    if r.signal != 0 and not np.isnan(r.entry):
+        side = "BUY" if r.signal > 0 else "SELL"
+        for px, ttl, col, dash in (
+                (r.entry, f"{side} ENTRY", T.GREEN, "solid"),
+                (r.sl,    f"{side} SL",    T.RED,   "solid"),
+                (r.tp1,   f"{side} TP1",   T.CYAN,  "dot"),
+                (r.tp2,   f"{side} TP2",   T.CYAN,  "dash"),
+                (r.tp3,   f"{side} TP3",   T.CYAN,  "solid")):
+            if not np.isnan(px):
+                series.append(tv_charts.level_series(list(view.index), px, col,
+                                                     f"{ttl} {px:.3f}", dash=dash))
+
+    tv_charts.render([tv_charts.price_chart(series, height=560)],
+                     key=f"tv_abr_{symbol}")
+    st.caption("🅣 TradingView pilot · candles + structure markers + trendlines "
+               "+ risk-plan levels. Order blocks show as top/bottom bound lines "
+               "(this engine has no shaded rectangle) — switch to Terminal for "
+               "the filled order-block boxes.")
+
+
 # ============================================================================
 # Panel + page
 # ============================================================================
@@ -521,8 +583,16 @@ def render_instrument(repo, name: str, cfg: dict, params: dict) -> None:
 
     left, right = st.columns([3, 1])
     with left:
-        st.plotly_chart(build_chart(df, r, name), use_container_width=True,
-                        key=f"abr_chart_{name}")
+        if params.get("tv_engine"):
+            try:
+                _render_abr_tv(df, r, name)
+            except Exception as exc:  # noqa: BLE001
+                st.warning(f"TradingView render failed ({exc}); showing Terminal chart.")
+                st.plotly_chart(build_chart(df, r, name), width="stretch",
+                                key=f"abr_chart_{name}")
+        else:
+            st.plotly_chart(build_chart(df, r, name), width="stretch",
+                            key=f"abr_chart_{name}")
     with right:
         st.markdown(f"#### {name} · {tf_label}")
         st.markdown(
@@ -582,6 +652,9 @@ def render(repo=None) -> None:
         tp2r = c2.number_input("TP2 R", 0.5, 8.0, 2.0, 0.1)
         tp3r = c3.number_input("TP3 R", 0.5, 10.0, 2.83, 0.01)
 
+        from src.ui import tv_charts
+        _tv_engine = tv_charts.engine_toggle("abr")
+
         st.divider()
         render_sidebar_nav()
 
@@ -591,7 +664,7 @@ def render(repo=None) -> None:
 
     params = dict(tf_label=tf_label, risk_usd=risk_usd, swing_len=swing_len,
                   max_ob=max_ob, ob_max_age=ob_max_age, sl_buf=sl_buf,
-                  tp1r=tp1r, tp2r=tp2r, tp3r=tp3r)
+                  tp1r=tp1r, tp2r=tp2r, tp3r=tp3r, tv_engine=_tv_engine)
 
     tabs = st.tabs(chosen)
     for tab, name in zip(tabs, chosen):

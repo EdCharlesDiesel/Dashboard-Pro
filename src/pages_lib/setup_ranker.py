@@ -6,8 +6,26 @@ from the original `pages/setup-ranker.py`; only presentation is refactored.
 from __future__ import annotations
 
 import html as _html
+import math
 from datetime import datetime, timedelta
 from typing import Dict, Optional
+
+# Two prices within this fractional band collapse to one alert-dedupe bucket, so
+# a Grade-A pair drifting a handful of pips doesn't re-email on every 5-min
+# scan. 0.35% is ~38 pips on EUR/USD and ~$8 on gold — same "zone" either way.
+# Raise it to calm alerts further; lower it to re-alert on smaller moves.
+_ALERT_PRICE_BAND = 0.0035
+
+
+def alert_price_bucket(price: float, band: float = _ALERT_PRICE_BAND) -> int:
+    """Coarse, instrument-agnostic price bucket for alert dedupe. Log-space
+    bucketing gives a constant *percentage* width, so one band means the same
+    "this is the same setup zone" tolerance for a 1.10 FX pair and a 2400 metal
+    alike — unlike a fixed decimal count (``:.4f`` was 1 pip on EUR/USD but
+    meaningless on gold). Two prices within ~``band`` land in one bucket."""
+    if not price or price <= 0:
+        return 0
+    return int(round(math.log(price) / band))
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -401,6 +419,7 @@ class SetupRankerPage(BloombergPage):
                     "<p style='font-family:monospace;color:#0a0;'>✅ Setup Ranker email alerts "
                     "are wired up correctly.</p>",
                     "Setup Ranker email alerts are wired up correctly.",
+                    source="test",
                 )
                 (st.success if ok else st.error)(msg)
         with c_reset:
@@ -446,7 +465,15 @@ class SetupRankerPage(BloombergPage):
         # same pattern as market_overview_lib's live trading-ideas fragment.
         # Persistence + email dedupe are keyed per pair/direction/price, so an
         # unattended tick that finds nothing new is a safe no-op.
-        @st.fragment(run_every=300, parallel=True)
+        #
+        # NOT parallel=True: this is the page's single main-content fragment, so
+        # parallelism buys nothing (that flag is for running *several*
+        # independent fragments concurrently) — and it runs the body on a worker
+        # thread where st.toast / persist_signals / email (global-container
+        # writes) are disallowed on initial load. The per-pair scan is already
+        # concurrent internally via run_parallel; the fragment only needs
+        # run_every for the unattended re-scan.
+        @st.fragment(run_every=300)
         def _scan_and_render():
             all_results = self._scan(pairs, directions)
 
@@ -853,7 +880,8 @@ class SetupRankerPage(BloombergPage):
         if not qualifying:
             return
 
-        keys = [f"{r['pair']}|{r['direction']}|{float(r['close']):.4f}" for r in qualifying]
+        keys = [f"{r['pair']}|{r['direction']}|{alert_price_bucket(float(r['close']))}"
+                for r in qualifying]
         cache = alert_service.NotifyCache("setup_ranker")
         seen = cache.load()
         fresh = [(r, k) for r, k in zip(qualifying, keys) if k not in seen]
@@ -868,7 +896,7 @@ class SetupRankerPage(BloombergPage):
             f"🎰 {len(setups)} new setup{'s' if len(setups) != 1 else ''} ≥{threshold_pct}% — "
             f"{', '.join(r['pair'] for r in setups[:3])}{'…' if len(setups) > 3 else ''}"
         )
-        ok, msg = alert_service.send_email(subject, html, plain)
+        ok, msg = alert_service.send_email(subject, html, plain, source="setup_ranker")
         if ok:
             cache.filter_new([k for _, k in fresh])  # mark as alerted only now
             st.toast(f"📧 Emailed {len(setups)} new setup(s) to {alert_service.email_recipient()}",
@@ -887,6 +915,7 @@ class SetupRankerPage(BloombergPage):
         """
         n = max(1, int(trades_per_signal))
         rows_html, plain_lines = "", []
+        rationale_html, rationale_plain = "", []
         total_win = 0.0   # if every alerted signal hits TP (n trades each)
         total_risk = 0.0  # if every alerted signal hits SL (n trades each)
         for r in setups:
@@ -940,6 +969,23 @@ class SetupRankerPage(BloombergPage):
                 f"{n}× {lot_txt} lot · risk {risk_txt} · GROWTH {grow_plain}"
             )
 
+            # "Why this trade" — the same checklist rationale shown on the card,
+            # so the email is self-contained (no need to open the app to see
+            # what's actually supporting the setup).
+            why = trade_rationale_template(r, lv, rr_ratio)
+            rationale_html += (
+                f'<div style="margin:0 0 10px 0;padding:12px 14px;background:#12151f;'
+                f'border-left:3px solid {d_color};border-radius:6px;">'
+                f'<div style="font-weight:700;color:#e0e0e0;font-size:13px;'
+                f'margin-bottom:4px;">{r["pair"]} '
+                f'<span style="color:{d_color};">{arrow}</span> '
+                f'<span style="color:#8b8fa8;font-weight:400;">· Grade {r["grade"]} '
+                f'· {r["score"]}/{r.get("max_score", 7)}</span></div>'
+                f'<div style="color:#b8bcc8;font-size:12px;line-height:1.55;">'
+                f'{_html.escape(why)}</div></div>'
+            )
+            rationale_plain.append(f"{r['pair']} {r['direction']} — {why}")
+
         new_bal = account_bal + total_win
         total_grow_pct = (total_win / account_bal * 100) if account_bal else 0.0
         summary_html = (
@@ -975,15 +1021,22 @@ class SetupRankerPage(BloombergPage):
               <tbody>{rows_html}</tbody>
             </table>
             {summary_html}
+            <h3 style="color:#00ff41;font-size:15px;margin:26px 0 12px 0;
+                border-bottom:1px solid #2d3148;padding-bottom:8px;">
+              📋 Why these setups rank
+            </h3>
+            {rationale_html}
             <p style="color:#8b8fa8;font-size:11px;margin-top:22px;border-top:1px solid #2d3148;padding-top:12px;">
-              Entry ≈ current close · confirm on the 15M trigger before executing ·
-              each unique pair/direction/price alerts once.
+              Entry ≈ current close · rationale is the multi-timeframe checklist read,
+              not a guarantee · confirm on the 15M trigger before executing ·
+              each unique pair/direction/zone alerts once.
             </p>
           </div></body></html>"""
         plain = (f"SETUP RANKER — {len(setups)} new setup(s) ≥ {threshold_pct}% "
                  f"({datetime.now().strftime('%Y-%m-%d %H:%M')})\n"
                  f"Sizing {risk_pct:.2f}% · {n} trades/signal\n\n"
-                 + "\n".join(plain_lines) + "\n" + summary_plain)
+                 + "\n".join(plain_lines) + "\n" + summary_plain
+                 + "\n\nWHY THESE SETUPS RANK\n" + "\n".join(rationale_plain))
         return html, plain
 
     # ── Invalidation email alerts ─────────────────────────────────────────
@@ -1012,7 +1065,7 @@ class SetupRankerPage(BloombergPage):
             f"⚠ {len(setups)} setup{'s' if len(setups) != 1 else ''} invalidated — "
             f"{', '.join(r['pair'] for r in setups[:3])}{'…' if len(setups) > 3 else ''}"
         )
-        ok, msg = alert_service.send_email(subject, html, plain)
+        ok, msg = alert_service.send_email(subject, html, plain, source="setup_ranker_stale")
         if ok:
             cache.filter_new([k for _, k in fresh])  # mark as alerted only now
             st.toast(f"📧 Emailed {len(setups)} invalidated setup(s) to "
