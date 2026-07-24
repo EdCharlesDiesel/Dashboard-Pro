@@ -172,7 +172,7 @@ separate re-entries of the same instrument/balance/risk inputs.
 ### 📋 Pre-Session — 16:30 SAST, build the shortlist (~20 min)
 | Page | What it's for |
 |------|---------------|
-| [🎰 Setup Ranker](pages/setup-ranker.py) | **Primary scan.** Direction-only scoring (7-8 criteria; ATR/Spread/4H-Zone are a separate quality gate, not points) — 80%+ is Grade A. |
+| [🎰 Setup Ranker](pages/setup-ranker.py) | **Primary scan.** Direction-only scoring (7-8 criteria; ATR/Spread/4H-Zone are a separate quality gate, not points) — 80%+ is Grade A. Grade-A email alerts are **on by default** and also run **unattended**: a background worker re-scans every 5 min inside the server, so alerts arrive even with no browser open. |
 | [📡 Trend Signals](pages/trend-signals.py) | **Confirmer.** Confirms/denies the Ranker's top picks — 50/200 EMA, RSI, MACD, with ADX as a hard trend gate (not one point of six). |
 | [💪 Currency Strength](pages/currency-strength.py) | Kill conflicted exposure — ranks the 9 registry currencies strong → weak. |
 | [🔗 Correlations](pages/correlations.py) | Kill duplicated exposure — stacked-risk check before adding a correlated pair. |
@@ -184,7 +184,7 @@ analytical — if you can re-open the Ranker mid-session you will, and that's
 how a flat day becomes a revenge trade.
 | Page | What it's for |
 |------|---------------|
-| [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Optional email alerts. |
+| [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Email alerts on by default; auto-rescans every 5 min while open. |
 | [🛡️ Risk Suite](pages/risk-suite.py) | Stop Structure + R:R Calculator + Account Risk, one page, three tabs — where's the stop, is R:R ≥2:1, what's the size. |
 | [📓 Trade Journal](pages/trade-journal.py) | Log at entry, not after. Also the 19:00 post-session review stop — equity curve, win rate vs 66% target, and the **Source Scorecard** tab ranking every signal source by realized expectancy. |
 
@@ -217,6 +217,7 @@ Visited when building or validating, not part of the routine.
 | [🟡 VWAP-EMA Gold](pages/vwap-ema-gold.py) | A dedicated VWAP+EMA strategy view for Gold. |
 | [🔮 Instrument Predictor](pages/instrument-predictor.py) | Composite second opinion — Setup Score + Trend Signal + Currency Strength + COT Composite, one weighted read. Heuristic, not a validated model. |
 | [💵 DXY vs Gold](pages/dxy-gold.py) | Dollar vs Gold inverse — cross-asset confirmation. |
+| [🇺🇸 Indices Correlation](pages/indices-correlation.py) | S&P 500 vs Dow Jones — candles, rolling return-correlation, and the S&P/Dow relative-strength ratio. Cross-asset risk-on/risk-off context (a decoupling or ratio breakout is the tell). Dual chart engine (TradingView pilot / Terminal). Audit-only. |
 | [📈 Daily Trend](pages/daily-trend.py) | EMA20/50/100/200 stack + slope + crossover-recency + gap history — more than the Ranker's single boolean. |
 | [📊 Daily MACD](pages/daily-macd.py) | Full histogram-momentum analysis (rising/falling counts, acceleration, 6-way verdict) — more than the Ranker's MACD>signal check. |
 | [🏗️ Market Structure](pages/market-structure.py) | HH/HL/LH/LL + CHoCH/BOS across 4 timeframes — more than the Ranker's single Daily read. |
