@@ -100,6 +100,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("VWAP", "VWAP-EMA Gold",         "🟡", "pages/vwap-ema-gold.py"),
         NavEntry("PRDX", "Instrument Predictor",  "🔮", "pages/instrument-predictor.py"),
         NavEntry("DXAU", "DXY vs Gold",           "💵", "pages/dxy-gold.py"),
+        NavEntry("IDXC", "Indices Correlation",   "🇺🇸", "pages/indices-correlation.py"),
         NavEntry("DTRN", "Daily Trend",           "📈", "pages/daily-trend.py"),
         NavEntry("DMCD", "Daily MACD",            "📊", "pages/daily-macd.py"),
         NavEntry("STRC", "Market Structure",      "🏗️", "pages/market-structure.py"),
@@ -137,6 +138,16 @@ def render_sidebar_nav() -> None:
     Uses st.page_link so navigation is SPA-style and preserves session state.
     Every page should call this instead of hand-maintaining its own link list.
     """
+    # Every page calls this, which makes it the one guaranteed per-process
+    # hook: kick off the unattended Grade-A scanner (idempotent — a lock +
+    # liveness check after the first call; no-op under pytest). Lives here so
+    # alerts keep firing even when no page (or browser) is open.
+    try:
+        from src.services.background_scanner import ensure_started
+        ensure_started()
+    except Exception as exc:  # the nav must render no matter what
+        logger.warning("[nav] background scanner failed to start: %s", exc)
+
     for section, entries in NAV_SECTIONS:
         st.caption(section)
         for e in entries:

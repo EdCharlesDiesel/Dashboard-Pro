@@ -514,6 +514,19 @@ def render_mtf_matrix_tab(data_by_timeframe: Optional[Dict] = None):
     from src.instruments.registry import INSTRUMENTS
     from src.services.bias_service import get_house_view
 
+    # Honesty line: is the board coming from the unattended worker (fast — one
+    # precomputed read) or being computed live right now? Purely informational.
+    try:
+        from src.services.precomputed import board_age_seconds, read_board
+        _age = board_age_seconds(read_board())
+        if _age is not None and _age <= 900:
+            _mins = int(_age // 60)
+            st.caption(f"🛰 Served from the background worker's board · "
+                       f"computed {_mins} min ago (recomputes every 5 min, "
+                       "day & night while the server is up).")
+    except Exception:
+        pass
+
     _WORD = {"BULLISH": "▲ Bullish", "BEARISH": "▼ Bearish", "NEUTRAL": "— Neutral"}
 
     # Fan the 24 house-view computations out across the thread pool (same
