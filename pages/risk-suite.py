@@ -628,7 +628,7 @@ def size_position(balance: float, risk_pct: float, sl_pips: float,
 with st.sidebar:
     st.markdown("### 🛡️ Risk Suite")
 
-    inst_keys = list(INSTRUMENTS.keys())
+    inst_keys = sorted(INSTRUMENTS.keys())  # alphabetical dropdown
     default_inst = st.session_state.get("selected_instrument", "EUR/USD")
     if default_inst not in inst_keys:
         default_inst = inst_keys[0]

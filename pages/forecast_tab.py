@@ -333,7 +333,7 @@ def render(repo=None) -> None:
 
     with st.sidebar:
         st.subheader("Forecast settings")
-        chosen = st.multiselect("Instruments", list(INSTRUMENTS.keys()),
+        chosen = st.multiselect("Instruments", sorted(INSTRUMENTS.keys()),
                                 default=["EURUSD", "XAUUSD"])
         horizon_keys = list(HORIZONS.keys())
         horizon_lbl = st.selectbox("Horizon", horizon_keys,

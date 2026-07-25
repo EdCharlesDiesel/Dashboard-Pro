@@ -237,3 +237,32 @@ def scan_once() -> dict:
     last_scan.update(stats)
     logger.info("[bg-scanner] %s", stats)
     return stats
+
+
+def run_forever(interval: int = SCAN_INTERVAL_S) -> None:  # pragma: no cover - process entrypoint
+    """Foreground ingest→score loop for a **dedicated worker process/container**
+    (AWS EC2, docker-compose ``worker`` service, or any always-on host).
+
+    Unlike :func:`ensure_started` this does not spawn a thread or honour the
+    pytest guard — it runs the cycle in the current process forever, which is
+    exactly what a headless worker service wants (``python -m
+    src.services.background_scanner``). Deployed next to the DB (Neon
+    ``us-east-1``) it becomes the true 24/7 engine; the UI containers just read
+    the board it keeps fresh.
+    """
+    from src.core.observability import init_logging
+    try:
+        init_logging()
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+    logger.info("[bg-scanner] headless worker starting (cycle every %ds)", interval)
+    while True:
+        try:
+            scan_once()
+        except Exception as exc:  # noqa: BLE001 — the worker must never die
+            logger.warning("[bg-scanner] cycle failed: %s", exc)
+        time.sleep(interval)
+
+
+if __name__ == "__main__":  # pragma: no cover - container/CLI entrypoint
+    run_forever()

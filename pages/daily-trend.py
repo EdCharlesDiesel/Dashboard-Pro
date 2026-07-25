@@ -259,7 +259,7 @@ with st.sidebar:
     st.markdown("### 📈 Daily Trend")
 
     direction = st.radio("🎯 Trade Direction", ["LONG", "SHORT"], horizontal=True)
-    focus_pair = st.selectbox("Focus Pair (Detail Chart)", list(INSTRUMENTS.keys()), index=0)
+    focus_pair = st.selectbox("Focus Pair (Detail Chart)", sorted(INSTRUMENTS.keys()), index=0)
 
     show_emas = st.multiselect("Overlay EMAs on chart",
                                ["EMA20","EMA50","EMA100","EMA200"],

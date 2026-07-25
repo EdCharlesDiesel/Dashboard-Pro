@@ -123,7 +123,7 @@ class CorrelationsPage(BloombergPage):
             "Lookback", keys, index=keys.index(st.session_state.corr_period),
         )
         st.session_state.corr_selected = st.multiselect(
-            "Instruments", list(_ALL_INSTRUMENTS.keys()),
+            "Instruments", sorted(_ALL_INSTRUMENTS.keys()),  # alphabetical dropdown
             default=st.session_state.corr_selected,
         )
         st.session_state.corr_method = st.radio(
@@ -133,7 +133,7 @@ class CorrelationsPage(BloombergPage):
         st.session_state.corr_rolling = st.slider(
             "Rolling Window (days)", 10, 60, st.session_state.corr_rolling,
         )
-        focus_options = (st.session_state.corr_selected
+        focus_options = (sorted(st.session_state.corr_selected)  # alphabetical dropdown
                           if st.session_state.corr_selected else ["EUR/USD"])
         if st.session_state.corr_focus not in focus_options:
             st.session_state.corr_focus = focus_options[0]

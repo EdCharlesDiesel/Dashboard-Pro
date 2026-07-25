@@ -1,0 +1,68 @@
+# Dashboard-Pro — AWS EC2 + Neon deployment (two services, no local DB).
+#
+# Unlike docker-compose.yml (which bundles a local postgres for a self-contained
+# laptop run), this file targets an always-on host in Neon's region
+# (AWS us-east-1) and uses **Neon** as the database. Two services share one
+# image:
+#
+#   • worker — the headless ingest→score→store daemon
+#     (src/services/background_scanner.run_forever). Runs day & night regardless
+#     of UI traffic; this is what keeps the precomputed board fresh 24/7.
+#   • ui     — the Streamlit dashboard. Just reads the board the worker writes.
+#
+# Secrets come from a local .env file (see .env.example) — NEVER baked into the
+# image (.dockerignore excludes secrets.toml/.env). Copy .env.example to .env,
+# fill in the Neon DATABASE_URL, then:
+#
+#   docker compose -f docker-compose.aws.yml up -d --build
+#
+# See DEPLOY-AWS.md for the full EC2 walkthrough (security group, swap, Docker).
+
+services:
+  worker:
+    build: .
+    image: dashboard-pro:aws
+    restart: unless-stopped
+    # Headless loop — no Streamlit, no browser needed. The 24/7 engine.
+    command: ["python", "-m", "src.services.background_scanner"]
+    env_file: .env
+    # No published ports — the worker only talks to Neon (outbound).
+
+  ui:
+    build: .
+    image: dashboard-pro:aws
+    restart: unless-stopped
+    depends_on:
+      - worker
+    env_file: .env
+    # Reverse-proxy-friendly Streamlit flags. enableCORS=false only takes effect
+    # when XSRF protection is also off (Streamlit overrides CORS back on
+    # otherwise, with a warning) — so they go together. Safe here because the
+    # app is single-origin behind nginx and gated by TLS + basic-auth
+    # (docker-compose.aws-tls.yml); those are the compensating controls for
+    # XSRF. On the bare SSH-tunnel setup (no nginx) it's equally fine — the app
+    # isn't reachable without the tunnel.
+    command:
+      - streamlit
+      - run
+      - app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --server.headless=true
+      - --browser.gatherUsageStats=false
+      - --server.enableCORS=false
+      - --server.enableXsrfProtection=false
+    ports:
+      # Bound to LOCALHOST ONLY on purpose: Streamlit ships with no auth, so it
+      # must never face the public internet. Reach it via an SSH tunnel:
+      #   ssh -L 8501:localhost:8501 ec2-user@<your-ec2-ip>
+      # then open http://localhost:8501 on your machine. To expose it properly,
+      # front it with nginx + TLS + basic-auth and publish 443 instead (see
+      # DEPLOY-AWS.md) — do not change this to "8501:8501".
+      - "127.0.0.1:8501:8501"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 25s
+      retries: 3

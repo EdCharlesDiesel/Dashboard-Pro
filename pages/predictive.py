@@ -23,7 +23,7 @@ st.sidebar.header("Dashboard Settings")
 # covers the same universe, with the same tickers, as every other page.
 forex_pairs = {name: info.ticker for name, info in _REGISTRY_INSTRUMENTS.items()}
 
-selected_pair_label = st.sidebar.selectbox("Select Currency Pair", list(forex_pairs.keys()))
+selected_pair_label = st.sidebar.selectbox("Select Currency Pair", sorted(forex_pairs.keys()))
 ticker_symbol = forex_pairs[selected_pair_label]
 
 # Timeframe selection

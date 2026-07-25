@@ -361,7 +361,7 @@ if __name__ == "__main__":
 
     with st.sidebar:
         st.header("Composite Signal Settings")
-        instrument = st.selectbox("Instrument", list(_COT_INSTRUMENTS.keys()), index=0)
+        instrument = st.selectbox("Instrument", sorted(_COT_INSTRUMENTS.keys()), index=0)
         years_back = st.slider("Years of history", 1, 8, 4)
         lookback_weeks = st.slider("Trend lookback (weeks)", 4, 16, 8)
         refresh = st.button("🔄 Force refresh from CFTC", width="stretch")

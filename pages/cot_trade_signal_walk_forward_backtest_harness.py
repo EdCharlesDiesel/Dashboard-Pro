@@ -303,7 +303,7 @@ if __name__ == "__main__":
         instrument = None
         years_back = 10
         if data_source.startswith("Live"):
-            instrument = st.selectbox("Instrument", list(_COT_INSTRUMENTS.keys()), index=0)
+            instrument = st.selectbox("Instrument", sorted(_COT_INSTRUMENTS.keys()), index=0)
             years_back = st.slider("Years of history", 2, 15, 10)
         min_history = st.slider("Min. history before first signal (weeks)", 26, 208, 104)
         lookback_weeks = st.slider("Trend lookback (weeks)", 4, 16, 8)

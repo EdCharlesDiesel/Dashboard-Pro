@@ -100,7 +100,7 @@ class ChecklistSidebar:
             unsafe_allow_html=True,
         )
 
-        inst_keys = INSTRUMENTS.keys()
+        inst_keys = sorted(INSTRUMENTS.keys())  # alphabetical dropdown
         if st.session_state.selected_instrument not in inst_keys:
             st.session_state.selected_instrument = inst_keys[0]
         selected = st.selectbox(
@@ -241,7 +241,7 @@ class TrendSidebar:
                 ]
 
         selected = st.multiselect(
-            "Select Markets", INSTRUMENTS.keys(),
+            "Select Markets", sorted(INSTRUMENTS.keys()),  # alphabetical dropdown
             default=st.session_state.trend_selected_pairs,
             key="trend_pair_selector",
         )

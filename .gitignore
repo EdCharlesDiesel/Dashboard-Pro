@@ -16,6 +16,7 @@ logs/
 forex_notify_cache.json
 *_notify_cache.json
 account_state.json
+worker_board.json
 setup_ranker_score_history.json
 .streamlit/secrets.toml
 

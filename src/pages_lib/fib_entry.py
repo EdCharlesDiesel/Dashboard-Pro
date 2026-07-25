@@ -227,8 +227,8 @@ class FibEntryPage(BloombergPage):
         </style>
         """, unsafe_allow_html=True)
         st.session_state.fib_detail = st.selectbox(
-            "Detail instrument", list(INSTRUMENTS.keys()),
-            index=list(INSTRUMENTS.keys()).index(
+            "Detail instrument", sorted(INSTRUMENTS.keys()),  # alphabetical dropdown
+            index=sorted(INSTRUMENTS.keys()).index(
                 st.session_state.fib_detail
                 if st.session_state.fib_detail in INSTRUMENTS else "EUR/USD"),
             help="Pair shown on the detail chart. The scanner runs on the Setup "
@@ -246,7 +246,7 @@ class FibEntryPage(BloombergPage):
         # appears to "reset" mid-selection.
         with st.form("fib_filter_form"):
             pairs = st.multiselect(
-                "Instruments to scan", list(INSTRUMENTS.keys()),
+                "Instruments to scan", sorted(INSTRUMENTS.keys()),  # alphabetical dropdown
                 default=[p for p in st.session_state.fib_pairs if p in INSTRUMENTS],
             )
             min_score = st.slider(

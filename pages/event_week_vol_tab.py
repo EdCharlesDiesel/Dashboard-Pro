@@ -212,7 +212,7 @@ def render_event_week_vol_tab() -> None:
     with col2:
         window = st.slider("Event window (± days)", 3, 10, 5)
     with col3:
-        chosen = st.multiselect("Instruments", list(INSTRUMENTS),
+        chosen = st.multiselect("Instruments", sorted(INSTRUMENTS),
                                 default=["USD/JPY", "USD/ZAR", "EUR/USD"])
 
     uploaded = st.file_uploader(

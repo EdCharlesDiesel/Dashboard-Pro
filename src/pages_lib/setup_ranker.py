@@ -323,7 +323,7 @@ class SetupRankerPage(BloombergPage):
             if st.button("Metals", width="stretch"):
                 st.session_state.sr_pairs = ["XAU/USD", "XAG/USD", "XPT/USD", "WTI/USD"]
         st.session_state.sr_pairs = st.multiselect(
-            "Instruments", INSTRUMENTS.keys(),
+            "Instruments", sorted(INSTRUMENTS.keys()),  # alphabetical dropdown
             default=[p for p in st.session_state.sr_pairs if p in INSTRUMENTS],
         )
         st.session_state.sr_direction = st.radio(

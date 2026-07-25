@@ -217,7 +217,7 @@ class InstrumentPredictorPage(BloombergPage):
             'text-transform:uppercase;font-size:11px;">PREDICTOR SETTINGS</div>',
             unsafe_allow_html=True,
         )
-        names = INSTRUMENTS.keys()
+        names = sorted(INSTRUMENTS.keys())  # alphabetical dropdown
         st.session_state.pred_pair = st.selectbox(
             "Instrument", names,
             index=names.index(st.session_state.pred_pair)

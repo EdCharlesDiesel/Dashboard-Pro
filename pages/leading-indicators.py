@@ -38,7 +38,7 @@ from src.ui.components import MetricCell, Panel, render_metric_row
 # ── Sidebar (contract: header → controls, symbol first → divider → nav) ─────
 with st.sidebar:
     st.markdown("### 🧲 Leading Indicators")
-    inst_keys = list(INSTRUMENTS.keys())
+    inst_keys = sorted(INSTRUMENTS.keys())  # alphabetical dropdown
     default_ix = inst_keys.index("XAU/USD") if "XAU/USD" in inst_keys else 0
     pair = st.selectbox("Instrument", inst_keys, index=default_ix)
     timeframe = st.selectbox("Timeframe", ["Daily", "4H"], index=0)

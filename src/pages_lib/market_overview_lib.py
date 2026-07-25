@@ -684,7 +684,7 @@ def render_technical_chart_tab(data_by_timeframe: Dict):
                "stop at the formation day's low/high, exit when the order breaks.")
 
     daily_data = data_by_timeframe.get('Daily', {})
-    avail = [p for p, d in daily_data.items() if not d.empty]
+    avail = sorted(p for p, d in daily_data.items() if not d.empty)
     if not avail:
         st.info("No daily data available.")
         return
@@ -786,7 +786,7 @@ def render_trading_view_tab(data_by_timeframe: Dict):
     import streamlit as st
     st.subheader("🛒 Trading View (Pivots & Fibonacci)")
     daily_data = data_by_timeframe.get('Daily', {})
-    avail_tv = [p for p, d in daily_data.items() if not d.empty]
+    avail_tv = sorted(p for p, d in daily_data.items() if not d.empty)
     if avail_tv:
         col1, col2 = st.columns([1, 3])
         with col1:
@@ -1006,7 +1006,7 @@ def render_volume_profile_tab(data_by_timeframe: Dict) -> None:
     st.subheader("🔊 Volume Profile Analysis")
     st.caption("Analyzes the distribution of volume over price to find Point of Control (POC) and Value Areas.")
 
-    avail_pairs = list(config.assets.keys())
+    avail_pairs = sorted(config.assets.keys())
     c1, c2, c3 = st.columns(3)
     pair = c1.selectbox("Select Pair", avail_pairs, key="vp_pair")
     tf = c2.selectbox("Timeframe", ["Daily", "4 Hour", "Hourly"], key="vp_tf")
