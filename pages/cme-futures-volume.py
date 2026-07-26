@@ -94,7 +94,7 @@ with st.sidebar:
     st.markdown("### 📦 CME FX Futures")
     st.caption("Volume-backed money flow for forex, via real exchange volume")
 
-    label = st.selectbox("Currency", list(CME_FUTURES.keys()))
+    label = st.selectbox("Currency", sorted(CME_FUTURES.keys()))
     ticker = CME_FUTURES[label]
     period = st.selectbox("Lookback", ["1mo", "3mo", "6mo", "1y", "2y"], index=1)
     interval = st.selectbox("Interval", ["1d", "1h"], index=0)

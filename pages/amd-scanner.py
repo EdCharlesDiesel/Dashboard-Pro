@@ -519,7 +519,7 @@ st.caption(
 
 with st.sidebar:
     st.header("Data")
-    inst_keys = list(INSTRUMENTS.keys())
+    inst_keys = sorted(INSTRUMENTS.keys())  # alphabetical dropdown
     default_idx = inst_keys.index("EUR/USD") if "EUR/USD" in inst_keys else 0
     instrument = st.selectbox("Symbol", inst_keys, index=default_idx)
     symbol = INSTRUMENTS[instrument]["ticker"]

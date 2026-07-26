@@ -270,14 +270,17 @@ class SetupRankerPage(BloombergPage):
         st.session_state.setdefault("risk_pct", 1.0)
         # Use the Trade Journal's live balance by default when it's available.
         st.session_state.setdefault("sr_use_live_bal", bool(account_state.get()))
-        # Email alerts (opt-in — toggle it on in the sidebar to activate).
-        # Threshold default 90%: only the top tier (not all of Grade A ≥80%)
-        # is worth an interruption; Grade A still auto-saves to the journal DB
-        # via _persist_signals regardless of this toggle.
-        st.session_state.setdefault("sr_email_on", False)
-        st.session_state.setdefault("sr_email_min", 90)
-        # Separate opt-in: email when a Grade-A setup drops out of grade.
-        st.session_state.setdefault("sr_email_stale_on", False)
+        # Email alerts — ON by default (user's standing preference: no toggle
+        # hunting; the sidebar switches remain only as an off-ramp). Threshold
+        # default 80% = Grade A, matching "notify me on every Grade-A setup".
+        # Grade A also auto-saves to the journal DB via _persist_signals
+        # regardless of this toggle. The unattended path is
+        # src/services/background_scanner.py — same threshold, same dedupe
+        # ledger, so page and worker never double-email.
+        st.session_state.setdefault("sr_email_on", True)
+        st.session_state.setdefault("sr_email_min", 80)
+        # Also on by default: email when a Grade-A setup drops out of grade.
+        st.session_state.setdefault("sr_email_stale_on", True)
         # User's house rule: every signal is taken as 2 trades.
         st.session_state.setdefault("sr_trades_per_signal", 2)
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
@@ -320,7 +323,7 @@ class SetupRankerPage(BloombergPage):
             if st.button("Metals", width="stretch"):
                 st.session_state.sr_pairs = ["XAU/USD", "XAG/USD", "XPT/USD", "WTI/USD"]
         st.session_state.sr_pairs = st.multiselect(
-            "Instruments", INSTRUMENTS.keys(),
+            "Instruments", sorted(INSTRUMENTS.keys()),  # alphabetical dropdown
             default=[p for p in st.session_state.sr_pairs if p in INSTRUMENTS],
         )
         st.session_state.sr_direction = st.radio(
@@ -409,6 +412,14 @@ class SetupRankerPage(BloombergPage):
         )
         if alert_service.email_configured():
             st.caption(f"✅ Alerts → {alert_service.email_recipient()}")
+            from src.services import background_scanner
+            if background_scanner.last_scan:
+                st.caption("🛰 Background watch: last unattended scan "
+                           f"{background_scanner.last_scan.get('at', '—')} · "
+                           f"{background_scanner.last_scan.get('grade_a', 0)} Grade A")
+            else:
+                st.caption("🛰 Background watch armed — Grade-A alerts fire "
+                           "every 5 min even with the app closed in the browser.")
         else:
             st.caption("⚠ Set [gmail] in secrets.toml (or GMAIL_* env vars) to enable.")
         c_test, c_reset = st.columns(2)

@@ -250,7 +250,7 @@ def render(get_conn):
     st.caption("Pool detection + sweep/confirm/fail event study vs a random-entry baseline")
 
     c1, c2, c3, c4 = st.columns(4)
-    sym = c1.selectbox("Symbol", list(SYMBOL_MAP), index=0)
+    sym = c1.selectbox("Symbol", sorted(SYMBOL_MAP), index=0)
     interval = c2.selectbox("Interval", ["15m", "30m", "1h"], index=0)
     period = c3.selectbox("Lookback", ["5d", "1mo", "3mo"], index=1)
     pivot_n = c4.number_input("Pivot length", 2, 20, 5)

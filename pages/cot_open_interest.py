@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     with st.sidebar:
         st.header("Open Interest Settings")
-        instrument = st.selectbox("Instrument", list(TFF_INSTRUMENTS.keys()), index=0)
+        instrument = st.selectbox("Instrument", sorted(TFF_INSTRUMENTS.keys()), index=0)
         weeks_back = st.slider("Weeks of history", 52, 260, 260)
         lookback = st.slider("Trend lookback (weeks)", 4, 16, 8)
         st.divider()

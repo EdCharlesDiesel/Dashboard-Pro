@@ -85,7 +85,7 @@ def _symbol_picker(label: str, key: str, default: str = "XAU/USD"
     """A registry instrument by default, or a free-text Yahoo ticker / FRED
     series id for macro drivers (real yields, DXY, ...) that aren't in the
     tradable registry. Returns (price series, display name)."""
-    names = INSTRUMENTS.keys()
+    names = sorted(INSTRUMENTS.keys())  # alphabetical dropdown
     options = names + [_CUSTOM_YAHOO, _CUSTOM_FRED]
     idx = options.index(default) if default in options else 0
     choice = st.selectbox(label, options, index=idx, key=f"{key}_choice")

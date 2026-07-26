@@ -191,7 +191,7 @@ def render_holding_period_tab() -> None:
     )
 
     c1, c2, c3 = st.columns(3)
-    pair = c1.selectbox("Instrument", list(PAIRS.keys()))
+    pair = c1.selectbox("Instrument", sorted(PAIRS.keys()))
     years = c2.slider("History (years)", 5, 20, 10)
     mode = c3.radio("Sampling", ["state", "event"], horizontal=True,
                     help="state = every day in signal; event = signal flips only")

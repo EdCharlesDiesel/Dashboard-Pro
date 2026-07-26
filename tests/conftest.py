@@ -55,6 +55,13 @@ def _no_live_db(request, monkeypatch):
         "host": "localhost", "port": 5432, "dbname": "trading",
         "user": "postgres", "password": "",
     })
+    # Neutralize the worker's precomputed board for the same reason: a developer
+    # machine may carry a real worker_board.json (from a live scan), and its
+    # JSON fallback would otherwise shadow the live house-view compute that
+    # bias_service tests assert on. Tests that exercise the board build one
+    # explicitly and call the pure helpers directly, so this doesn't hide them.
+    from src.services import precomputed as _pc
+    monkeypatch.setattr(_pc, "read_board", lambda: None)
     yield
 
 

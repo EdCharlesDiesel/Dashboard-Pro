@@ -26,6 +26,12 @@ from src.instruments.registry import INSTRUMENTS
 from src.services.market_data import daily_ohlc, h4_ohlc, weekly_ohlc
 
 
+# How stale the worker's precomputed board may be before this funnel ignores
+# it and computes live. The daemon cycles every 5 min; 15 min (three missed
+# cycles) means it's down or the market's closed — live compute is then honest.
+_BOARD_MAX_AGE_S = 900
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def _house_view_cached(pair: str, ticker: str) -> HouseView:
     return house_view(
@@ -36,12 +42,37 @@ def _house_view_cached(pair: str, ticker: str) -> HouseView:
     )
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _board_cached():
+    """The worker's precomputed board, read once per minute for the whole
+    process (one DB round-trip serves every pair on a universe-wide page).
+    ``None`` when the worker hasn't run / the DB is down — caller goes live."""
+    from src.services.precomputed import read_board
+    return read_board()
+
+
 def get_house_view(pair: str) -> Optional[HouseView]:
     """The canonical composite read for a registry pair, or ``None`` for a
-    symbol the registry doesn't know (free-text tickers stay lens-only)."""
+    symbol the registry doesn't know (free-text tickers stay lens-only).
+
+    Prefers the background daemon's precomputed board — a single cached DB read
+    for the entire universe instead of three timeframe fetches + a recompute
+    per pair on the request path. Falls through to a live compute whenever the
+    board is missing, stale, or doesn't have this pair, so behavior is
+    identical when the worker isn't running.
+    """
     inst = INSTRUMENTS.get(pair)
     if inst is None:
         return None
+    try:
+        from src.services.precomputed import board_is_fresh, house_view_from_board
+        board = _board_cached()
+        if board_is_fresh(board, _BOARD_MAX_AGE_S):
+            view = house_view_from_board(pair, board)
+            if view is not None:
+                return view
+    except Exception:
+        pass  # any board-read problem → fall through to live compute
     try:
         return _house_view_cached(pair, inst.ticker)
     except Exception:

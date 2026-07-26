@@ -176,7 +176,7 @@ class TrendController:
         )
 
     def _render_detail_panel(self, results: Dict[str, dict], selected: List[str]) -> None:
-        valid_pairs = [p for p in selected if not results.get(p, {}).get("error")]
+        valid_pairs = sorted(p for p in selected if not results.get(p, {}).get("error"))
         if not valid_pairs:
             st.error("No valid data. Try refreshing.")
             return

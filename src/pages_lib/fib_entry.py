@@ -201,7 +201,9 @@ class FibEntryPage(BloombergPage):
         st.session_state.setdefault("fib_detail", "EUR/USD")
         st.session_state.setdefault("account_bal", account_state.get_balance(10000.0))
         st.session_state.setdefault("risk_pct", 1.0)
-        st.session_state.setdefault("fib_email_on", False)
+        # ON by default (user's standing preference — alerts fire without
+        # having to find the toggle; the sidebar switch remains an off-ramp).
+        st.session_state.setdefault("fib_email_on", True)
         st.session_state.setdefault("fib_trades_per_signal", 2)
         return PageContext(code="15FB", title="15M Fib Entry", icon="⚡")
 
@@ -225,8 +227,8 @@ class FibEntryPage(BloombergPage):
         </style>
         """, unsafe_allow_html=True)
         st.session_state.fib_detail = st.selectbox(
-            "Detail instrument", list(INSTRUMENTS.keys()),
-            index=list(INSTRUMENTS.keys()).index(
+            "Detail instrument", sorted(INSTRUMENTS.keys()),  # alphabetical dropdown
+            index=sorted(INSTRUMENTS.keys()).index(
                 st.session_state.fib_detail
                 if st.session_state.fib_detail in INSTRUMENTS else "EUR/USD"),
             help="Pair shown on the detail chart. The scanner runs on the Setup "
@@ -244,7 +246,7 @@ class FibEntryPage(BloombergPage):
         # appears to "reset" mid-selection.
         with st.form("fib_filter_form"):
             pairs = st.multiselect(
-                "Instruments to scan", list(INSTRUMENTS.keys()),
+                "Instruments to scan", sorted(INSTRUMENTS.keys()),  # alphabetical dropdown
                 default=[p for p in st.session_state.fib_pairs if p in INSTRUMENTS],
             )
             min_score = st.slider(
@@ -333,31 +335,41 @@ class FibEntryPage(BloombergPage):
             (datetime.now().strftime("%a %d %b %H:%M"), "amber"),
         ]).show()
 
-        signals = self._scan_signals(pairs, min_score)
-        results = self._analyse(signals)
+        # Auto-refreshing fragment (same cadence as the Setup Ranker): while
+        # the page is open it re-scans, re-persists, and re-checks email
+        # alerts every 5 minutes without a manual rerun. Dedupe ledgers keep
+        # repeat scans quiet — only genuinely new entries email/save.
+        @st.fragment(run_every=300)
+        def _scan_and_render():
+            signals = self._scan_signals(pairs, min_score)
+            results = self._analyse(signals)
 
-        self._persist_signals(results)
+            self._persist_signals(results)
 
-        if st.session_state.get("fib_email_on"):
-            self._maybe_email(results)
+            if st.session_state.get("fib_email_on"):
+                self._maybe_email(results)
 
-        n_entries = sum(len(r["fib"]["entries"]) for r in results)
-        n_live = sum(1 for r in results if r["fib"]["status"] in ("ENTRY_FIRED", "IN_ZONE"))
-        render_metric_row([
-            MetricCell("Setup Signals", str(len(signals)), "cyan"),
-            MetricCell("With Fib Leg", str(len(results)), "green"),
-            MetricCell("Live Entries", str(n_live), "green"),
-            MetricCell("Total Entries", str(n_entries), "yellow"),
-        ])
+            n_entries = sum(len(r["fib"]["entries"]) for r in results)
+            n_live = sum(1 for r in results if r["fib"]["status"] in ("ENTRY_FIRED", "IN_ZONE"))
+            render_metric_row([
+                MetricCell("Setup Signals", str(len(signals)), "cyan"),
+                MetricCell("With Fib Leg", str(len(results)), "green"),
+                MetricCell("Live Entries", str(n_live), "green"),
+                MetricCell("Total Entries", str(n_entries), "yellow"),
+            ])
+            st.caption(f"◷ Auto-refreshes every 5 min · last scan "
+                       f"{datetime.now().strftime('%H:%M:%S')}")
 
-        tab_sig, tab_detail, tab_ref = st.tabs(
-            ["◆ FIB SIGNALS", "🔍 DETAIL CHART", "📖 METHOD"])
-        with tab_sig:
-            self._render_signals(results)
-        with tab_detail:
-            self._render_detail()
-        with tab_ref:
-            self._render_reference()
+            tab_sig, tab_detail, tab_ref = st.tabs(
+                ["◆ FIB SIGNALS", "🔍 DETAIL CHART", "📖 METHOD"])
+            with tab_sig:
+                self._render_signals(results)
+            with tab_detail:
+                self._render_detail()
+            with tab_ref:
+                self._render_reference()
+
+        _scan_and_render()
 
     # ── scanning / analysis ──────────────────────────────────────────────────
     @staticmethod

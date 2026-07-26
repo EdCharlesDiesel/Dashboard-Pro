@@ -127,7 +127,7 @@ def _positioning_chart(df: pd.DataFrame, instrument: str, price_df: pd.DataFrame
 # ══════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.header("COT Settings")
-    instrument = st.selectbox("Instrument", list(INSTRUMENTS.keys()), index=0)
+    instrument = st.selectbox("Instrument", sorted(INSTRUMENTS.keys()), index=0)
     years_back = st.slider("Years of history", 1, 8, 4)
     refresh = st.button("🔄 Force refresh from CFTC", width="stretch")
     if refresh:

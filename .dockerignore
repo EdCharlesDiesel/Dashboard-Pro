@@ -24,9 +24,18 @@ __pycache__/
 logs/
 archive/
 
+# Provisioning scripts / reverse-proxy configs — never needed inside the app
+# image (and .htpasswd shouldn't be baked in).
+deploy/
+# EXCEPT deploy/railway/, which IS the build context for the Railway basic-auth
+# proxy image (deploy/railway/Dockerfile COPYs from it). See DEPLOY-RAILWAY.md.
+!deploy/railway/
+!deploy/railway/**
+
 # Runtime state caches (regenerated at runtime — never bake stale state in)
 *_notify_cache.json
 account_state.json
+worker_board.json
 
 # Editor / OS cruft
 .idea/

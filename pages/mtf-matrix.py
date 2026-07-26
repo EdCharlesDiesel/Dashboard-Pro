@@ -34,7 +34,7 @@ def _render_validation_tab() -> None:
     default_pairs = [p for p in ("EUR/USD", "XAU/USD", "WTI/USD", "GBP/USD")
                      if p in INSTRUMENTS]
     c1, c2 = st.columns([3, 1])
-    pairs = c1.multiselect("Instruments", list(INSTRUMENTS.keys()),
+    pairs = c1.multiselect("Instruments", sorted(INSTRUMENTS.keys()),
                            default=default_pairs)
     period = c2.selectbox("History", ["2y", "5y"], index=1)
 

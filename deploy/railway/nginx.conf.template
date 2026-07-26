@@ -1,0 +1,64 @@
+# Basic-auth reverse proxy for the Streamlit `ui` service on Railway.
+#
+# Rendered by entrypoint.sh (envsubst, restricted to the four ${...} vars below
+# so nginx's own $variables survive) into /etc/nginx/conf.d/default.conf.
+#
+# Railway's edge terminates TLS, so — unlike the old self-hosted nginx — there
+# are no certificates, no ACME challenge, and no :443 block here. This listens
+# on plain HTTP on $PORT (Railway's injected port) and its only job is to put a
+# password in front of the dashboard: Streamlit authenticates nobody, and the
+# `ui` service is deliberately kept off the public internet, reachable only over
+# Railway's private network.
+
+# Streamlit's live channel (/_stcore/stream) is a WebSocket: echo the Upgrade
+# header back only when the client actually sent one.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# Railway's edge sets X-Forwarded-Proto: https. Pass it through so Streamlit
+# builds https:// URLs; fall back to the real scheme for a direct/local hit.
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
+server {
+    listen ${PORT};
+    listen [::]:${PORT};
+    server_name _;
+
+    # The UI's `*.railway.internal` name gets a new address on every redeploy
+    # (and resolves to IPv6). A literal hostname in proxy_pass would be
+    # resolved once at startup and then cached forever, so the proxy would 502
+    # after the UI redeploys. Resolving through a variable + this resolver (the
+    # container's own nameserver, detected in entrypoint.sh) re-resolves live.
+    resolver ${NGINX_RESOLVER} valid=10s ipv6=on;
+
+    # The whole point of this service.
+    auth_basic           "Dashboard-Pro";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    # Allow MT4 statement / chart uploads.
+    client_max_body_size 50M;
+
+    location / {
+        set $upstream "${UI_HOST}:${UI_PORT}";
+        # $request_uri is required: a variable in proxy_pass drops the URI.
+        proxy_pass http://$upstream$request_uri;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Streamlit holds the socket open for the session; don't cut it at 60s.
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}

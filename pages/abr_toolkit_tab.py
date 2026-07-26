@@ -639,7 +639,7 @@ def render(repo=None) -> None:
 
     with st.sidebar:
         st.subheader("ABR settings")
-        chosen = st.multiselect("Instruments", list(INSTRUMENTS.keys()),
+        chosen = st.multiselect("Instruments", sorted(INSTRUMENTS.keys()),
                                 default=["XAUUSD", "XAGUSD"])
         tf_label = st.selectbox("Timeframe", list(TIMEFRAMES.keys()), index=0)
         risk_usd = st.number_input("Risk per trade (USD)", 1.0, 10000.0, 30.0)
