@@ -18,7 +18,9 @@ Method, per relationship (A = driver, B = asset):
   2. Rolling OLS: B_norm = a + b * A_norm over a 2y window
      -> residual = how far B sits from where A "says" it should be
      -> residual z-score = the DISCONNECT SCORE
-  3. Event study: every past day |z| crossed the threshold, what did
+  3. Ornstein-Uhlenbeck fit on the residual -> half-life = does the gap
+     revert on a tradeable horizon, or is it a multi-year regime story?
+  4. Event study: every past day |z| crossed the threshold, what did
      the asset do over the next 5/20/60 trading days?
      -> if returns after past disconnects are ~random, the "massive
         opportunity" is a story, not an edge.
@@ -43,6 +45,7 @@ import streamlit as st
 import yfinance as yf
 from plotly.subplots import make_subplots
 
+from src.core.quant_models import fit_ou
 from src.core.secrets import fred_api_key
 from src.services.alert_service import NotifyCache
 from src.services.signal_store import persist_signals
@@ -84,6 +87,12 @@ CORR_WINDOW = 60      # days, rolling correlation of changes
 BETA_WINDOW = 504     # ~2 years, rolling regression window
 Z_THRESHOLD = 2.0
 HORIZONS = (5, 20, 60)
+
+# OU half-life gate: the residual technically reverts, but only trade it when
+# half of the gap decays within a sane holding period. ~120 trading days
+# (~6 months) is generous for these slow macro relationships; a disconnect
+# that reverts slower than this is a regime story, not an entry.
+OU_MAX_HALF_LIFE = 120
 
 
 # ---------------------------------------------------------------------------
@@ -230,10 +239,40 @@ def _render_relationship(
         corr_now = float(df["corr"].iloc[-1])
         regime = ("ALIVE" if np.sign(corr_now) == expected_sign
                   and abs(corr_now) > 0.2 else "BROKEN")
+
+        # Fit an Ornstein-Uhlenbeck process to the disconnect RESIDUAL itself
+        # (fit_ou wants a stationary series — the rolling-regression residual is
+        # exactly that, never raw price). This puts an expected HOLDING PERIOD on
+        # the gap: half_life = trading days for half the disconnect to decay back
+        # to its mean. Degenerate / no-reversion fits come back with
+        # half_life = inf and are treated as untradeable.
+        try:
+            ou = fit_ou(df["resid"])
+        except Exception:
+            ou = None
+        ou_ok = bool(ou is not None and np.isfinite(ou.half_life)
+                     and ou.half_life <= OU_MAX_HALF_LIFE)
+
         m1, m2, m3 = st.columns(3)
         m1.metric("Disconnect z now", f"{z_now:+.2f}")
         m2.metric(f"{CORR_WINDOW}d corr (changes)", f"{corr_now:+.2f}")
         m3.metric("Regime check", regime)
+
+        m4, m5, m6 = st.columns(3)
+        m4.metric("OU half-life (days)",
+                  f"{ou.half_life:.0f}"
+                  if (ou is not None and np.isfinite(ou.half_life)) else "—")
+        m5.metric("OU z-score", f"{ou.zscore:+.2f}" if ou is not None else "—")
+        m6.metric("Reverts in time?", "YES" if ou_ok else "NO")
+        st.caption(
+            f"OU half-life = trading days for half of this disconnect to decay "
+            f"back toward its mean (fit on the residual, not price). 'Reverts in "
+            f"time?' is YES only when the fit shows genuine mean reversion with "
+            f"half-life ≤ {OU_MAX_HALF_LIFE}d — the extra gate that stops you "
+            f"fading a gap which technically closes but takes years. The OU "
+            f"z-score is an independent read on the same residual (vs its "
+            f"equilibrium std) to cross-check the rolling z above."
+        )
 
         # Audit log (deduped per label+date; this loop reruns on every widget touch).
         _latest_date = df.index[-1]
@@ -243,26 +282,40 @@ def _render_relationship(
                 "pair_name": label, "date": str(_latest_date),
                 "z_now": z_now, "corr_now": corr_now, "regime": regime,
                 "expected_sign": expected_sign,
+                "ou_half_life": (float(ou.half_life) if ou is not None
+                                 and np.isfinite(ou.half_life) else None),
+                "ou_zscore": (float(ou.zscore) if ou is not None else None),
+                "ou_tradeable": ou_ok,
             })
 
         # Escalate to a trade_setups signal only when there's a tradable pair
         # AND the disconnect clears the threshold AND the relationship is still
         # ALIVE (fading a BROKEN regime is exactly the trap this page warns
-        # against — see the caption above).
-        if reg_pair and regime == "ALIVE" and abs(z_now) >= thr:
+        # against — see the caption above). OU half-life is the third gate:
+        # only fade a disconnect that actually reverts within a sane horizon.
+        _hl = ou.half_life if (ou is not None
+                               and np.isfinite(ou.half_life)) else None
+        if reg_pair and regime == "ALIVE" and abs(z_now) >= thr and ou_ok:
+            _hl_txt = f", OU half-life {_hl:.0f}d" if _hl is not None else ""
             persist_signals("disconnect_mon", [{
                 "pair": reg_pair,
                 "bias": "SHORT" if z_now > 0 else "LONG",
                 "entry": float(df["B"].iloc[-1]),
                 "strength_score": None,
-                "conviction": f"|z|={abs(z_now):.2f} (thr {thr:.2f})",
+                "conviction": (f"|z|={abs(z_now):.2f} (thr {thr:.2f})" + _hl_txt),
                 "thesis": (f"Disconnect Monitor — {label}: z={z_now:+.2f}, "
-                           f"regime ALIVE (corr={corr_now:+.2f}), fading the "
-                           f"{'rich' if z_now > 0 else 'cheap'} side."),
+                           f"regime ALIVE (corr={corr_now:+.2f}){_hl_txt}, "
+                           f"fading the {'rich' if z_now > 0 else 'cheap'} side."),
             }])
             st.success(f"📌 Trade signal saved: {reg_pair} "
                        f"{'SHORT' if z_now > 0 else 'LONG'} (fading the "
                        f"{'rich' if z_now > 0 else 'cheap'} side).")
+        elif reg_pair and regime == "ALIVE" and abs(z_now) >= thr and not ou_ok:
+            st.caption(
+                "⚠️ Disconnect is stretched and the regime is ALIVE, but the OU "
+                f"fit shows no tradeable mean reversion (half-life too long / "
+                f"none, > {OU_MAX_HALF_LIFE}d) — no trade signal escalated. The "
+                "gap may still close eventually, just not on a tradeable horizon.")
         elif reg_pair and abs(z_now) >= thr and regime == "BROKEN":
             st.caption(
                 "⚠️ Stretched, but the driver→asset correlation no longer holds "
@@ -299,7 +352,8 @@ def _render_relationship(
                 "change, not an opportunity.")
 
         return {"relationship": label, "z_now": round(z_now, 2),
-                "corr_now": round(corr_now, 2), "regime": regime}
+                "corr_now": round(corr_now, 2), "regime": regime,
+                "reverts": "YES" if ou_ok else "NO"}
 
 
 # ---------------------------------------------------------------------------
@@ -382,10 +436,12 @@ def render_disconnect_monitor_tab() -> None:
         st.dataframe(pd.DataFrame(summary), use_container_width=True,
                      hide_index=True)
         st.caption(
-            "Interpretation guide: big |z| with regime ALIVE = tension that "
-            "historically resolved (tradeable with your regime filter). Big "
-            "|z| with regime BROKEN = the relationship itself changed — the "
-            "gap can widen for months. Check whether the event study agrees.")
+            "Interpretation guide: big |z| with regime ALIVE **and reverts YES** "
+            "= tension that historically resolved on a tradeable horizon (this "
+            "is what escalates to a signal). Big |z| with regime BROKEN = the "
+            "relationship itself changed — the gap can widen for months. "
+            "Reverts NO = it may close eventually, but too slowly to trade. "
+            "Check whether the event study agrees.")
 
 
 # ===========================================================================
