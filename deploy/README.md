@@ -1,5 +1,11 @@
 # Deploy — DigitalOcean (single Droplet)
 
+> **The deployment of record is [DEPLOY-RAILWAY.md](../DEPLOY-RAILWAY.md)** —
+> Railway + Neon, with the always-on ingest→score worker as its own service.
+> This DigitalOcean guide is the alternative self-hosted path (one box running
+> both Streamlit and its own Postgres). `railway/` in this folder holds the
+> basic-auth proxy image for the Railway deploy, not the Droplet one.
+
 Cheapest production setup: **one Droplet running both Streamlit and Postgres**.
 DigitalOcean Managed Postgres starts at $15/mo — more than a whole Droplet — so
 we self-host Postgres on `localhost` alongside the app.

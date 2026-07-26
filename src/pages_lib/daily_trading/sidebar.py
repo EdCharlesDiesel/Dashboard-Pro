@@ -167,18 +167,12 @@ class ChecklistSidebar:
 
         st.markdown("---")
         st.markdown("**◆ POSTGRESQL**")
-        st.session_state.db_host = st.text_input("Host", value=st.session_state.db_host)
-        st.session_state.db_port = st.number_input(
-            "Port", value=int(st.session_state.db_port), step=1,
-        )
-        st.session_state.db_name = st.text_input("Database", value=st.session_state.db_name)
-        st.session_state.db_user = st.text_input("User", value=st.session_state.db_user)
-        st.session_state.db_pass = st.text_input(
-            "Password", value=st.session_state.db_pass, type="password",
-        )
-
-        # Auto-connected from secrets on startup; this is a manual reconnect for
-        # when the credentials above are edited. Re-runs the same connect path.
+        # ⚠️ No credential inputs here, by design. A prefilled `type="password"`
+        # text_input still ships the real value to the browser on every page
+        # load, so rendering the DB credentials would leak them to anyone who
+        # can reach the app (and the host/user/dbname were plaintext outright).
+        # `auto_connect()` resolves the target from secrets.toml / env instead —
+        # change it there (or in the host's env vars) and press Reconnect.
         if st.button("Reconnect & Init DB", width="stretch"):
             from src.db.connection import auto_connect
             auto_connect(force=True)

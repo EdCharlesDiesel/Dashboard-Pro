@@ -2,7 +2,6 @@ import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
 from src.instruments.registry import INSTRUMENTS
-from src.core import secrets
 from src.db.trade_repository import TradeRepository, DBConfig
 from src.db.cache import pooled_repository
 from src.db.market_cache import cached_closes
@@ -28,7 +27,7 @@ BloombergTheme.apply()
 
 # Auto-connect to PostgreSQL from secrets.toml on first load — no manual
 # "Connect & Load" click needed. Idempotent per session and never raises.
-from src.db.connection import auto_connect
+from src.db.connection import auto_connect, current_db_config
 auto_connect()
 
 st.markdown("""
@@ -379,26 +378,15 @@ with st.sidebar:
     st.markdown("### 📓 Trade Journal")
 
     st.markdown("**🗄️ PostgreSQL Database**")
-    _db = secrets.db_config()  # defaults from .streamlit/secrets.toml [database]
-    _host = st.text_input("Host", value=st.session_state.get("db_host", _db["host"]), key="jdb_host")
-    _port = st.number_input("Port", value=int(st.session_state.get("db_port", _db["port"])), step=1, key="jdb_port")
-    _name = st.text_input("Database", value=st.session_state.get("db_name", _db["dbname"]), key="jdb_name")
-    _user = st.text_input("User", value=st.session_state.get("db_user", _db["user"]), key="jdb_user")
-    _pass = st.text_input("Password", value=st.session_state.get("db_pass", _db["password"]), type="password",
-                          key="jdb_pass")
-
-    db_cfg = {"host": _host, "port": int(_port), "dbname": _name, "user": _user, "password": _pass}
-
-    if st.button("🔌 Connect & Load", width="stretch", type="primary"):
-        try:
-            conn = get_db_connection(db_cfg)
-            conn.close()
-            st.session_state.journal_db_ok = True
-            st.session_state.journal_db_cfg = db_cfg
+    # ⚠️ No credential inputs here, by design — see the same note in
+    # src/pages_lib/daily_trading/sidebar.py. `auto_connect()` at the top of this
+    # page already resolved the target from secrets.toml / env and set
+    # journal_db_ok + journal_db_cfg; this button just re-runs that path.
+    if st.button("🔌 Reconnect & Load", width="stretch", type="primary"):
+        if auto_connect(force=True):
             st.success("✅ Connected")
-        except Exception as e:
-            st.session_state.journal_db_ok = False
-            st.error(str(e)[:60])
+        else:
+            st.error(str(st.session_state.get("db_msg", "Connection failed"))[:60])
 
     st.divider()
     show_n = st.slider("Max trades to load", 50, 500, 200, step=50)
@@ -425,10 +413,14 @@ st.markdown(f"""
 
 # ── Guard: DB connection ───────────────────────────────────────────
 if not st.session_state.get("journal_db_ok"):
-    st.info("🔌 Connect to PostgreSQL in the sidebar to load your trade journal.")
+    st.info(
+        "🔌 No database connection. Check the `[database]` credentials in "
+        "`.streamlit/secrets.toml` (or `DATABASE_URL` on the host), then press "
+        "**Reconnect & Load** in the sidebar."
+    )
     st.stop()
 
-_cfg = st.session_state.get("journal_db_cfg", db_cfg)
+_cfg = st.session_state.get("journal_db_cfg") or current_db_config().as_kwargs()
 
 render_mt4_import(_cfg)
 

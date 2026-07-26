@@ -38,9 +38,9 @@ Design constraints (all deliberate):
   on every page load via the sidebar nav). Never started under pytest —
   ``PYTEST_CURRENT_TEST`` guards against live emails/DB writes from AppTest.
 - **Runs where it's hosted.** Inside ``streamlit run`` it works whenever the
-  server is up; the *same code* on a small always-on host in the DB's region
-  (Neon ``us-east-1``) gives true 24/7 with ~2ms DB latency — that's the
-  upgrade path, not a rewrite.
+  server is up; the *same code* as a dedicated worker service in the DB's region
+  (Neon ``us-east-1`` ⇒ Railway US East, see ``DEPLOY-RAILWAY.md``) gives true
+  24/7 with ~2ms DB latency — that's the upgrade path, not a rewrite.
 
 Scope: Grade-A ranker sweep + house-view board. 15M Fib Entry alerts stay
 page-driven (its entries are desk-time intraday triggers).
@@ -241,14 +241,15 @@ def scan_once() -> dict:
 
 def run_forever(interval: int = SCAN_INTERVAL_S) -> None:  # pragma: no cover - process entrypoint
     """Foreground ingest→score loop for a **dedicated worker process/container**
-    (AWS EC2, docker-compose ``worker`` service, or any always-on host).
+    (the Railway ``worker`` service, docker-compose ``worker``, or any always-on
+    host).
 
     Unlike :func:`ensure_started` this does not spawn a thread or honour the
     pytest guard — it runs the cycle in the current process forever, which is
     exactly what a headless worker service wants (``python -m
-    src.services.background_scanner``). Deployed next to the DB (Neon
-    ``us-east-1``) it becomes the true 24/7 engine; the UI containers just read
-    the board it keeps fresh.
+    src.services.background_scanner``). Deployed in the DB's region (Neon
+    ``us-east-1`` ⇒ Railway US East) it becomes the true 24/7 engine; the UI
+    containers just read the board it keeps fresh.
     """
     from src.core.observability import init_logging
     try:
