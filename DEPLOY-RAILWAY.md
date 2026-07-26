@@ -117,7 +117,7 @@ On the service Railway created in step 1:
 Start Command (one line):
 
 ```bash
-streamlit run app.py --server.port=8501 --server.address=:: --server.headless=true --browser.gatherUsageStats=false --server.enableCORS=false --server.enableXsrfProtection=false
+streamlit run app.py --server.port=${PORT:-8501} --server.address=:: --server.headless=true --browser.gatherUsageStats=false --server.enableCORS=false --server.enableXsrfProtection=false
 ```
 
 Three details in there matter:
@@ -127,9 +127,13 @@ Three details in there matter:
   name), and the internal name resolves to an IPv6 address. `::` on Linux
   dual-stack accepts both families, so it's the binding that works either way;
   `0.0.0.0` can leave the service unreachable over the private network.
-- **`--server.port=8501`** literal, not `$PORT` — this service has no domain, so
-  Railway injects no `PORT`. A fixed port keeps it in sync with the proxy's
-  `UI_PORT`.
+- **`--server.port=${PORT:-8501}`**, not a bare `8501` — Railway injects `PORT`
+  for whichever service owns a public domain and routes the edge to *that* port,
+  so a hard-pinned 8501 gives "Application failed to respond" the moment you
+  generate a domain on this service (e.g. to smoke-test it before the proxy
+  exists). The `:-8501` fallback covers the normal private case and keeps it in
+  sync with the proxy's `UI_PORT`. Railway runs the start command through a
+  shell, so the expansion works.
 - **CORS and XSRF off together** — Streamlit re-enables CORS if XSRF protection
   is on, with a warning. Safe here for the same reason it was safe behind the
   self-hosted nginx: single origin, and the only route in is the basic-auth
@@ -160,7 +164,7 @@ Variables:
 |---|---|
 | `BASIC_AUTH_USER` | your username |
 | `BASIC_AUTH_PASSWORD` | a long random password |
-| `UI_HOST` | The UI service's private hostname, copied from its Networking panel — `ui.railway.internal` if you renamed it, `dashboard-pro.railway.internal` if you kept the default. |
+| `UI_HOST` | **Prefer a reference**, not a literal: `${{ui.RAILWAY_PRIVATE_DOMAIN}}` (substitute the UI service's actual name — `${{Dashboard-Pro.RAILWAY_PRIVATE_DOMAIN}}` if you kept the default). Railway maintains that value, so renaming the UI service can't silently break the proxy. Use the **Reference** button on the Variables tab to build the syntax. A hardcoded `ui.railway.internal` / `dashboard-pro.railway.internal` also works. |
 | `UI_PORT` | `8501` |
 
 `PORT` is injected by Railway once the domain exists — don't set it yourself.
