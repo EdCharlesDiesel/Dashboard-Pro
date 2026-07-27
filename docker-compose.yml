@@ -20,7 +20,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       # $$ escapes the literal $ so Compose doesn't treat it as variable interpolation.
-      POSTGRES_PASSWORD: "$$ta99Ath0"
+      POSTGRES_PASSWORD: ""
       POSTGRES_DB: dashboardprov1
     volumes:
       # postgres:18+ stores data under /var/lib/postgresql (version subdir),
@@ -50,16 +50,16 @@ services:
       DB_PORT: 5432
       DB_NAME: dashboardprov1
       DB_USER: postgres
-      DB_PASSWORD: "$$ta99Ath0"
+      DB_PASSWORD: ""
       # API keys — real values, optional (app degrades gracefully without them).
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
       FMP_API_KEY: "BDIqvTLAhhi04dVyNeGG9xzSGQc5yDLQ"
       FINNHUB_API_KEY: ""
       ANTHROPIC_API_KEY: ""
       # Gmail SMTP (AMD scanner / market-overview alerts) — optional, unset.
-      GMAIL_SENDER: ""
-      GMAIL_APP_PASSWORD: ""
-      GMAIL_RECIPIENT: ""
+      GMAIL_SENDER: "Ckhotso@gmail.com"
+      GMAIL_APP_PASSWORD: "dsqf gaoj gdfw pjvg"
+      GMAIL_RECIPIENT: "Ckhotso@gmail.com"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
       interval: 30s

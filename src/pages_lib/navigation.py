@@ -79,6 +79,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("JRNL", "Trade Journal", "📓", "pages/trade-journal.py"),
     ]),
     ("📅 WEEKEND — weekly bias & COT", [
+        NavEntry("WKAH", "Week Ahead",              "🗓️", "pages/week_ahead_tab.py"),
         NavEntry("WEMA", "Weekly EMA",              "📉", "pages/weekly-ema.py"),
         NavEntry("WSWG", "Weekly Swing",            "🔄", "pages/weekly-swing.py"),
         NavEntry("SWPB", "Swing Playbook",          "📔", "pages/swing_playbook_tab.py"),

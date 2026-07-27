@@ -16,11 +16,16 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from src.ui.theme import BloombergTheme
+from src.ui.theme import BloombergTheme as T
 from src.pages_lib.navigation import render_sidebar_nav
 from src.core import observability
 from src.core.config import CANDLE_STYLE
+from src.core import volume_profile as vp
 from src.instruments import INSTRUMENTS
+from src.services.alert_service import NotifyCache
 from src.services.signal_store import persist_signals
+from src.services.tool_log import log_tool_usage
+from src.ui.charts import ChartKit
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -68,13 +73,11 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.rolling(period, min_periods=1).mean()
 
 
-def true_range(df: pd.DataFrame) -> pd.Series:
-    """Per-bar true range (no smoothing). Used as a volume-like activity proxy."""
-    high, low, close = df["High"], df["Low"], df["Close"]
-    prev_close = close.shift(1)
-    return pd.concat(
-        [(high - low), (high - prev_close).abs(), (low - prev_close).abs()], axis=1
-    ).max(axis=1)
+# Per-bar true range — the volume-like activity proxy for zero-volume spot FX.
+# Both this and `_has_usable_volume` below now live in src/core/volume_profile.py
+# because the Fixed Range VP tab needs the identical definitions; keeping two
+# copies is exactly how the two panels would drift apart. Same formulas.
+true_range = vp.true_range
 
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -260,13 +263,10 @@ def _this_week(labeled: pd.DataFrame) -> pd.DataFrame:
     return view
 
 
-def _has_usable_volume(s: pd.Series) -> bool:
-    """Volume is usable when it has at least one non-NaN, non-zero value.
-    Yahoo Finance returns all-zero Volume for FX pairs, which renders as an
-    empty subplot — treat that as "no volume" and fall back to a range-based
-    activity proxy instead."""
-    vol = pd.to_numeric(s, errors="coerce")
-    return bool(vol.fillna(0).abs().sum() > 0)
+# Volume is usable when it has at least one non-NaN, non-zero value. Yahoo
+# returns all-zero Volume for FX pairs, which renders as an empty subplot —
+# treat that as "no volume" and fall back to the range-based activity proxy.
+_has_usable_volume = vp.has_usable_volume
 
 
 def _period_boundaries(idx, interval: str) -> list:
@@ -435,6 +435,111 @@ def make_chart(labeled: pd.DataFrame, symbol: str, interval: str = "1d") -> go.F
 
 
 # --------------------------------------------------------------------------- #
+# Fixed Range Volume Profile (TradingView-style overlay)
+# --------------------------------------------------------------------------- #
+# TradingView draws the FRVP *on* the price panel, anchored at the left edge of
+# the fixed range and growing rightward — not as a separate side panel like the
+# AMD chart's volume-by-price. Plotly has no native horizontal-histogram
+# overlay for a datetime axis, so each profile row is a rectangle shape whose
+# width is a time delta proportional to that bin's activity. Buy and sell are
+# stacked horizontally within the row (buy first, from the anchor), which is
+# how the up/down split reads on TradingView.
+FRVP_BUY = "#00e0ff"    # cyan — activity from up-closing bars
+FRVP_SELL = "#ff5c8a"   # pink — activity from down-closing bars
+
+
+def _frvp_rows(fig, profile, max_width: pd.Timedelta) -> None:
+    """Add one buy/sell rectangle pair per price bin."""
+    peak = float(profile.total.max())
+    if peak <= 0:
+        return
+    x0 = profile.window.start
+    for i, (lo_edge, hi_edge) in enumerate(zip(profile.edges[:-1], profile.edges[1:])):
+        total_i = float(profile.total[i])
+        if total_i <= 0:
+            continue
+        # Rows outside the value area are dimmed, same as TradingView — the
+        # eye should land on the 70% band, not on the tails.
+        in_va = profile.va_low_index <= i <= profile.va_high_index
+        opacity = 0.95 if in_va else 0.35
+        pad = (hi_edge - lo_edge) * 0.12          # hairline gap between rows
+        y0, y1 = lo_edge + pad / 2, hi_edge - pad / 2
+        width = max_width * (total_i / peak)
+        buy_w = width * (float(profile.buy[i]) / total_i)
+        for x_start, x_end, color in (
+                (x0, x0 + buy_w, FRVP_BUY),
+                (x0 + buy_w, x0 + width, FRVP_SELL),
+        ):
+            if x_end <= x_start:
+                continue
+            fig.add_shape(
+                type="rect", xref="x", yref="y",
+                x0=x_start, x1=x_end, y0=y0, y1=y1,
+                fillcolor=color, opacity=opacity,
+                line=dict(width=0), layer="below",
+            )
+
+
+def make_frvp_chart(view: pd.DataFrame, profile, symbol: str,
+                    breaks: list) -> go.Figure:
+    """Candles for `view` with the fixed-range profile overlaid at its anchor.
+
+    `view` must already be UTC-indexed (see `vp.to_utc`) so the shapes, whose
+    x coordinates come from the profile's UTC window, land on the right bars.
+    """
+    kind = "Activity" if profile.is_proxy else "Volume"
+    fig = ChartKit.panels([
+        f"{symbol} — Fixed Range {kind} Profile · {profile.window.label}"
+    ])
+    ChartKit.candles(fig, view, row=1)
+
+    chart_span = view.index[-1] - view.index[0]
+    # Short ranges (a 2h kill zone on a week of bars) would render as a sliver
+    # against the range duration alone, so the profile also gets a floor
+    # proportional to the visible span.
+    max_width = max(profile.window.duration * 0.9, chart_span * 0.12)
+
+    # Shaded box marking the fixed range itself.
+    fig.add_shape(
+        type="rect", xref="x", yref="paper",
+        x0=profile.window.start, x1=profile.window.end, y0=0, y1=1,
+        fillcolor=FRVP_BUY, opacity=0.05, line=dict(width=0), layer="below",
+    )
+    # Session-break separators.
+    for b in breaks:
+        if view.index[0] <= b <= view.index[-1]:
+            fig.add_shape(
+                type="line", xref="x", yref="paper", x0=b, x1=b, y0=0, y1=1,
+                line=dict(color=T.BORDER, width=1, dash="dot"), layer="below",
+            )
+
+    _frvp_rows(fig, profile, max_width)
+
+    # POC / VAH / VAL carried forward across everything after the range — the
+    # whole reason to profile a *previous* session.
+    right = view.index[-1]
+    for level, color, dash, label in (
+            (profile.poc, T.YELLOW, "solid", "POC"),
+            (profile.vah, T.GREY, "dash", "VAH"),
+            (profile.val, T.GREY, "dash", "VAL"),
+    ):
+        fig.add_shape(
+            type="line", xref="x", yref="y",
+            x0=profile.window.start, x1=right, y0=level, y1=level,
+            line=dict(color=color, width=1.6 if label == "POC" else 1, dash=dash),
+        )
+        fig.add_annotation(
+            x=right, y=level, text=f"{label} {level:,.5f}", xref="x", yref="y",
+            showarrow=False, xanchor="left", xshift=4,
+            font=dict(color=color, size=9, family=T.FONT_MONO),
+        )
+
+    fig = ChartKit.finish(fig, height=560)
+    fig.update_layout(hovermode="x", margin=dict(l=30, r=110, t=40, b=20))
+    return fig
+
+
+# --------------------------------------------------------------------------- #
 # Educational content
 # --------------------------------------------------------------------------- #
 PLAYBOOK = {
@@ -545,6 +650,35 @@ with st.sidebar:
     expansion_atr_mult = st.slider("Expansion body (×ATR)", 0.5, 3.0, 1.3, 0.1)
 
     st.divider()
+    st.header("📊 Fixed Range VP")
+    FRVP_PREV_DAY = "Previous FX day"
+    FRVP_LAST_N = "Last N bars"
+    frvp_mode = st.selectbox(
+        "Fixed range", [FRVP_PREV_DAY] + list(vp.SESSION_WINDOWS.keys()) + [FRVP_LAST_N],
+        help="Which session the profile is anchored to. Anchoring to a session "
+             "break (instead of dragging a range by hand) is what makes the "
+             "POC reproducible — the same page gives the same level twice.",
+    )
+    if frvp_mode == FRVP_LAST_N:
+        frvp_n = st.slider("Bars in range", 6, 240, BARS_PER_DAY)
+        frvp_back = 1
+    else:
+        frvp_n = BARS_PER_DAY
+        frvp_back = st.slider(
+            "Sessions back", 1, 5, 1,
+            help="1 = the most recent completed session. The session still "
+                 "forming is never profiled — its POC would move every rerun.",
+        )
+    frvp_bins = st.slider("Price bins", 12, 100, vp.DEFAULT_BINS)
+    frvp_va = st.slider("Value area %", 50, 90, 70, 5) / 100.0
+    frvp_break_hour = st.slider(
+        "FX day break (UTC hour)", 0, 23, vp.FX_DAY_BREAK_HOUR,
+        help="21:00 UTC is the 17:00 New York close during US daylight time — "
+             "the standard FX day roll. Use 22 in northern winter, or 0 for a "
+             "plain UTC-midnight break.",
+    )
+
+    st.divider()
     st.header("📧 Email alerts (Gmail)")
     # Credentials come from .streamlit/secrets.toml under [gmail].
     try:
@@ -609,8 +743,9 @@ try:
 except Exception as e:  # noqa: BLE001
     st.error(f"Could not load data: {e}")
 
-tab_chart, tab_phases, tab_play, tab_about = st.tabs(
-    ["📈 Chart", "🧩 Detected phases", "📘 How to trade each phase", "ℹ️ About"]
+tab_chart, tab_frvp, tab_phases, tab_play, tab_about = st.tabs(
+    ["📈 Chart", "📊 Fixed Range VP", "🧩 Detected phases",
+     "📘 How to trade each phase", "ℹ️ About"]
 )
 
 if df_raw is not None and not df_raw.empty:
@@ -750,6 +885,129 @@ if df_raw is not None and not df_raw.empty:
                 "slightly ahead · 🔴 **light red**: sellers slightly ahead · "
                 "🟥 **red**: sellers dominate. Long bars = high-interest levels."
             )
+
+        with tab_frvp:
+            # The profile is built on the full loaded history (not the
+            # week-windowed view the AMD chart uses) so "5 sessions back" has
+            # something to reach for.
+            full_utc = vp.to_utc(labeled)
+            if frvp_mode == FRVP_PREV_DAY:
+                frvp_window = vp.previous_day_range(
+                    full_utc.index, back=frvp_back, day_break_hour=frvp_break_hour)
+            elif frvp_mode == FRVP_LAST_N:
+                frvp_window = vp.last_n_bars_range(full_utc.index, frvp_n)
+            else:
+                frvp_window = vp.previous_session_range(
+                    full_utc.index, frvp_mode, back=frvp_back,
+                    day_break_hour=frvp_break_hour)
+
+            profile = None
+            if frvp_window is not None:
+                profile = vp.fixed_range_profile(
+                    full_utc, window=frvp_window, bins=frvp_bins,
+                    value_area_pct=frvp_va)
+
+            if profile is None:
+                st.warning(
+                    f"No completed **{frvp_mode}** range available "
+                    f"{frvp_back} session(s) back in the loaded "
+                    f"{PERIOD} of {INTERVAL} bars. Try a smaller "
+                    "*Sessions back*, or a different range mode."
+                )
+            else:
+                last_close = float(labeled["Close"].iloc[-1])
+                read = vp.read_profile(profile, last_close)
+                _inst = INSTRUMENTS.get(instrument)
+                pip_size = getattr(_inst, "pip_size", 0.0001) or 0.0001
+                _fmt = "{:,.5f}" if abs(last_close) < 100 else "{:,.2f}"
+
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("POC", _fmt.format(profile.poc),
+                          f"{(last_close - profile.poc) / pip_size:+,.1f} pips away")
+                m2.metric("VAH", _fmt.format(profile.vah))
+                m3.metric("VAL", _fmt.format(profile.val))
+                m4.metric(f"Value area ({profile.value_area_pct:.0%})",
+                          f"{profile.value_area_width / pip_size:,.1f} pips")
+
+                (st.success if read.lean == "Bullish" else
+                 st.error if read.lean == "Bearish" else st.info)(
+                    f"**{read.state}** — {read.headline}"
+                )
+                st.caption(read.detail)
+
+                # Context window: a couple of range-widths of lead-in so the box
+                # isn't glued to the left edge, then everything after it — the
+                # point is watching price interact with the carried-forward levels.
+                pad = max(profile.window.duration * 2, pd.Timedelta(hours=24))
+                view = full_utc[full_utc.index >= profile.window.start - pad]
+                brks = vp.session_breaks(view.index, day_break_hour=frvp_break_hour)
+                st.plotly_chart(
+                    make_frvp_chart(view, profile, symbol, brks),
+                    width="stretch", config=ChartKit.PLOTLY_CONFIG,
+                )
+
+                b1, b2 = st.columns(2)
+                b1.metric("Buy share of range", f"{profile.buy_share:.0%}")
+                b2.metric("Bars in range", f"{profile.bars}")
+
+                if profile.bars < 4:
+                    st.warning(
+                        f"⚠️ Only **{profile.bars} bars** in this range. A kill "
+                        f"zone is 2–3 hours, so on {INTERVAL} bars it profiles "
+                        "into a handful of rows — the POC is closer to 'the "
+                        "middle of two candles' than to a real distribution. "
+                        "Use **Previous FX day** for a level worth trading, or "
+                        "read this one as rough context only."
+                    )
+
+                st.caption(
+                    f"Fixed range: **{profile.window.label}** "
+                    f"({profile.window.start:%a %d %b %H:%M} → "
+                    f"{profile.window.end:%a %d %b %H:%M} UTC, {profile.bars} × "
+                    f"{INTERVAL} bars). Rows are 🟦 **cyan** buy (up-closing bars) + 🟥 "
+                    "**pink** sell (down-closing bars), stacked from the range's "
+                    "left edge; rows inside the value area are drawn solid and "
+                    "the tails dimmed. Dotted verticals are FX-day breaks."
+                )
+                if profile.is_proxy:
+                    st.caption(
+                        "ℹ️ **Activity proxy, not traded volume.** Spot FX trades "
+                        "over-the-counter so Yahoo reports zero volume; each bar's "
+                        "true range is substituted instead. The *prices* the POC "
+                        "and value area identify are still meaningful — the bar "
+                        "lengths are ranges, not contracts. For real volume, pick "
+                        "a futures-backed instrument (Gold, Silver, Platinum)."
+                    )
+                st.caption(
+                    "⚠️ The buy/sell split is inferred from each bar's direction "
+                    "(up-closing = buy), not from the tape. That is the standard "
+                    "retail approximation — it is not real order-flow delta."
+                )
+
+                # Audit trail only: a profile yields levels, not a directional
+                # pair+bias call, so it belongs in tool_usage_log rather than
+                # trade_setups (same policy as stop_structure / correlations).
+                # Deduped per instrument+range+settings — Streamlit reruns the
+                # whole script on every widget touch.
+                _frvp_key = (f"{instrument}|{profile.window.label}|"
+                             f"{frvp_bins}|{frvp_va:.2f}")
+                if NotifyCache("frvp_log").filter_new([_frvp_key]):
+                    log_tool_usage("frvp", {
+                        "instrument": instrument, "ticker": symbol,
+                        "interval": INTERVAL, "mode": frvp_mode,
+                        "range_label": profile.window.label,
+                        "range_start": str(profile.window.start),
+                        "range_end": str(profile.window.end),
+                        "bars": profile.bars, "bins": frvp_bins,
+                        "value_area_pct": round(frvp_va, 2),
+                        "poc": round(profile.poc, 6),
+                        "vah": round(profile.vah, 6),
+                        "val": round(profile.val, 6),
+                        "buy_share": round(profile.buy_share, 4),
+                        "is_proxy": profile.is_proxy,
+                        "last_close": round(last_close, 6),
+                        "state": read.state, "lean": read.lean,
+                    })
 
         with tab_phases:
             seg = summarize_phases(labeled)
