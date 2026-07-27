@@ -249,17 +249,22 @@ def render(charts: List[Dict[str, Any]], key: str = "tv") -> None:
 
 
 def engine_toggle(key: str, label: str = "Chart engine") -> bool:
-    """Shared sidebar radio for the opt-in TradingView pilot. Returns True when
-    the user picked TradingView **and** the component is importable; otherwise
-    False (use the Plotly stencil). Defaults to Plotly so nothing changes
-    unless the user opts in."""
+    """Shared sidebar radio for the TradingView renderer. Returns True when the
+    user picked TradingView **and** the component is importable; otherwise
+    False (use the Plotly stencil).
+
+    TradingView is the **default** when the component is installed; Terminal
+    (Plotly) remains the fallback on every render (each call site wraps the tv
+    render in try/except) and stays the default when the component is missing,
+    so the radio never opens on a choice that immediately warns."""
     import streamlit as st
     ok = available()
     with st.sidebar:
         st.markdown(f"**📊 {label}**")
         choice = st.radio(
             label, ["Terminal (Plotly)", "TradingView (pilot)"],
-            index=0, key=f"engine_{key}", label_visibility="collapsed",
+            index=1 if ok else 0, key=f"engine_{key}",
+            label_visibility="collapsed",
             help=("TradingView pilot uses the open-source lightweight-charts "
                   "engine (crosshair OHLC readout, smooth pan/zoom). Terminal "
                   "is the system-wide Plotly look." if ok else

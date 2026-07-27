@@ -193,6 +193,7 @@ Having these in the daily path just adds scroll — check once a week, not
 every session.
 | Page | What it's for |
 |------|---------------|
+| [🗓️ Week Ahead](pages/week_ahead_tab.py) | **Start the weekend here.** The coming week's probable range per instrument (5-day GARCH cone, ±1σ), the high-impact event calendar, COT crowding, and nearest supply/demand — then write the thesis + invalidation. Forecasts *volatility*, never direction. Audit-only. |
 | [📉 Weekly EMA](pages/weekly-ema.py) | Weekly 20/50 EMA alignment = the macro trend. |
 | [🔄 Weekly Swing](pages/weekly-swing.py) | Weekly pivot swing setups + daily confirmation. |
 | [📔 Swing Playbook](pages/swing_playbook_tab.py) | Weekly pre-flight: price, COT crowdedness, gold disconnect, supply/demand zones, vol-scaled sizing, written thesis journal. |
