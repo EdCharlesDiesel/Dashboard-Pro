@@ -22,36 +22,14 @@ import numpy as np
 import pandas as pd
 
 from src.instruments.registry import INSTRUMENTS
-
-# Display name (e.g. "EUR/USD") keyed by its compact form ("EURUSD").
-_SYMBOL_KEYS: Dict[str, str] = {name.replace("/", ""): name for name in INSTRUMENTS}
-_ALIASES = {"GOLD": "XAU/USD", "SILVER": "XAG/USD", "PLATINUM": "XPT/USD"}
+# Symbol mapping moved to broker_symbols (shared with the live MT5 link);
+# re-exported here so existing callers keep importing it from mt4_import.
+from src.services.broker_symbols import (  # noqa: F401
+    build_symbol_map,
+    normalize_symbol,
+)
 
 _TRADE_TYPES = {"buy", "sell"}
-
-
-# ══════════════════════════════════════════════════════════════════
-# SYMBOL MAPPING
-# ══════════════════════════════════════════════════════════════════
-
-def normalize_symbol(item: str) -> Optional[str]:
-    """Map an MT4 instrument string ('EURUSD', 'XAUUSD.r', 'GOLD', 'EURUSDm')
-    to an app instrument name, or None if it can't be matched automatically."""
-    if not item:
-        return None
-    u = str(item).upper()
-    core = re.sub(r"[^A-Z]", "", u)[:6]
-    if core in _SYMBOL_KEYS:
-        return _SYMBOL_KEYS[core]
-    for alias, name in _ALIASES.items():
-        if alias in u:
-            return name
-    return None
-
-
-def build_symbol_map(items: List[str]) -> Dict[str, Optional[str]]:
-    """Auto-map every distinct raw symbol seen in the statement."""
-    return {it: normalize_symbol(it) for it in sorted(set(items))}
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -188,6 +166,102 @@ def parse_mt4_html(content: bytes) -> List[dict]:
             ))
 
     return trades
+
+
+def parse_mt4_open_positions(content: bytes) -> List[dict]:
+    """Return one dict per **open** position in the statement.
+
+    The mirror of `parse_mt4_html`: same row geometry, same exact ``buy``/
+    ``sell`` type-cell anchor (so pending orders — ``buy limit``, ``sell
+    stop`` — are excluded, they are not exposure yet), but keeping the rows
+    that have *no* close timestamp instead of discarding them.
+
+    This is what makes the exposure guard work on a real book. The closed-trade
+    importer deliberately writes ``is_open = FALSE``, so before this the app
+    had no idea what you were actually holding.
+    """
+    text = _decode(content)
+    try:
+        tables = pd.read_html(StringIO(text))
+    except Exception as exc:  # noqa: BLE001 — surface a friendly message to the UI
+        raise ValueError(f"No HTML tables found — is this an MT4 statement? ({exc})")
+
+    positions: List[dict] = []
+    seen_tickets = set()
+
+    for tbl in tables:
+        for row in tbl.itertuples(index=False, name=None):
+            cells = [c for c in row]
+            t_idx = next((i for i, c in enumerate(cells)
+                          if str(c).strip().lower() in _TRADE_TYPES), None)
+            if t_idx is None or t_idx < 2 or t_idx + 7 >= len(cells):
+                continue
+
+            if _to_dt(cells[t_idx + 6]) is not None:
+                continue  # has a close timestamp -> it's a closed trade
+
+            open_dt = _to_dt(cells[t_idx - 1])
+            if open_dt is None:
+                continue  # no open timestamp either -> not a trade row
+
+            ticket = _to_float(cells[t_idx - 2])
+            if ticket is None or int(ticket) in seen_tickets:
+                continue
+            seen_tickets.add(int(ticket))
+
+            positions.append(dict(
+                ticket=int(ticket),
+                open_time=open_dt,
+                type=str(cells[t_idx]).strip().lower(),
+                size=_to_float(cells[t_idx + 1]),
+                item=str(cells[t_idx + 2]).strip(),
+                open_price=_to_float(cells[t_idx + 3]),
+                sl=_to_float(cells[t_idx + 4]),
+                tp=_to_float(cells[t_idx + 5]),
+            ))
+
+    return positions
+
+
+def to_open_position_rows(
+    positions: List[dict],
+    symbol_map: Dict[str, Optional[str]],
+) -> Tuple[List[dict], Dict[str, int]]:
+    """Map parsed open positions onto registry instruments for the exposure
+    guard. Returns ``(rows, skipped)`` in the same shape as `to_journal_rows`.
+
+    Row construction is delegated to `open_positions.make_row`, the single
+    definition of the stored shape — the live MT5 link builds its rows through
+    the same function, so a statement-sourced position and a terminal-sourced
+    one are indistinguishable to the exposure guard.
+    """
+    from src.services.open_positions import make_row
+
+    rows: List[dict] = []
+    skipped: Dict[str, int] = {}
+
+    for p in positions:
+        inst = symbol_map.get(p["item"])
+        if inst is None or inst not in INSTRUMENTS:
+            skipped[p["item"]] = skipped.get(p["item"], 0) + 1
+            continue
+        if p.get("size") is None:
+            skipped[p["item"]] = skipped.get(p["item"], 0) + 1
+            continue
+
+        rows.append(make_row(
+            pair=inst,
+            direction="LONG" if p["type"] == "buy" else "SHORT",
+            lot_size=p["size"],
+            ticket=p["ticket"],
+            entry_price=p.get("open_price"),
+            stop_loss=p.get("sl"),
+            take_profit=p.get("tp"),
+            opened_at=p["open_time"].isoformat() if p.get("open_time") else None,
+            label="MT4 #{0}".format(p["ticket"]),
+        ))
+
+    return rows, skipped
 
 
 # ══════════════════════════════════════════════════════════════════
