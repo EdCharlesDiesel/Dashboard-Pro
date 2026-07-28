@@ -5,7 +5,7 @@ from src.instruments.registry import INSTRUMENTS
 from src.db.trade_repository import TradeRepository, DBConfig
 from src.db.cache import pooled_repository
 from src.db.market_cache import cached_closes
-from src.services import mt4_import, account_state
+from src.services import mt4_import, account_state, open_positions, mt5_link
 from src.services import signal_expiry
 import os
 import pandas as pd
@@ -175,6 +175,25 @@ def _existing_tickets(cfg) -> set:
         return set()
 
 
+def _capture_open_positions(content: bytes) -> int:
+    """Snapshot the statement's **open** positions into the durable store that
+    feeds the Setup Ranker's exposure guard.
+
+    Separate from the closed-trade import on purpose: `import_mt4_rows` writes
+    ``is_open = FALSE`` (it builds history for the balance/stats), so without
+    this the app has no idea what you are currently holding and the exposure
+    guard has nothing to check against. Best-effort — a parse failure must
+    never block the trade import that follows.
+    """
+    try:
+        positions = mt4_import.parse_mt4_open_positions(content)
+        smap = mt4_import.build_symbol_map([p["item"] for p in positions])
+        rows, _ = mt4_import.to_open_position_rows(positions, smap)
+        return open_positions.save(rows)
+    except Exception:
+        return 0
+
+
 def _ingest_statement(cfg, content: bytes, offset: float) -> dict:
     """Non-interactive ingest used by the auto-importer: parse, auto-map, import
     new trades, and apply the statement's account balance. Returns a summary."""
@@ -182,9 +201,14 @@ def _ingest_statement(cfg, content: bytes, offset: float) -> dict:
     if bal is not None:
         account_state.set_balance(bal, source="MT4 statement")
 
+    # Before the early return: a statement can carry open positions and no
+    # newly-closed trades, and that book still has to reach the guard.
+    open_n = _capture_open_positions(content)
+
     trades = mt4_import.parse_mt4_html(content)
     if not trades:
-        return {"trades": 0, "imported": 0, "balance": bal, "skipped": {}}
+        return {"trades": 0, "imported": 0, "balance": bal, "skipped": {},
+                "open_positions": open_n}
 
     smap = mt4_import.build_symbol_map([t["item"] for t in trades])
     rows, skipped = mt4_import.to_journal_rows(trades, smap, offset)
@@ -197,7 +221,8 @@ def _ingest_statement(cfg, content: bytes, offset: float) -> dict:
         if imported:
             from src.db.cache import clear_read_caches
             clear_read_caches()
-    return {"trades": len(trades), "imported": imported, "balance": bal, "skipped": skipped}
+    return {"trades": len(trades), "imported": imported, "balance": bal,
+            "skipped": skipped, "open_positions": open_n}
 
 
 def _do_auto_import(cfg, path: str, offset: float, force: bool) -> None:
@@ -232,6 +257,79 @@ def _do_auto_import(cfg, path: str, offset: float, force: bool) -> None:
         st.toast(f"📥 Auto-imported {res['imported']} new trade(s)")
 
 
+def _render_mt5_link() -> None:
+    """Read the running MT5 terminal directly — no file export step.
+
+    Read-only: positions and account figures in, nothing out. Degrades to an
+    explanation on Linux (no wheel), with no terminal running, or on MT4
+    (which this package cannot talk to at all)."""
+    st.caption(
+        "Reads open positions and your real balance straight from a running "
+        "MetaTrader **5** terminal on this machine. Read-only — it never places, "
+        "modifies or closes an order."
+    )
+
+    if not mt5_link.available():
+        st.info(
+            "MetaTrader5 package isn't available here. It's Windows-only and "
+            "talks to **MT5** terminals only — on Linux, or with an MT4 "
+            "terminal, use the statement upload instead."
+        )
+        return
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("🔍 Test connection", width="stretch"):
+            ok, msg = mt5_link.probe()
+            (st.success if ok else st.error)(msg)
+    with col_b:
+        synced = st.button("⬇ Sync positions + balance", type="primary",
+                           width="stretch")
+
+    if not synced:
+        return
+
+    res = mt5_link.sync()
+    if not res["ok"]:
+        st.error(res["message"])
+        return
+
+    acct = res["account"] or {}
+    st.success(
+        f"✅ {res['saved']} open position(s) stored · balance "
+        f"**{acct.get('balance', 0):,.2f} {acct.get('currency', '')}** applied "
+        f"to position sizing."
+    )
+    if res["skipped"]:
+        st.warning("Symbols not in the registry (ignored): "
+                   + ", ".join(f"{k} ×{v}" for k, v in res["skipped"].items()))
+
+    warn = mt5_link.margin_warning(acct)
+    if warn:
+        st.error(warn)
+
+    m = st.columns(4)
+    m[0].metric("Balance", f"{acct.get('balance', 0):,.2f}")
+    m[1].metric("Equity", f"{acct.get('equity', 0):,.2f}")
+    m[2].metric("Free margin", f"{acct.get('margin_free', 0):,.2f}")
+    lvl = acct.get("margin_level")
+    m[3].metric("Margin level", f"{lvl:,.0f}%" if lvl else "—")
+
+    if res["rows"]:
+        st.dataframe(pd.DataFrame(res["rows"])[
+            ["pair", "direction", "lot_size", "entry_price", "stop_loss",
+             "take_profit", "has_stop", "label"]
+        ], width="stretch", hide_index=True)
+        no_stop = [r["pair"] for r in res["rows"] if not r["has_stop"]]
+        if no_stop:
+            st.error(
+                f"⚠ {len(no_stop)} position(s) carry **no stop loss**: "
+                f"{', '.join(no_stop)} — unbounded risk."
+            )
+    st.caption("The Setup Ranker will now flag any setup that stacks a currency "
+               "you already hold.")
+
+
 def _render_manual_import(cfg, offset: float) -> None:
     up = st.file_uploader("MT4 statement", type=["htm", "html"], key="mt4_file",
                           label_visibility="collapsed")
@@ -248,6 +346,13 @@ def _render_manual_import(cfg, offset: float) -> None:
     if bal is not None:
         account_state.set_balance(bal, source="MT4 statement")
         st.success(f"💰 Account balance detected: **${bal:,.2f}** — applied to position sizing.")
+
+    open_n = _capture_open_positions(content)
+    if open_n:
+        st.success(
+            f"📌 Captured **{open_n}** open position(s) — the Setup Ranker will "
+            f"now flag any setup that stacks a currency you already hold."
+        )
 
     if not trades:
         st.warning("No closed trades found in this statement. "
@@ -348,7 +453,8 @@ def render_mt4_import(cfg):
     """Upload (or auto-import from a watched file) + parse + map + persist an MT4
     HTML statement. Imported trades are tagged source='mt4_import'; the
     statement's account balance is shared to Setup Ranker via account_state."""
-    with st.expander("📥 Import MT4 trade history (HTML statement)", expanded=False):
+    with st.expander("📥 Import trades & positions (live MT5 · MT4 statement)",
+                     expanded=False):
         acct = account_state.get()
         if acct:
             st.markdown(
@@ -363,7 +469,10 @@ def render_mt4_import(cfg):
             help="MT4 times are broker server time (often UTC+2, +3 in summer). "
                  "Set this so sessions line up — leave 0 if your broker reports UTC.")
 
-        tab_manual, tab_auto = st.tabs(["⬆ Manual upload", "🔄 Auto-import (5 min)"])
+        tab_live, tab_manual, tab_auto = st.tabs(
+            ["🔌 Live MT5 terminal", "⬆ Manual upload", "🔄 Auto-import (5 min)"])
+        with tab_live:
+            _render_mt5_link()
         with tab_manual:
             _render_manual_import(cfg, offset)
         with tab_auto:
