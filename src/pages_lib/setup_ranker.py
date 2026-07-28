@@ -547,6 +547,12 @@ class SetupRankerPage(BloombergPage):
 
             self._render_exposure_strip(results, account_bal, risk_pct, rr_ratio)
 
+            # Positions you actually hold (MT4 import → open_positions store).
+            # Empty when nothing has been imported, in which case every
+            # exposure check below is a silent no-op rather than a wrong one.
+            held = self._held_positions()
+            self._render_held_book(held)
+
             # Best-effort: Daily Cockpit's regime + rate-lean read, displayed
             # per card/row (not scored) so a Grade B that also agrees with
             # the cockpit visibly outranks a Grade B fighting it. A fetch
@@ -565,8 +571,12 @@ class SetupRankerPage(BloombergPage):
             )
 
             tab_cards, tab_table, tab_chart = st.tabs(["◆ RANKED", "▤ TABLE", "▦ CHART"])
-            with tab_cards: self._render_cards(results, rr_ratio, account_bal, risk_pct, cockpit)
-            with tab_table: self._render_table(results, rr_ratio, account_bal, risk_pct, cockpit)
+            with tab_cards:
+                self._render_cards(results, rr_ratio, account_bal, risk_pct,
+                                   cockpit, held)
+            with tab_table:
+                self._render_table(results, rr_ratio, account_bal, risk_pct,
+                                   cockpit, held)
             with tab_chart: self._render_chart(results)
 
         _scan_and_render()
@@ -779,6 +789,126 @@ class SetupRankerPage(BloombergPage):
                 f'both sides of two ideas (CONFLICT).</div>'
             ),
         ).show()
+
+    # ── Held-book exposure guard ──────────────────────────────────────────
+    @staticmethod
+    def _held_positions() -> list:
+        """Open positions from the durable store. Best-effort: an unreachable
+        DB or an empty book just disables the guard, it never breaks a scan."""
+        try:
+            from src.services.open_positions import load as load_open
+            return load_open()
+        except Exception:
+            return []
+
+    @staticmethod
+    def _stack_warnings(pair: str, direction: str, held: list) -> list:
+        """Currency-leg stack check for one candidate against the held book."""
+        if not held:
+            return []
+        try:
+            from src.services.exposure import check_stack
+            return check_stack(pair, direction, held)
+        except Exception:
+            return []
+
+    @classmethod
+    def _render_held_book(cls, held: list) -> None:
+        """What you're already holding, netted per currency.
+
+        This is the panel that would have caught the GBP/AUD + AUD/JPY +
+        EUR/AUD stack: three pairs, two different direction words, no shared
+        CORR_GROUPS entry — but one currency leg carrying all of it.
+        """
+        if not held:
+            return
+        try:
+            from src.services.exposure import net_currency_exposure
+            from src.services.mt5_link import margin_warning
+            from src.services.open_positions import (account_snapshot, saved_at,
+                                                     unstopped)
+            net = net_currency_exposure(held)
+            no_stop = unstopped(held)
+            stamp = saved_at()
+            account = account_snapshot()
+            margin_txt = margin_warning(account)
+        except Exception:
+            return
+
+        chips = ""
+        for ccy, lots in sorted(net.items(), key=lambda kv: -abs(kv[1])):
+            if abs(lots) < 1e-9:
+                continue
+            color = T.GREEN if lots > 0 else T.RED
+            chips += (
+                f'<span style="display:inline-block;border:1px solid {T.BORDER};'
+                f'color:{color};padding:2px 8px;font-size:11px;margin:2px;'
+                f'font-family:\'JetBrains Mono\',monospace;font-weight:700;">'
+                f'{ccy} {"+" if lots > 0 else "-"}{abs(lots):.2f} lots</span>'
+            )
+        rows = " · ".join(
+            f'{p.get("pair")} {p.get("direction")} {float(p.get("lot_size") or 0):.2f}'
+            for p in held
+        )
+        warn = ""
+        if no_stop:
+            names = ", ".join(str(p.get("pair")) for p in no_stop)
+            warn = (
+                f'<div style="color:{T.RED};font-size:11px;margin-top:6px;'
+                f'font-family:\'JetBrains Mono\',monospace;">'
+                f'⚠ {len(no_stop)} open position(s) with NO STOP: {_html.escape(names)}'
+                f' — risk is unbounded, so none of the netting below is a real '
+                f'risk number.</div>'
+            )
+        # Margin level decides whether you keep these positions at all, so it
+        # outranks every other caveat on a page about to suggest more exposure.
+        margin_html = ""
+        if margin_txt:
+            margin_html = (
+                f'<div style="color:{T.RED};font-size:11px;margin-top:6px;'
+                f'font-weight:700;font-family:\'JetBrains Mono\',monospace;">'
+                f'{_html.escape(margin_txt)}</div>'
+            )
+        acct_html = ""
+        if account:
+            lvl = account.get("margin_level")
+            acct_html = (
+                f'<div style="color:{T.GREY};font-size:10px;margin-top:6px;">'
+                f'Account {_html.escape(str(account.get("login", "—")))} · '
+                f'balance {account.get("balance", 0):,.2f} '
+                f'{_html.escape(str(account.get("currency", "")))} · equity '
+                f'{account.get("equity", 0):,.2f} · free margin '
+                f'{account.get("margin_free", 0):,.2f}'
+                + (f' · margin level {lvl:,.0f}%' if lvl else '')
+                + '</div>'
+            )
+        age = (f'<div style="color:{T.GREY};font-size:10px;margin-top:6px;">'
+               f'Book as of {_html.escape(str(stamp))} · sync the MT5 terminal '
+               f'(or re-import your statement) to refresh.</div>') if stamp else ""
+        Panel(
+            title="📌 POSITIONS YOU ALREADY HOLD",
+            tag=f"{len(held)} open",
+            body_html=(
+                f'<div>{chips}</div>'
+                f'<div style="color:{T.GREY};font-size:10px;margin-top:6px;">'
+                f'{_html.escape(rows)}</div>{margin_html}{warn}{acct_html}{age}'
+            ),
+        ).show()
+
+    @classmethod
+    def _exposure_badge(cls, pair: str, direction: str, held: list):
+        """``(html, is_blocking)`` for a card's stack warning, ``("", False)``
+        when the candidate adds no currency you already hold."""
+        warnings = cls._stack_warnings(pair, direction, held)
+        if not warnings:
+            return "", False
+        worst = warnings[0]
+        text = "⛔ STACKS {0}".format(worst.summary())
+        return (
+            f'<div style="margin-top:6px;padding:4px 8px;border:1px solid {T.RED};'
+            f'color:{T.RED};font-size:10px;line-height:1.4;'
+            f'font-family:\'JetBrains Mono\',monospace;">{_html.escape(text)}</div>'
+        ), True
 
     # ── Cockpit reconciliation (regime + rate lean, displayed not scored) ──
     @staticmethod
@@ -1135,7 +1265,8 @@ class SetupRankerPage(BloombergPage):
         return html, plain
 
     @classmethod
-    def _render_cards(cls, results, rr_ratio, account_bal, risk_pct, cockpit=None) -> None:
+    def _render_cards(cls, results, rr_ratio, account_bal, risk_pct,
+                      cockpit=None, held=None) -> None:
         grade_color = {
             "A": ("●", T.GREEN, "GO", "go"),
             "B": ("◆", T.CYAN, "STRONG", "info"),
@@ -1264,6 +1395,12 @@ class SetupRankerPage(BloombergPage):
                     f'font-family:\'JetBrains Mono\',monospace;color:{cockpit_color};">'
                     f'{cockpit_txt}</div>'
                 )
+            # Exposure guard: taking this would add to a currency leg already
+            # in the book. Rendered on the card because the decision is made
+            # here, not three panels up.
+            exposure_html, stacked = cls._exposure_badge(
+                r["pair"], r["direction"], held or [])
+            body += exposure_html
             # "Why this trade" — deterministic facts for the actionable grades;
             # Grade A additionally gets the Claude-polished analyst paragraph
             # (fail-soft to the template, cached — see polished_rationale).
@@ -1282,12 +1419,14 @@ class SetupRankerPage(BloombergPage):
                 )
             Panel(
                 title=f"{r['pair']} · {r['direction']}",
-                tag=f"GRADE {r['grade']}",
+                tag=(f"GRADE {r['grade']} · ⛔ STACKED" if stacked
+                     else f"GRADE {r['grade']}"),
                 body_html=body,
             ).show()
 
     @classmethod
-    def _render_table(cls, results, rr_ratio, account_bal, risk_pct, cockpit=None) -> None:
+    def _render_table(cls, results, rr_ratio, account_bal, risk_pct,
+                      cockpit=None, held=None) -> None:
         rows = []
         # Union of every result's criteria, not just the first row's — FX
         # pairs carry "Currency Strength" (8 direction criteria) but
@@ -1335,6 +1474,11 @@ class SetupRankerPage(BloombergPage):
             if cockpit is not None:
                 cockpit_txt, _ = cls._cockpit_badge(r, cockpit)
                 row["Cockpit"] = cockpit_txt
+            stack = cls._stack_warnings(r["pair"], r["direction"], held or [])
+            row["Exposure"] = (
+                "⛔ stacks " + "/".join(w.currency for w in stack)
+                if stack else "—"
+            )
             for k in criteria_keys:
                 if k not in r["scores"]:
                     row[k] = "—"  # not applicable (e.g. Currency Strength on a commodity)

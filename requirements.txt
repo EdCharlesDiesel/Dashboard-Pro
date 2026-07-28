@@ -30,6 +30,14 @@ cot_reports==0.1.3  # CFTC Commitment of Traders reports (src/services/cot_fetch
 SQLAlchemy>=2.0
 APScheduler>=3.10
 lxml==6.1.1  # HTML parsing backend for pandas.read_html (MT4 statement import)
+# MetaTrader5: live terminal link (src/services/mt5_link.py) — reads open
+# positions + account balance straight from a running MT5 terminal, feeding the
+# Setup Ranker's exposure guard. The environment marker is load-bearing: the
+# wheel is Windows-only and the deploy of record is Railway Linux containers
+# (DEPLOY-RAILWAY.md), so pip must skip it there. Every import of it is lazy and
+# self-disabling, so the Linux worker/UI run fine without it — on Linux (and on
+# MT4, which this package cannot talk to) the statement import is the only route.
+MetaTrader5==5.0.5735 ; sys_platform == "win32"
 # anthropic: optional — powers AI report summaries (src/core/ai_reports.py),
 # which self-disable when it's absent. Not installed in the working venv, so
 # left unpinned; pin once installed.
