@@ -9,9 +9,11 @@ from src.core.bias import (
     NEUTRAL,
     HouseView,
     TF_WEIGHTS,
+    dissenting_timeframes,
     house_view,
     is_conflict,
     normalize_direction,
+    timeframe_agreement,
     timeframe_bias,
 )
 
@@ -163,6 +165,61 @@ class TestCanonicalParams:
 
 
 # ── vocabulary + conflict helpers ───────────────────────────────────────────
+
+class TestTimeframeAgreement:
+    """Which frame dissents — the thing a Grade-A score can't tell you.
+
+    Modelled on the real EUR/AUD case: weekly bearish, 4H already flipped
+    bullish on a counter-trend bounce, so the ranker graded SHORT 'A' while the
+    board sat NEUTRAL. The breakdown must name the 4H as the dissenter.
+    """
+    def _split_view(self):
+        # weekly down, daily flat-ish, 4H up  ->  composite lands NEUTRAL
+        return house_view(
+            "EUR/AUD",
+            weekly=_ohlc(120, slope=-0.5, freq="W"),
+            daily=_ohlc(120, slope=-0.5),
+            h4=_ohlc(120, slope=+0.5, freq="4h"),
+        )
+
+    def test_names_the_dissenting_timeframe(self):
+        view = self._split_view()
+        rows = {r["timeframe"]: r for r in timeframe_agreement(view, "SHORT")}
+        assert rows["Weekly"]["agrees"] is True and rows["Weekly"]["opposes"] is False
+        assert rows["4H"]["opposes"] is True      # bullish 4H against a SHORT
+        assert dissenting_timeframes(view, "SHORT") == ("4H",)
+
+    def test_flips_with_the_trade_direction(self):
+        view = self._split_view()
+        assert dissenting_timeframes(view, "LONG") == ("Weekly", "Daily")
+
+    def test_neutral_frame_neither_agrees_nor_opposes(self):
+        # An absent opinion is not opposition.
+        view = house_view("X", weekly=_ohlc(120, slope=0.0, freq="W"))
+        row = timeframe_agreement(view, "LONG")[0]
+        assert row["direction"] == NEUTRAL
+        assert row["agrees"] is False and row["opposes"] is False
+
+    def test_carries_weight_and_score(self):
+        view = self._split_view()
+        for row in timeframe_agreement(view, "SHORT"):
+            assert row["weight"] == TF_WEIGHTS[row["timeframe"]]
+            assert -1.0 <= row["score"] <= 1.0
+
+    def test_only_available_timeframes_appear(self):
+        view = house_view("X", weekly=_ohlc(120, slope=0.5, freq="W"))
+        assert [r["timeframe"] for r in timeframe_agreement(view, "LONG")] == ["Weekly"]
+
+    def test_empty_view_is_safe(self):
+        view = house_view("X")           # no frames at all
+        assert timeframe_agreement(view, "LONG") == ()
+        assert dissenting_timeframes(view, "LONG") == ()
+
+    def test_unknown_direction_opposes_nothing(self):
+        view = self._split_view()
+        assert dissenting_timeframes(view, "NEUTRAL") == ()
+        assert dissenting_timeframes(view, None) == ()
+
 
 class TestVocabulary:
     @pytest.mark.parametrize("word", ["Bullish", "BUY", "STRONG_BUY", "Long", "up"])

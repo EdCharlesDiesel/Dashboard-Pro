@@ -72,11 +72,37 @@ def get_db_connection(cfg):
     )
 
 
-def load_journal_trades(cfg, limit: int = 500):
+# ``trade_setups`` does double duty: it holds trades the user actually took AND
+# every auto-saved page SIGNAL (src/services/signal_store.py — ~25 pages plus
+# the background worker write those continuously). Counting signals as trades
+# makes win rate / expectancy / profit factor meaningless, so the journal
+# separates them. A NULL source is the schema default 'checklist', i.e. a trade.
+EXECUTED_SOURCES = ("checklist", "mt4_import", "mt5_sync")
+
+
+def load_journal_trades(cfg, limit: int = 500, executed_only=None):
+    """Rows from ``trade_setups``, newest first.
+
+    ``executed_only=True``  → only trades the user took (:data:`EXECUTED_SOURCES`)
+    ``executed_only=False`` → only auto-saved page signals
+    ``executed_only=None``  → everything (what the Source Scorecard wants)
+
+    The source filter is applied **in SQL, before the LIMIT**, so a flood of
+    signal rows can never push real trades out of the loaded window — the bug
+    that made the journal report "200 open / 0 closed".
+    """
+    where, params = "", []
+    if executed_only is True:
+        where = "WHERE COALESCE(source, 'checklist') IN %s"
+        params.append(tuple(EXECUTED_SOURCES))
+    elif executed_only is False:
+        where = "WHERE COALESCE(source, 'checklist') NOT IN %s"
+        params.append(tuple(EXECUTED_SOURCES))
+    params.append(limit)
     try:
         conn = get_db_connection(cfg)
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
+        cur.execute(f"""
             SELECT id, logged_at, instrument, ticker, direction, session,
                    score, verdict, sl_pips, tp1_pips, tp2_pips, rr_tp1,
                    lot_size, risk_amount,
@@ -84,9 +110,10 @@ def load_journal_trades(cfg, limit: int = 500):
                    is_open, checks_passed, checks_total, source, notes,
                    checks_detail, invalidated_at, invalidation_price
             FROM trade_setups
+            {where}
             ORDER BY logged_at DESC
             LIMIT %s
-        """, (limit,))
+        """, tuple(params))
         rows = [dict(r) for r in cur.fetchall()]
         cur.close()
         conn.close()
@@ -533,7 +560,12 @@ _cfg = st.session_state.get("journal_db_cfg") or current_db_config().as_kwargs()
 
 render_mt4_import(_cfg)
 
-raw = load_journal_trades(_cfg, limit=show_n)
+# Two independent windows so signal volume can't starve the trade window:
+# `show_n` executed trades AND `show_n` signals, rather than `show_n` rows of
+# whatever happens to be newest (which is almost always signals).
+raw_trades = load_journal_trades(_cfg, limit=show_n, executed_only=True)
+raw_signals = load_journal_trades(_cfg, limit=show_n, executed_only=False)
+raw = raw_trades + raw_signals
 
 if not raw:
     st.warning("No trades found yet. Import an MT4 statement above, or save setups from the Checklist page.")
@@ -555,14 +587,27 @@ df_all["signal_status"] = np.where(
     np.where(df_all["invalidated_at"].notna(), "🔴 INVALIDATED", "🟢 OPEN"),
 )
 
+# ── Trades vs signals ──────────────────────────────────────────────
+# Everything above this line treats the table as one pile. From here on the two
+# are separate: performance analytics describe TRADES YOU TOOK, while signals
+# (auto-saved page reads) are counted on their own and judged in the Source
+# Scorecard tab, which resolves them against subsequent price action.
+_is_trade = df_all["source"].isin(EXECUTED_SOURCES)
+df_trades = df_all[_is_trade].copy()
+df_signals = df_all[~_is_trade].copy()
+
+n_signals = len(df_signals)
+n_sig_invalidated = int((df_signals["signal_status"] == "🔴 INVALIDATED").sum())
+n_sig_open = int((df_signals["is_open"] != False).sum())
+
 # Closed trades only for analytics. Imported broker fills without a Stop Loss
 # carry a null R — treat as 0R for cumulative math; they still count by outcome.
-df_closed = df_all[df_all["outcome"].notna() & (df_all["is_open"] == False)].copy()
+df_closed = df_trades[df_trades["outcome"].notna() & (df_trades["is_open"] == False)].copy()
 df_closed["r_multiple"] = df_closed["r_multiple"].fillna(0)
-df_open = df_all[df_all["is_open"] != False].copy()
+df_open = df_trades[df_trades["is_open"] != False].copy()
 n_invalidated = int((df_open["signal_status"] == "🔴 INVALIDATED").sum())
 
-n_total = len(df_all)
+n_total = len(df_trades)
 n_closed = len(df_closed)
 n_open = len(df_open)
 
@@ -604,8 +649,8 @@ kpis = [
     (k1, f"{win_rate:.1f}%", "Win Rate", wr_color),
     (k2, f"{len(wins) if n_closed else 0}W/{len(losses) if n_closed else 0}L/{len(be_trades) if n_closed else 0}BE",
      "W / L / BE", "#e6e6e6"),
-    (k3, f"{n_closed}", "Closed", "#9a9a9a"),
-    (k4, f"{n_open}", "Open", "#00ff41"),
+    (k3, f"{n_closed}", "Closed Trades", "#9a9a9a"),
+    (k4, f"{n_open}", "Open Trades", "#00ff41"),
     (k5, f"{n_invalidated}", "Invalidated", "#ff3344" if n_invalidated else "#9a9a9a"),
     (k6, f"{expectancy:+.2f}R", "Expectancy", "#00ff66" if expectancy > 0 else "#ff3344"),
     (k7, f"{pf:.2f}", "Profit Factor", "#00ff66" if pf >= 1.5 else "#ffcc00" if pf >= 1 else "#ff3344"),
@@ -634,8 +679,25 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# Signals are a different animal — page reads, not positions. Shown separately
+# so they can never be mistaken for (or averaged into) trading performance.
+if n_signals:
+    st.markdown(f"""
+    <div style="background:#0d1a2f;border:1px solid #1f4f8a;border-radius:10px;
+                padding:9px 18px;margin:-4px 0 16px 0;color:#8ab4e8;font-size:13px;">
+      📡 <b style="color:#cfe3ff;">{n_signals}</b> auto-saved signals in view
+      &nbsp;·&nbsp; {n_sig_open} unresolved &nbsp;·&nbsp; {n_sig_invalidated} invalidated
+      &nbsp;—&nbsp; these are <i>page reads, not trades</i>, and are excluded from
+      every stat above. Judge them in the <b>🏆 Source Scorecard</b> tab.
+    </div>
+    """, unsafe_allow_html=True)
+
 if n_closed == 0:
-    st.info("No closed trades yet — close trades from the Checklist to see performance analytics.")
+    st.info(
+        f"No closed **trades** yet — the stats above describe trades you took, "
+        f"not the {n_signals} signals your pages logged. Close a trade from the "
+        "Checklist, or import an MT4/MT5 statement, to see performance analytics."
+    )
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════
@@ -1033,7 +1095,15 @@ with tab_src:
     from src.services.source_scorecard import build_scorecard
 
     _sc_rows = df_all.to_dict("records")
-    _sc_tickers = sorted({r.get("ticker") for r in _sc_rows if r.get("ticker")})
+    # A SQL NULL ticker becomes float('nan') through pandas, and **NaN is
+    # truthy** — so a plain `if r.get("ticker")` guard lets it through and
+    # sorted() then raises comparing float to str. Only real, non-empty
+    # strings are usable as a price-history key; rows without one still reach
+    # build_scorecard, which marks them unresolved (bars lookup returns None).
+    _sc_tickers = sorted({
+        t for t in (r.get("ticker") for r in _sc_rows)
+        if isinstance(t, str) and t.strip()
+    })
     _sc_bars = {}
     _sc_prog = st.progress(0, text="Loading price history…")
     for _i, _t in enumerate(_sc_tickers):
@@ -1120,6 +1190,14 @@ with tab_log:
            """, unsafe_allow_html=True)
     st.markdown('<div class="section-title">📋 Full Trade Log</div>', unsafe_allow_html=True)
 
+    # Row type first — the log holds both trades you took and auto-saved page
+    # signals, and mixing them is what made the old KPIs meaningless.
+    f_kind = st.radio(
+        "Show", ["🎯 Trades", "📡 Signals", "Both"], horizontal=True,
+        help="Trades = taken by you (checklist / broker import). "
+             "Signals = auto-saved page reads.",
+    )
+
     # Filter controls
     fc1, fc2, fc3, fc4, fc5 = st.columns(5)
     with fc1:
@@ -1139,7 +1217,9 @@ with tab_log:
                                    help="checklist = logged in-app · mt4_import = imported broker fills")
 
     # Apply filters
-    df_view = df_all.copy()
+    df_view = (df_trades if f_kind == "🎯 Trades"
+               else df_signals if f_kind == "📡 Signals"
+               else df_all).copy()
     if f_outcome:
         mask_out = pd.Series(False, index=df_view.index)
         if "OPEN" in f_outcome:

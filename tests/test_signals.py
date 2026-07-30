@@ -113,6 +113,51 @@ class TestScoreSetup:
         assert res["scores"]["Weekly EMA"] == 1
         assert res["scores"]["Daily Trend"] == 1
 
+    # ── Daily 200MA regime filter ────────────────────────────────────────
+    # Scored, never a veto (a new trend always starts by crossing the 200), and
+    # omitted rather than failed when there isn't enough daily history.
+    def _score(self, daily, direction, **kw):
+        return score_setup(
+            df_weekly=self._frame(1.00, 1.20, 260),
+            df_daily=daily,
+            df_4h=self._frame(1.18, 1.20, 120),
+            direction=direction, pip_size=0.0001, spread_pips=1.0, **kw)
+
+    def test_daily_200ma_rewards_long_above_the_average(self):
+        rising = self._frame(1.00, 1.30, 250)      # last close well above SMA200
+        assert self._score(rising, "LONG")["scores"]["Daily 200MA"] == 1
+        assert self._score(rising, "SHORT")["scores"]["Daily 200MA"] == 0
+
+    def test_daily_200ma_rewards_short_below_the_average(self):
+        falling = self._frame(1.30, 1.00, 250)     # last close well below SMA200
+        assert self._score(falling, "SHORT")["scores"]["Daily 200MA"] == 1
+        assert self._score(falling, "LONG")["scores"]["Daily 200MA"] == 0
+
+    def test_daily_200ma_omitted_when_history_too_short(self):
+        # 120 daily bars can't seed a 200 average — the criterion must vanish
+        # rather than score 0, so a thin-history instrument isn't penalised.
+        res = self._score(self._frame(1.10, 1.20, 120), "LONG")
+        assert "Daily 200MA" not in res["scores"]
+        assert res["max_score"] == 7
+
+    def test_daily_200ma_widens_the_direction_scale(self):
+        res = self._score(self._frame(1.00, 1.30, 250), "LONG")
+        assert "Daily 200MA" in res["scores"]
+        assert res["max_score"] == 8            # 7 + the regime filter
+        assert res["pct"] == int(round(res["score"] / 8 * 100))
+
+    def test_daily_200ma_and_currency_strength_both_scale(self):
+        res = self._score(self._frame(1.00, 1.30, 250), "LONG",
+                          currency_strength_diff=0.5)
+        assert res["max_score"] == 9            # 7 + 200MA + currency strength
+
+    def test_daily_200ma_detail_reports_actual_side(self):
+        # The label must describe reality, not the bullish case — the bug that
+        # made a correct SHORT read "EMA20>50".
+        falling = self._frame(1.30, 1.00, 250)
+        for direction in ("LONG", "SHORT"):
+            assert "price <" in self._score(falling, direction)["details"]["Daily 200MA"]
+
     def test_empty_frames_score_zero(self):
         res = score_setup(
             df_weekly=pd.DataFrame(),

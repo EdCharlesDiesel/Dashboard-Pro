@@ -55,6 +55,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+from src.services import confluence_alert
 from src.services.precomputed import (
     build_board, serialize_house_view, store_board,
 )
@@ -68,6 +69,8 @@ _RISK_PCT = 1.0                # page default (risk_pct)
 _TRADES_PER_SIGNAL = 2         # page default (sr_trades_per_signal)
 _STARTUP_DELAY_S = 90          # let the server (and any first page scan) settle
 _PER_PAIR_DELAY_S = 0.5        # rate-limit between pairs so Yahoo doesn't throttle
+_FIB_DAYS = 5                  # 15M history for the confluence leg (page default)
+_FIB_LOOKBACK = 96             # impulse-leg lookback in 15M bars (page default)
 
 _lock = threading.Lock()
 _thread: Optional[threading.Thread] = None
@@ -119,6 +122,42 @@ def _pair_frames(ticker: str):
     """
     from src.services.market_data import daily_ohlc, h4_ohlc, weekly_ohlc
     return weekly_ohlc(ticker), daily_ohlc(ticker), h4_ohlc(ticker)
+
+
+def _find_confluences(grade_a: List[dict], board_pairs: Dict[str, dict]) -> List:
+    """Grade-A ranker reads that ALSO carry a same-side house view and a live
+    15M fib trigger. The 15M fetch is the only extra network cost and it runs
+    just for Grade-A candidates — never the whole universe.
+
+    Isolated so :func:`scan_once` stays a scheduler, and so tests can stub it.
+    Never raises: a failure here must not cost the ingest/score/store work.
+    """
+    from src.pages_lib.fib_entry import _fetch_15m, fib_analysis
+    from src.instruments import INSTRUMENTS
+
+    out = []
+    for r in grade_a:
+        pair = r.get("pair")
+        entry = board_pairs.get(pair) or {}
+        hv = entry.get("hv") or {}
+        try:
+            inst = INSTRUMENTS.get(pair)
+            if inst is None:
+                continue
+            df15 = _fetch_15m(inst.ticker, days=_FIB_DAYS)
+            if df15 is None or df15.empty:
+                continue
+            fib = fib_analysis(df15, r["direction"], _FIB_LOOKBACK)
+            c = confluence_alert.evaluate(
+                pair, r, hv.get("direction"), hv.get("score"),
+                fib, r["direction"], min_pct=GRADE_A_PCT)
+            if c is not None:
+                out.append(c)
+        except Exception as exc:
+            logger.warning("[bg-scanner] confluence check failed for %s: %s", pair, exc)
+        finally:
+            time.sleep(_PER_PAIR_DELAY_S)      # same rate limit as the sweep
+    return out
 
 
 def _setup_summary(r: dict) -> dict:
@@ -201,34 +240,35 @@ def scan_once() -> dict:
         except Exception as exc:
             logger.warning("[bg-scanner] persist failed: %s", exc)
 
-    # 4b. Email newly-appearing Grade-A setups — page-identical keys + ledger.
+    # 4b. Email only TRIPLE CONFLUENCE — Grade-A ranker + house view + a live
+    # 15M fib trigger, all the same side. Grade A alone is a week-long opinion
+    # and fired constantly; requiring the 15M leg means every email has an
+    # entry to take right now. Deliberately rare (see confluence_alert docs).
     emailed = 0
-    if grade_a and alert_service.email_configured():
+    try:
+        confluences = _find_confluences(grade_a, board_pairs)
+    except Exception as exc:
+        # The 15M leg touches the network and imports the fib page library —
+        # neither may cost us the ingest/score/store work already done.
+        logger.warning("[bg-scanner] confluence scan failed: %s", exc)
+        confluences = []
+    if confluences and alert_service.email_configured():
         try:
-            keys = [f"{r['pair']}|{r['direction']}|{alert_price_bucket(float(r['close']))}"
-                    for r in grade_a]
-            cache = alert_service.NotifyCache("setup_ranker")
+            cache = alert_service.NotifyCache("confluence_alert")
             seen = cache.load()
-            fresh = [(r, k) for r, k in zip(grade_a, keys) if k not in seen]
+            fresh = [c for c in confluences if c.dedupe_key() not in seen]
             if fresh:
-                setups = [r for r, _ in fresh]
-                bal = account_state.get_balance(10000.0)
-                html, plain = SetupRankerPage._build_alert_email(
-                    setups, _RR_RATIO, bal, _RISK_PCT, GRADE_A_PCT,
-                    _TRADES_PER_SIGNAL)
-                subject = (
-                    f"🎰 {len(setups)} new Grade-A setup{'s' if len(setups) != 1 else ''} — "
-                    f"{', '.join(r['pair'] for r in setups[:3])}{'…' if len(setups) > 3 else ''}"
-                )
-                ok, msg = alert_service.send_email(subject, html, plain,
-                                                   source="setup_ranker_bg")
+                html, plain = confluence_alert.build_email(fresh)
+                ok, msg = alert_service.send_email(
+                    confluence_alert.subject_for(fresh), html, plain,
+                    source="confluence_bg")
                 if ok:
-                    cache.filter_new([k for _, k in fresh])  # mark seen only on success
-                    emailed = len(setups)
+                    cache.filter_new([c.dedupe_key() for c in fresh])
+                    emailed = len(fresh)
                 else:
-                    logger.warning("[bg-scanner] email failed: %s", msg)
+                    logger.warning("[bg-scanner] confluence email failed: %s", msg)
         except Exception as exc:
-            logger.warning("[bg-scanner] email step failed: %s", exc)
+            logger.warning("[bg-scanner] confluence email step failed: %s", exc)
 
     stats = {"at": datetime.now().isoformat(timespec="seconds"),
              "scored": len(results), "pairs": len(board_pairs),
