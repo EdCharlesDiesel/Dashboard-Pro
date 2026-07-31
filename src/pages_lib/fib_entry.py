@@ -201,9 +201,11 @@ class FibEntryPage(BloombergPage):
         st.session_state.setdefault("fib_detail", "EUR/USD")
         st.session_state.setdefault("account_bal", account_state.get_balance(10000.0))
         st.session_state.setdefault("risk_pct", 1.0)
-        # ON by default (user's standing preference — alerts fire without
-        # having to find the toggle; the sidebar switch remains an off-ramp).
-        st.session_state.setdefault("fib_email_on", True)
+        # OFF by default: the fib leg now reaches you through the
+        # TRIPLE-CONFLUENCE alert (src/services/confluence_alert.py) instead of
+        # emailing on its own. A fib trigger with no higher-timeframe backing
+        # was the chattiest alert in the system; kept as an opt-in wider net.
+        st.session_state.setdefault("fib_email_on", False)
         st.session_state.setdefault("fib_trades_per_signal", 2)
         return PageContext(code="15FB", title="15M Fib Entry", icon="⚡")
 

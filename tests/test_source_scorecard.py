@@ -185,6 +185,22 @@ class TestBuildScorecard:
         df = build_scorecard(rows, {})
         assert "checklist" in df.index
 
+    def test_null_ticker_rows_are_tolerated(self):
+        # A SQL NULL ticker arrives as float('nan') via pandas .to_dict().
+        # NaN is TRUTHY, so it slips past naive `if row["ticker"]` guards —
+        # this caused a TypeError in the Trade Journal when the ticker set was
+        # sorted (float vs str). The scorecard itself must simply mark such a
+        # row unresolved rather than raise. Real source: pages that take a
+        # free-text ticker (smart_money) and fail to resolve one.
+        rows = [
+            _row(source="smart_money", ticker=float("nan")),
+            _row(source="smart_money", ticker=None),
+        ]
+        df = build_scorecard(rows, {})            # no bars for either
+        assert df.loc["smart_money", "signals"] == 2
+        assert df.loc["smart_money", "resolved"] == 0   # nothing guessed
+        assert df.loc["smart_money", "open"] == 2       # still-open, unpriceable
+
     def test_checks_detail_as_dict_like_psycopg2_jsonb(self):
         # psycopg2 auto-deserializes JSONB — checks_detail arrives as a dict,
         # not a JSON string. The entry must still be found.

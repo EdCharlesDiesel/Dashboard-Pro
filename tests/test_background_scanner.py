@@ -73,7 +73,18 @@ def quiet_universe(monkeypatch):
     stored: List[dict] = []
     monkeypatch.setattr(bg, "store_board", lambda board: stored.append(board))
     monkeypatch.setattr(bg, "_PER_PAIR_DELAY_S", 0)
+    # No confluence by default — the real one fetches live 15M bars. Tests that
+    # care about emailing stub this with a Confluence of their own.
+    monkeypatch.setattr(bg, "_find_confluences", lambda grade_a, board: [])
     return {"persisted": persisted, "stored": stored}
+
+
+def _confluence(pair="EUR/USD", direction="LONG", status="ENTRY_FIRED"):
+    from src.services.confluence_alert import Confluence
+    return Confluence(pair=pair, direction=direction, ranker_pct=88.0,
+                      ranker_grade="A", house_direction="BULLISH",
+                      house_score=0.9, fib_status=status, entry=1.10,
+                      sl=1.095, tp1=1.11, tp2=1.12, rr1=2.0)
 
 
 class TestEnsureStarted:
@@ -85,7 +96,25 @@ class TestEnsureStarted:
 
 
 class TestScanOnce:
-    def test_persists_and_emails_grade_a(self, monkeypatch, quiet_universe):
+    def test_grade_a_persists_but_does_not_email_on_its_own(
+            self, monkeypatch, quiet_universe):
+        # The behaviour change that matters: Grade A alone is journalled but is
+        # NOT worth an interruption. Only triple confluence emails.
+        from src.services import alert_service
+        monkeypatch.setattr(alert_service, "email_configured", lambda: True)
+        monkeypatch.setattr(alert_service, "send_email",
+                            lambda *a, **k: pytest.fail("Grade A alone must not email"))
+        monkeypatch.setattr(alert_service, "NotifyCache", lambda ns: _FakeCache())
+
+        stats = bg.scan_once()
+
+        assert stats["scored"] == 4            # 2 pairs × 2 directions
+        assert stats["pairs"] == 2             # both pairs on the board
+        assert stats["grade_a"] == 1
+        assert stats["saved"] == 1 and quiet_universe["persisted"]
+        assert stats["emailed"] == 0
+
+    def test_emails_on_triple_confluence(self, monkeypatch, quiet_universe):
         from src.services import alert_service
         monkeypatch.setattr(alert_service, "email_configured", lambda: True)
         sent = []
@@ -94,18 +123,29 @@ class TestScanOnce:
             lambda subject, html, plain, source=None: (sent.append((subject, source)) or (True, "")))
         cache = _FakeCache()
         monkeypatch.setattr(alert_service, "NotifyCache", lambda ns: cache)
+        c = _confluence()
+        monkeypatch.setattr(bg, "_find_confluences", lambda grade_a, board: [c])
 
         stats = bg.scan_once()
 
-        assert stats["scored"] == 4            # 2 pairs × 2 directions
-        assert stats["pairs"] == 2             # both pairs on the board
-        assert stats["grade_a"] == 1
-        assert stats["saved"] == 1 and quiet_universe["persisted"]
         assert stats["emailed"] == 1 and len(sent) == 1
-        assert sent[0][1] == "setup_ranker_bg"  # audit-log source tag
-        # Dedupe key is page-identical: pair|direction|alert_price_bucket
-        from src.pages_lib.setup_ranker import alert_price_bucket
-        assert cache.marked == [f"EUR/USD|LONG|{alert_price_bucket(1.1000)}"]
+        assert "ENTRY FIRED" in sent[0][0]          # subject leads with the trigger
+        assert sent[0][1] == "confluence_bg"        # audit-log source tag
+        assert cache.marked == [c.dedupe_key()]
+
+    def test_confluence_already_alerted_is_not_resent(
+            self, monkeypatch, quiet_universe):
+        from src.services import alert_service
+        monkeypatch.setattr(alert_service, "email_configured", lambda: True)
+        monkeypatch.setattr(alert_service, "send_email",
+                            lambda *a, **k: pytest.fail("must not resend"))
+        c = _confluence()
+        cache = _FakeCache(seen=[c.dedupe_key()])
+        monkeypatch.setattr(alert_service, "NotifyCache", lambda ns: cache)
+        monkeypatch.setattr(bg, "_find_confluences", lambda grade_a, board: [c])
+
+        assert bg.scan_once()["emailed"] == 0
+        assert cache.marked == []
 
     def test_stores_a_board_for_every_pair(self, monkeypatch, quiet_universe):
         from src.services import alert_service
@@ -124,30 +164,36 @@ class TestScanOnce:
         assert eur["setup"]["grade"] == "A"    # best of LONG/SHORT kept
         assert eur["setup"]["direction"] == "LONG"
 
-    def test_already_seen_setups_do_not_reemail(self, monkeypatch, quiet_universe):
-        from src.pages_lib.setup_ranker import alert_price_bucket
-        from src.services import alert_service
-        monkeypatch.setattr(alert_service, "email_configured", lambda: True)
-        monkeypatch.setattr(alert_service, "send_email",
-                            lambda *a, **k: pytest.fail("must not send"))
-        cache = _FakeCache(seen=[f"EUR/USD|LONG|{alert_price_bucket(1.1000)}"])
-        monkeypatch.setattr(alert_service, "NotifyCache", lambda ns: cache)
-
-        stats = bg.scan_once()
-        assert stats["emailed"] == 0
-        assert cache.marked == []              # ledger untouched
-
     def test_failed_send_leaves_ledger_unmarked(self, monkeypatch, quiet_universe):
+        # A transient SMTP failure must not consume the ledger, or the alert is
+        # lost forever instead of retrying next cycle.
         from src.services import alert_service
         monkeypatch.setattr(alert_service, "email_configured", lambda: True)
         monkeypatch.setattr(alert_service, "send_email",
                             lambda *a, **k: (False, "SMTP down"))
         cache = _FakeCache()
         monkeypatch.setattr(alert_service, "NotifyCache", lambda ns: cache)
+        monkeypatch.setattr(bg, "_find_confluences",
+                            lambda grade_a, board: [_confluence()])
 
         stats = bg.scan_once()
         assert stats["emailed"] == 0
         assert cache.marked == []              # retries next cycle
+
+    def test_confluence_failure_does_not_break_the_cycle(
+            self, monkeypatch, quiet_universe):
+        # The 15M leg hits the network; if it throws, ingest/score/store must
+        # still complete — the board is the more important product.
+        from src.services import alert_service
+        monkeypatch.setattr(alert_service, "email_configured", lambda: True)
+
+        def boom(grade_a, board):
+            raise RuntimeError("yahoo 15m failed")
+        monkeypatch.setattr(bg, "_find_confluences", boom)
+
+        stats = bg.scan_once()
+        assert stats["pairs"] == 2 and stats["saved"] == 1
+        assert stats["emailed"] == 0
 
     def test_no_email_config_still_persists(self, monkeypatch, quiet_universe):
         from src.services import alert_service

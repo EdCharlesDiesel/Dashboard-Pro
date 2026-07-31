@@ -152,6 +152,41 @@ def house_view(
                      score=composite, aligned=aligned)
 
 
+def timeframe_agreement(view: HouseView, trade_direction: Optional[str]) -> Tuple[Dict, ...]:
+    """Per-timeframe verdict on a proposed trade direction.
+
+    Answers the question a Grade-A signal can't: *which* timeframe disagrees?
+    A setup scored on weight-of-evidence (``score_setup``) can be strongly
+    directional while the board is NEUTRAL because the timeframes are fighting
+    — typically a counter-trend bounce where the fast frame has already flipped
+    but the weekly hasn't. Surfacing the dissenter turns "the board says
+    NEUTRAL" into "the 4H is against you", which is actionable.
+
+    Returns one dict per *available* timeframe with its own direction, weight,
+    and whether it agrees with / opposes ``trade_direction``. NEUTRAL frames do
+    neither — an absent opinion is not opposition.
+    """
+    want = normalize_direction(trade_direction)
+    rows = []
+    for tf in view.timeframes:
+        rows.append({
+            "timeframe": tf.timeframe,
+            "direction": tf.direction,
+            "score": tf.score,
+            "weight": TF_WEIGHTS[tf.timeframe],
+            "agrees": want != NEUTRAL and tf.direction == want,
+            "opposes": is_conflict(tf.direction, trade_direction),
+        })
+    return tuple(rows)
+
+
+def dissenting_timeframes(view: HouseView, trade_direction: Optional[str]) -> Tuple[str, ...]:
+    """Names of the timeframes actively pointing the other way — the short
+    answer to "what's holding this back?"."""
+    return tuple(r["timeframe"] for r in timeframe_agreement(view, trade_direction)
+                 if r["opposes"])
+
+
 def normalize_direction(text: Optional[str]) -> str:
     """Map a page's own vocabulary (Long/Short, BUY/SELL, Bullish/Bearish,
     STRONG_BUY…) onto the canonical direction constants."""
