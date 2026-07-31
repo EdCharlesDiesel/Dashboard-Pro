@@ -270,17 +270,16 @@ class SetupRankerPage(BloombergPage):
         st.session_state.setdefault("risk_pct", 1.0)
         # Use the Trade Journal's live balance by default when it's available.
         st.session_state.setdefault("sr_use_live_bal", bool(account_state.get()))
-        # Email alerts — ON by default (user's standing preference: no toggle
-        # hunting; the sidebar switches remain only as an off-ramp). Threshold
-        # default 80% = Grade A, matching "notify me on every Grade-A setup".
-        # Grade A also auto-saves to the journal DB via _persist_signals
-        # regardless of this toggle. The unattended path is
-        # src/services/background_scanner.py — same threshold, same dedupe
-        # ledger, so page and worker never double-email.
-        st.session_state.setdefault("sr_email_on", True)
+        # Grade-A-only email is OFF by default. Emails now come from the
+        # TRIPLE-CONFLUENCE alert (src/services/confluence_alert.py, sent by
+        # the background worker): Grade-A ranker + house view + a live 15M fib
+        # trigger, all the same side. Grade A alone is a week-long opinion and
+        # fired far too often to be worth an interruption — this toggle is kept
+        # as an opt-in wider net, not the default channel. Grade A still
+        # auto-saves to the journal via _persist_signals either way.
+        st.session_state.setdefault("sr_email_on", False)
         st.session_state.setdefault("sr_email_min", 80)
-        # Also on by default: email when a Grade-A setup drops out of grade.
-        st.session_state.setdefault("sr_email_stale_on", True)
+        st.session_state.setdefault("sr_email_stale_on", False)
         # User's house rule: every signal is taken as 2 trades.
         st.session_state.setdefault("sr_trades_per_signal", 2)
         return PageContext(code="RANK", title="Setup Ranker", icon="🎰")
@@ -1265,6 +1264,61 @@ class SetupRankerPage(BloombergPage):
         return html, plain
 
     @classmethod
+    def _timeframe_breakdown(cls, pair: str, direction: str) -> str:
+        """House-view timeframe strip for one card: Weekly/Daily/4H arrows, the
+        weighted composite, and an explicit callout when a frame opposes.
+
+        Reads through ``bias_service.get_house_view`` so it uses the background
+        worker's precomputed board — one DB round-trip serves every card, not
+        one per row. Any failure renders nothing rather than breaking the card.
+        """
+        try:
+            from src.core.bias import timeframe_agreement
+            from src.services.bias_service import get_house_view
+            view = get_house_view(pair)
+            if view is None or not view.timeframes:
+                return ""
+            rows = timeframe_agreement(view, direction)
+        except Exception:
+            return ""
+
+        arrow = {"BULLISH": "▲", "BEARISH": "▼", "NEUTRAL": "—"}
+        cells = []
+        for row in rows:
+            if row["opposes"]:
+                col = T.RED
+            elif row["agrees"]:
+                col = T.GREEN
+            else:
+                col = T.GREY
+            cells.append(
+                f'<span style="color:{T.GREY};">{row["timeframe"]}</span> '
+                f'<span style="color:{col};font-weight:700;">'
+                f'{arrow.get(row["direction"], "—")}</span>')
+
+        hv_col = {"BULLISH": T.GREEN, "BEARISH": T.RED}.get(view.direction, T.YELLOW)
+        against = [r["timeframe"] for r in rows if r["opposes"]]
+        if against:
+            note = (f'<span style="color:{T.RED};margin-left:8px;">'
+                    f'⚠ {" + ".join(against)} against this {direction}</span>')
+        elif view.direction == "NEUTRAL":
+            note = (f'<span style="color:{T.YELLOW};margin-left:8px;">'
+                    f'board undecided — timeframes split</span>')
+        else:
+            note = (f'<span style="color:{T.GREEN};margin-left:8px;">'
+                    f'board agrees</span>')
+
+        sep = f' <span style="color:{T.BORDER};">·</span> '
+        return (
+            f'<div style="margin-top:6px;font-family:\'JetBrains Mono\',monospace;'
+            f'font-size:10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;">'
+            f'<span style="color:{T.GREY};letter-spacing:0.05em;">🧭 HOUSE</span>'
+            f'<span style="color:{hv_col};font-weight:700;">{view.direction}</span>'
+            f'<span style="color:{T.GREY};">{view.score:+.2f}</span>'
+            f'<span style="color:{T.BORDER};">│</span>{sep.join(cells)}{note}</div>'
+        )
+
+    @classmethod
     def _render_cards(cls, results, rr_ratio, account_bal, risk_pct,
                       cockpit=None, held=None) -> None:
         grade_color = {
@@ -1388,6 +1442,11 @@ class SetupRankerPage(BloombergPage):
                 f'<span style="color:{T.GREY};font-size:9px;letter-spacing:0.05em;">'
                 f'QUALITY {quality_txt}</span>{quality_pills}</div>'
             )
+            # Which timeframe disagrees? The grade is weight-of-evidence and can
+            # read A while the board is NEUTRAL because the frames are fighting
+            # (classic counter-trend bounce: 4H already flipped, weekly hasn't).
+            # Naming the dissenter before entry beats discovering it from the P&L.
+            body += cls._timeframe_breakdown(r["pair"], r["direction"])
             if cockpit is not None:
                 cockpit_txt, cockpit_color = cls._cockpit_badge(r, cockpit)
                 body += (

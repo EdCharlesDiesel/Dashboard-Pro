@@ -18,6 +18,12 @@ from src.instruments.registry import INSTRUMENTS, TYPICAL_SPREADS
 # `score`/`max_score`/`pct`/`grade`, which are direction-only.
 _QUALITY_CRITERIA = frozenset({"ATR Volatile", "4H Zone", "Spread/ATR"})
 
+# Long-term regime filter period, from AppConfig so it can't drift from the
+# rest of the app (src/core/config.py ema_long). The criterion is labelled from
+# it, so the name always tells the truth about what was measured.
+_MA_LONG = int(config.ema_long)
+_MA_LONG_KEY = f"Daily {_MA_LONG}MA"
+
 
 def safe_get(row: pd.Series, col: str, default: float = 0.0) -> float:
 
@@ -333,12 +339,21 @@ def swing_structure(df: pd.DataFrame, n: int = 3) -> str:
 def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataFrame,
                 direction: str, pip_size: float, spread_pips: float = 0.0,
                 currency_strength_diff: Optional[float] = None) -> Dict:
-    """Score a pair against the multi-timeframe checklist: 7 directional
-    criteria (Weekly EMA/RSI/Structure, Daily Trend/Structure/MACD, 4H
-    Structure), an 8th "Currency Strength" criterion when the caller supplies
-    a fundamental read, and 3 "quality gate" criteria (ATR Volatile, 4H Zone,
-    Spread/ATR) that pass or fail identically for LONG and SHORT on the same
-    pair — tradeability conditions, not directional evidence.
+    """Score a pair against the multi-timeframe checklist: 7 always-scored
+    directional criteria (Weekly EMA/RSI/Structure, Daily Trend/Structure/MACD,
+    4H Structure) plus two conditional ones — a ``Daily 200MA`` regime filter
+    when the daily frame is at least ``AppConfig.ema_long`` bars long, and
+    ``Currency Strength`` when the caller supplies a fundamental read — and 3
+    "quality gate" criteria (ATR Volatile, 4H Zone, Spread/ATR) that pass or
+    fail identically for LONG and SHORT on the same pair — tradeability
+    conditions, not directional evidence.
+
+    The 200MA criterion is scored, never a veto: price crosses the 200 at the
+    *start* of every new trend, so rejecting those setups outright would hide
+    the highest-quality entries. Being on the wrong side costs a point (and
+    usually a grade), which is the honest treatment. Note it is the **daily**
+    200 — a 200-period average on an intraday chart measures ~8 days and will
+    frequently disagree; that is a timeframe difference, not a contradiction.
 
     ``score``/``max_score``/``pct``/``grade`` are direction-only (the quality
     criteria are excluded, so two opposite-direction calls on the same pair
@@ -413,7 +428,11 @@ def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataF
         e50_d = float(ema(df_d["Close"], 50).iloc[-1])
         ok = e20_d > e50_d if direction == "LONG" else e20_d < e50_d
         scores["Daily Trend"] = 1 if ok else 0
-        details["Daily Trend"] = "✅ EMA20>50" if ok else "❌ EMA20<50"
+        # Describe the ACTUAL cross, not the bullish case. Labelling a passing
+        # SHORT "EMA20>50" (which the old hard-coded string did) made a correct
+        # bearish score read like a contradiction.
+        details["Daily Trend"] = (
+            f"{'✅' if ok else '❌'} EMA20{'>' if e20_d > e50_d else '<'}50")
         daily_struct = swing_structure(df_d, 3)
     else:
         scores["Daily Trend"] = 0
@@ -430,10 +449,35 @@ def score_setup(df_weekly: pd.DataFrame, df_daily: pd.DataFrame, df_4h: pd.DataF
         mc = macd_cross(df_d["Close"])
         ok = (mc and direction == "LONG") or (not mc and direction == "SHORT")
         scores["Daily MACD"] = 1 if ok else 0
-        details["Daily MACD"] = "✅ Above sig" if ok else "❌ Below sig"
+        # Same fix as Daily Trend: report where MACD actually sits, so a
+        # passing SHORT reads "Below sig" instead of the inverted "Above sig".
+        details["Daily MACD"] = f"{'✅' if ok else '❌'} {'Above' if mc else 'Below'} sig"
     else:
         scores["Daily MACD"] = 0
         details["Daily MACD"] = "—"
+
+    # ── 6b. Daily 200 SMA — the long-term regime filter ─────────────────────
+    # "Trade with the tide": longs want price above the 200-day average, shorts
+    # below it. Deliberately a *scored criterion*, not a hard veto — every new
+    # trend begins by crossing the 200, so vetoing would make the first (and
+    # usually best) leg of every reversal invisible. On the wrong side a setup
+    # simply grades lower instead of disappearing.
+    #
+    # Watch the timeframe: this is the DAILY 200 (~10 months of regime). A
+    # 200-period average on an intraday chart is ~8 days of noise and says
+    # something entirely different — see the Daily-vs-H1 note in the README.
+    #
+    # Omitted entirely (not scored 0) when the daily frame is shorter than the
+    # average, so a thin-history instrument isn't penalised for missing data —
+    # same convention as Currency Strength below.
+    if not df_d.empty and len(df_d) >= _MA_LONG:
+        sma_long = float(df_d["Close"].rolling(_MA_LONG).mean().iloc[-1])
+        close_ma = float(df_d["Close"].iloc[-1])
+        above = close_ma > sma_long
+        ok = above if direction == "LONG" else not above
+        scores[_MA_LONG_KEY] = 1 if ok else 0
+        details[_MA_LONG_KEY] = (
+            f"{'✅' if ok else '❌'} price {'>' if above else '<'} {sma_long:.5f}")
 
     # ── 7. ATR volatility ────────────────────────────────────────────────────
     a14p = 0.0

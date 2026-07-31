@@ -172,7 +172,7 @@ separate re-entries of the same instrument/balance/risk inputs.
 ### 📋 Pre-Session — 16:30 SAST, build the shortlist (~20 min)
 | Page | What it's for |
 |------|---------------|
-| [🎰 Setup Ranker](pages/setup-ranker.py) | **Primary scan.** Direction-only scoring (7-8 criteria; ATR/Spread/4H-Zone are a separate quality gate, not points) — 80%+ is Grade A. Grade-A email alerts are **on by default** and also run **unattended**: a background worker re-scans every 5 min inside the server, so alerts arrive even with no browser open. |
+| [🎰 Setup Ranker](pages/setup-ranker.py) | **Primary scan.** Direction-only scoring (7–9 criteria — ATR/Spread/4H-Zone are a separate quality gate, not points; a **Daily 200 SMA** regime filter and Currency Strength are added when the data supports them) — 80%+ is Grade A. A background worker re-scans every 5 min inside the server, journaling Grade-A setups with no browser open. **Grade A alone no longer emails** — see the confluence alert below. |
 | [📡 Trend Signals](pages/trend-signals.py) | **Confirmer.** Confirms/denies the Ranker's top picks — 50/200 EMA, RSI, MACD, with ADX as a hard trend gate (not one point of six). |
 | [💪 Currency Strength](pages/currency-strength.py) | Kill conflicted exposure — ranks the 9 registry currencies strong → weak. |
 | [🔗 Correlations](pages/correlations.py) | Kill duplicated exposure — stacked-risk check before adding a correlated pair. |
@@ -184,7 +184,17 @@ analytical — if you can re-open the Ranker mid-session you will, and that's
 how a flat day becomes a revenge trade.
 | Page | What it's for |
 |------|---------------|
-| [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Email alerts on by default; auto-rescans every 5 min while open. |
+| [⚡ 15M Fib Entry](pages/15m-fib-entry.py) | Retrace into the 0.382–0.618 golden zone + a confirming candle. Auto-rescans every 5 min while open. Its trigger is the timing leg of the **confluence alert** — it no longer emails on its own. |
+
+**📧 What actually emails you: triple confluence only.** One alert channel
+(`src/services/confluence_alert.py`), and it fires only when all three agree on
+the same side — **Setup Ranker grades it A**, **the house view points that way**
+(NEUTRAL is not agreement), and **a live 15M Fib trigger** (`ENTRY_FIRED` /
+`IN_ZONE`) exists on that bias. Ranker + house answer *"should I be in this pair
+at all?"*; the 15M leg answers *"is this the moment?"*. Neither alone earned an
+interruption — Grade A is a week-long opinion, a fib trigger fires constantly.
+Expect these to be **rare (a few a week)**; that is the design, not a fault. The
+per-page email toggles remain as opt-in wider nets, defaulting off.
 | [🛡️ Risk Suite](pages/risk-suite.py) | Stop Structure + R:R Calculator + Account Risk, one page, three tabs — where's the stop, is R:R ≥2:1, what's the size. |
 | [📓 Trade Journal](pages/trade-journal.py) | Log at entry, not after. Also the 19:00 post-session review stop — equity curve, win rate vs 66% target, and the **Source Scorecard** tab ranking every signal source by realized expectancy. |
 
