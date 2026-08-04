@@ -117,6 +117,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("SEAS", "Seasonality",           "📅", "pages/seasonality.py"),
         NavEntry("RSKR", "Risk Reversals",        "🎭", "pages/risk_reversal_tab.py"),
         NavEntry("SMRT", "Smart Money",           "🕵️", "pages/smart_money_tab.py"),
+        NavEntry("RIBN", "Fibo Ribbon",           "🎗️", "pages/fibo-ribbon.py"),
     ]),
     ("📖 REFERENCE", [
         NavEntry("CHCK", "Daily Checklist (18-point)", "📋", "app.py"),
