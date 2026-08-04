@@ -90,6 +90,8 @@ PAGES: Tuple[Tuple[str, str], ...] = (
     ("seasonality", "pages/seasonality.py"),
     ("risk_reversal", "pages/risk_reversal_tab.py"),
     ("smart_money", "pages/smart_money_tab.py"),
+    # The desk's own chart stack (mt5/FiboRibbon.mq5) scored in Python.
+    ("fibo_ribbon", "pages/fibo-ribbon.py"),
 )
 
 DEFAULT_TIMEOUT = 300

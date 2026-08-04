@@ -1,6 +1,9 @@
-> **This folder holds two MT5 indicators.** This file documents the Fixed Range
-> Activity Profile; see [`ABR_PriceActionToolkit.md`](ABR_PriceActionToolkit.md)
-> for the ABR Price Action Toolkit (structure, order blocks, graded trade plan).
+> **This folder holds three MT5 indicators.** This file documents the Fixed
+> Range Activity Profile; see
+> [`ABR_PriceActionToolkit.md`](ABR_PriceActionToolkit.md) for the ABR Price
+> Action Toolkit (structure, order blocks, graded trade plan), and
+> [`FiboRibbon.md`](FiboRibbon.md) for the 5/21/55/200 EMA ribbon + 8-SMA-on-open
+> stack recreated from the desk's own saved chart profile.
 
 # Fixed Range Activity Profile — MT5 indicator
 
