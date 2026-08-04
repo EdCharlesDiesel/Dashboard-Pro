@@ -4,6 +4,8 @@ No DB, no Streamlit, no network — plain dict/float fixtures.
 """
 from __future__ import annotations
 
+import pytest
+
 from src.services.signal_expiry import (
     extract_entry_price,
     find_newly_invalidated,
@@ -142,3 +144,33 @@ class TestFindNewlyInvalidated:
         prices = {"EURUSD=X": 1.0960, "GBPUSD=X": 1.2400}
         hits = find_newly_invalidated(rows, prices)
         assert hits == [(1, 1.0960)]
+
+
+class TestBiasSignCoversEveryVocabulary:
+    """Direction must resolve to a side for both directions, in every dialect.
+
+    The app speaks four: pages persist "Long"/"Short", the checklist and MT4
+    import use "LONG"/"SHORT", TrendSignalEvaluator emits "BUY"/"SELL" and
+    "STRONG_BUY"/"STRONG_SELL", and bias.house_view speaks "BULLISH"/"BEARISH".
+    An unresolved direction is invisible in the Source Scorecard — it looks
+    exactly like a signal still waiting on price — so a missing dialect loses
+    data silently.
+    """
+
+    @pytest.mark.parametrize("value", [
+        "Long", "LONG", "long", "Buy", "BUY", "STRONG_BUY", "Bullish", "BULLISH",
+    ])
+    def test_long_dialects(self, value):
+        assert _bias_sign(value) == 1
+
+    @pytest.mark.parametrize("value", [
+        "Short", "SHORT", "short", "Sell", "SELL", "STRONG_SELL", "Bearish", "BEARISH",
+    ])
+    def test_short_dialects(self, value):
+        assert _bias_sign(value) == -1
+
+    @pytest.mark.parametrize("value", ["Neutral", "NEUTRAL", "", None, "WAIT", "FLAT"])
+    def test_genuinely_directionless_stays_unresolved(self, value):
+        # These must NOT be coerced to a side — a Neutral read has no direction
+        # to score, and guessing one would fabricate a result.
+        assert _bias_sign(value) is None

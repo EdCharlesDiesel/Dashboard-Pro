@@ -16,6 +16,11 @@ from typing import Dict, Optional
 # Raise it to calm alerts further; lower it to re-alert on smaller moves.
 _ALERT_PRICE_BAND = 0.0035
 
+# Trading days this page's setups are meant to play out over. Stored on each
+# persisted signal so the Source Scorecard can mark a swing read and a 15m
+# trigger on their own clocks instead of one global 10-day default.
+_HORIZON_DAYS = 20
+
 
 def alert_price_bucket(price: float, band: float = _ALERT_PRICE_BAND) -> int:
     """Coarse, instrument-agnostic price bucket for alert dedupe. Log-space
@@ -244,6 +249,10 @@ class _SetupRankerDataFeed:
         result = score_setup(df_w, df_d, df_4h, direction, pip_size, spread,
                              currency_strength_diff=ccy_diff)
         result["pair"] = pair
+        # The 4H bar is the finest frame in the score, so it is what makes this
+        # read new — carried through to the persisted signal so a stored row can
+        # prove which bar produced it and dedupe keys per bar, not per day.
+        result["bar_time"] = df_4h.index[-1] if df_4h is not None and len(df_4h) else None
         return result
 
 
@@ -1003,9 +1012,17 @@ class SetupRankerPage(BloombergPage):
                 "stop_loss_pips": r.get("sl_pips"),
                 "take_profit_1": lv["tp_price"],
                 "strength_score": r.get("score"),
+                "bar_time": r.get("bar_time"),
                 "conviction": f"Grade {r.get('grade')}",
                 "risk_reward_1": rr_ratio,
                 "thesis": "Setup Ranker — " + ", ".join(passed),
+                # Recorded, not enforced: the tradeability gate (ATR/zone/spread)
+                # currently fails on most of the universe, and nothing filtered on
+                # it, so every stored row looked alike. Persisting it lets the
+                # Source Scorecard segment passed-vs-failed and settle empirically
+                # whether the gate earns its keep.
+                "quality_passed": r.get("quality_passed"),
+                "horizon_days": _HORIZON_DAYS,
             })
         persist_signals("setup_ranker", signals)
 

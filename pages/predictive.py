@@ -88,6 +88,7 @@ try:
                 "pair": selected_pair_label,
                 "bias": "Long" if _bull else "Short",
                 "entry": float(latest_price),
+                "bar_time": df.index[-1],
                 "conviction": f"Price {'>' if _bull else '<'} {sma_period}SMA",
                 "thesis": (f"Analytics — price {latest_price:.4f} "
                            f"{'>' if _bull else '<'} {sma_period}-SMA {_sma_last:.4f}"),

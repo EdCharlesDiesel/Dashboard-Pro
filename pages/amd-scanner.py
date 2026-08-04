@@ -830,6 +830,9 @@ if df_raw is not None and not df_raw.empty:
                 "pair": instrument,
                 "bias": _dir,
                 "entry": float(last_bar["Close"]),
+                # The 1H bar the AMD phase was read from — an intraday phase call
+                # swept hours later must not read as fresh.
+                "bar_time": labeled.index[-1],
                 "conviction": last_phase,
                 "thesis": (f"AMD Scanner — {last_phase} phase, {assess.get('bias')} read · "
                            f"{str(assess.get('detail', ''))[:120]}"),

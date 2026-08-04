@@ -1,13 +1,14 @@
 import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
-from src.services.signal_store import persist_signals
+from src.services.alert_service import NotifyCache
+from src.services.tool_log import log_tool_usage
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 
 # ─────────────────────────────────────────────
@@ -369,15 +370,28 @@ with tab_scan:
 
     prog.empty()
 
-    # Persist pairs with a strong 4H confluence zone (non-directional → Neutral bias).
-    persist_signals("confluence_zone_4h", [{
-        "pair": r["pair"],
-        "bias": "Neutral",
-        "entry": r["current_price"],
-        "conviction": "Strong zone",
-        "thesis": (f"4H Confluence Zone — {r.get('strong', 0)} strong zone(s)"
-                   f"{' + key level' if r.get('has_key_level') else ''}"),
-    } for r in scan_results if r.get("ok") and r.get("strong", 0) > 0])
+    # A confluence zone is a *location*, not a direction — this page has no view
+    # on which way price leaves it. It used to persist to `trade_setups` with
+    # bias='Neutral', but the Source Scorecard resolves a row by its direction, so
+    # those rows could never resolve: they sat unresolved forever while inflating
+    # this page's signal count (43 of one day's 206 rows). Per the project's own
+    # rule — `trade_setups` is for directional pair+bias reads, `tool_usage_log`
+    # for everything else — the zone read is an audit-trail row. Deduped per
+    # pair+zone-count+day so a rerun doesn't re-log an unchanged scan.
+    _cz_day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _cz_hits = [r for r in scan_results if r.get("ok") and r.get("strong", 0) > 0]
+    _cz_keys = ["{0}|{1}|{2}".format(r["pair"], r.get("strong", 0), _cz_day)
+                for r in _cz_hits]
+    if _cz_hits and NotifyCache("confluence_zone_4h_log").filter_new(_cz_keys):
+        log_tool_usage("confluence_zone_4h", {
+            "date": _cz_day,
+            "zones": [{
+                "pair": r["pair"],
+                "price": r["current_price"],
+                "strong": r.get("strong", 0),
+                "has_key_level": bool(r.get("has_key_level")),
+            } for r in _cz_hits],
+        })
 
     # ── Summary counts ──────────────────────────
     cnt_strong   = sum(1 for r in scan_results if r.get("ok") and r.get("strong", 0) > 0)

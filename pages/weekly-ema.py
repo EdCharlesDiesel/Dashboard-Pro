@@ -170,6 +170,15 @@ def fetch_weekly(ticker: str, pip_size: float, lookback: str = "2y"):
             "stack_bull": stack_bull,
             "stack_bear": stack_bear,
             "history":    df.tail(80),
+            # The weekly bar this read was computed from, so a stored row can
+            # prove which bar produced it and dedupe keys per bar rather than per
+            # day — a weekly read must not re-fire on a daily sweep.
+            # NB this is the *period-end* label `resample("W")` assigns, so for
+            # the in-progress week it is a future Sunday. That is the bar's
+            # correct identity (what dedupe needs); it is not a claim that the
+            # week has closed. The spine deliberately includes the partial week
+            # (see `market_data.weekly_ohlc`), so this read moves during the week.
+            "bar_time":   df.index[-1],
         }
     except Exception:
         return None
@@ -230,11 +239,12 @@ bear    = {p: d for p, d in loaded.items() if d["overall"] == "Bearish"}
 neutral = {p: d for p, d in loaded.items() if d["overall"] == "Neutral"}
 
 # Persist Bullish/Bearish weekly-EMA reads as directional signals
-# (deduped per pair/direction/price, tagged source='weekly_ema').
+# (deduped per pair/direction/weekly bar, tagged source='weekly_ema').
 persist_signals("weekly_ema", [{
     "pair": p,
     "bias": "Long" if d["overall"] == "Bullish" else "Short",
     "entry": d["price"],
+    "bar_time": d["bar_time"],
     "conviction": ("Full stack" if (d["stack_bull"] or d["stack_bear"])
                    else d["overall"]),
     "thesis": (f"Weekly EMA — {d['overall']} slope majority"

@@ -27,6 +27,7 @@ the caller supplies rows and OHLC frames (spine ``daily_ohlc``).
 """
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional
@@ -70,6 +71,43 @@ def _pip_size_for(row: Mapping[str, Any]) -> Optional[float]:
     return None
 
 
+def _detail(row: Mapping[str, Any]) -> Dict[str, Any]:
+    """``checks_detail`` as a dict — JSONB arrives deserialized, fixtures as text."""
+    detail = row.get("checks_detail")
+    if isinstance(detail, str):
+        try:
+            detail = json.loads(detail)
+        except (TypeError, ValueError):
+            return {}
+    return detail if isinstance(detail, dict) else {}
+
+
+def row_horizon(row: Mapping[str, Any], default: int = DEFAULT_HORIZON) -> int:
+    """The page's own intended horizon in trading days, else ``default``.
+
+    A weekly-swing read and a 15-minute fib trigger should not be marked on the
+    same clock: judging the swing at 10 days cuts it off before its thesis plays
+    out, and judging the trigger at 10 days credits it with a move it never aimed
+    at. Pages that know their horizon record it; the rest keep the default.
+    """
+    value = _detail(row).get("horizon_days")
+    try:
+        horizon = int(value)
+    except (TypeError, ValueError):
+        return default
+    return horizon if horizon > 0 else default
+
+
+def quality_passed(row: Mapping[str, Any]) -> Optional[bool]:
+    """The tradeability gate recorded at signal time, or ``None`` if unrecorded.
+
+    Stored rather than enforced, so the scorecard can segment on it and show
+    whether the gate actually separates winners from losers.
+    """
+    value = _detail(row).get("quality_passed")
+    return bool(value) if isinstance(value, bool) else None
+
+
 def _as_float(value: Any) -> Optional[float]:
     try:
         f = float(value)
@@ -101,8 +139,13 @@ def evaluate_row(
     bars: Optional[pd.DataFrame],
     horizon: int = DEFAULT_HORIZON,
 ) -> RowResult:
-    """Resolve one ``trade_setups`` row into a :class:`RowResult`."""
+    """Resolve one ``trade_setups`` row into a :class:`RowResult`.
+
+    ``horizon`` is the caller's default; a row that recorded its own
+    ``horizon_days`` overrides it.
+    """
     source = str(row.get("source") or "checklist")
+    horizon = row_horizon(row, horizon)
 
     # 1. Recorded outcome — ground truth from a real close.
     if row.get("is_open") is False:

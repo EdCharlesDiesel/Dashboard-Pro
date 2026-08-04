@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "dashboard",
-      "runtimeExecutable": "C:\\x\\Practice\\Dashboard-Pro\\.venv\\Scripts\\python.exe",
+      "runtimeExecutable": "C:\\x\\Dashboard-Pro\\.venv\\Scripts\\python.exe",
       "runtimeArgs": ["-m", "streamlit", "run", "app.py", "--server.headless", "true"],
       "port": 8501
     }

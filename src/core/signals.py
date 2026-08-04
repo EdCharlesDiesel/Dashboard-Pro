@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 import numpy as np
@@ -704,10 +704,39 @@ def generate_trading_ideas(data_by_timeframe: Dict) -> Tuple[List[Dict], List[st
         idea = analyze_multi_timeframe(frames['Weekly'], frames['Daily'], frames['4 Hour'], frames['Hourly'],
                                        frames['15 Minute'], pair_name)
         if idea and idea['bias'] != 'Neutral':
+            # Stamp the bar that makes this read new. The 15-minute frame is the
+            # finest one feeding the multi-timeframe call, so it governs — an idea
+            # is only genuinely fresh when that bar has advanced. Carried into
+            # `trade_setups` so a row proves its own provenance.
+            m15 = frames.get('15 Minute')
+            idea['bar_time'] = m15.index[-1] if m15 is not None and len(m15) else None
             ideas.append(idea)
 
     ideas.sort(key=lambda x: (x['conviction'] == 'High', x['strength_score']), reverse=True)
     return ideas, skipped
+
+
+def _finite(value) -> Optional[float]:
+    """The number, or ``None`` when it isn't a real finite one.
+
+    A ``NaN`` that reaches ``json.dumps`` is emitted as a bare ``NaN`` token —
+    valid Python-flavoured JSON, **invalid JSONB**. Postgres rejects the whole
+    INSERT, and because ``signal_store`` catches failures per row the signal is
+    dropped with nothing but a log line to show for it. Non-finite floats turn up
+    routinely: a page reads the last row of a frame that yfinance left unfilled
+    and hands that straight through as the entry price.
+
+    This matters twice over, because ``signal_expiry.extract_entry_price`` reads
+    the entry back out of ``checks_detail`` — so an unserializable detail blob
+    would blind the Source Scorecard even where the row survived.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    return num if np.isfinite(num) else None
 
 
 def signal_to_setup_row(idea: Dict, session: str) -> Dict:
@@ -723,12 +752,19 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
     """
     pair = idea.get("pair", "")
     inst = INSTRUMENTS.get(pair)
-    ticker = inst.ticker if inst else None
+    # Fall back to the pair string as the ticker for pages that work off a
+    # free-text symbol (Smart Money takes any stock/ETF, e.g. "SPY"). Without
+    # this the ticker is NULL, and since the Source Scorecard fetches price bars
+    # *by ticker*, those rows can never resolve — they sit OPEN forever while
+    # still counting toward the source's signal total.
+    ticker = inst.ticker if inst else (str(pair).strip() or None)
     pip_size = (inst.pip_size if inst else 0.0001) or 0.0001
 
-    entry = float(idea.get("entry", 0.0) or 0.0)
-    tp1 = idea.get("take_profit_1")
-    tp2 = idea.get("take_profit_2")
+    # `or 0.0` alone doesn't guard this: NaN is truthy, so a NaN entry would sail
+    # through and poison both the JSON blob and every pip distance derived from it.
+    entry = _finite(idea.get("entry")) or 0.0
+    tp1 = _finite(idea.get("take_profit_1"))
+    tp2 = _finite(idea.get("take_profit_2"))
     score = idea.get("strength_score")
 
     def _pips(level) -> Optional[float]:
@@ -740,16 +776,36 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
         "entry": entry,
         "take_profit_1": tp1,
         "take_profit_2": tp2,
-        "stop_loss": idea.get("stop_loss"),
+        "stop_loss": _finite(idea.get("stop_loss")),
         "strength_score": score,
         "confidence": idea.get("confidence"),
         "conviction": idea.get("conviction"),
         "thesis": idea.get("thesis"),
         "stop_loss_method": idea.get("stop_loss_method"),
+        # Recorded, never enforced. `score_setup` computes `quality_passed` (the
+        # ATR/zone/spread tradeability gate) and it currently fails on most of the
+        # universe, but no page filtered on it — so every row looked alike. Storing
+        # it lets the Source Scorecard segment passed-vs-failed and answer
+        # empirically whether the gate adds edge. Gating here would throw that
+        # experiment away before it ran.
+        "quality_passed": idea.get("quality_passed"),
+        # The horizon the page intends this read for, in trading days. The
+        # scorecard defaults to 10 for everything; a weekly-swing signal and a
+        # 15m fib trigger should not be marked on the same clock.
+        "horizon_days": idea.get("horizon_days"),
+        "bar_time": (str(idea["bar_time"]) if idea.get("bar_time") is not None
+                     else None),
     }
 
     return {
-        "logged_at": datetime.now(),
+        # Naive UTC, not naive local. The column is TIMESTAMP (no zone), and
+        # `source_scorecard._bars_after` compares this against a price-bar index
+        # that is naive **UTC** — writing local time put every signal 2h out
+        # against the very frames used to resolve it. Immaterial at daily
+        # resolution, wrong at intraday, and it also kept `logged_at` from
+        # agreeing with the UTC-based dedupe period. Stays naive so the column
+        # type and every existing query are untouched.
+        "logged_at": datetime.now(timezone.utc).replace(tzinfo=None),
         "instrument": pair,
         "ticker": ticker,
         "direction": idea.get("bias"),
@@ -759,20 +815,26 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
         # overflow the insert (the full text lives in `thesis` / `checks_detail`).
         "verdict": (str(idea["conviction"])[:20]
                     if idea.get("conviction") is not None else None),
-        "atr14": idea.get("atr"),
+        "atr14": _finite(idea.get("atr")),
         "atr20": None,
-        "sl_pips": idea.get("stop_loss_pips"),
+        "sl_pips": _finite(idea.get("stop_loss_pips")),
         "tp1_pips": _pips(tp1),
         "tp2_pips": _pips(tp2),
         "lot_size": None,
         "risk_amount": None,
-        "rr_tp1": idea.get("risk_reward_1"),
-        "rr_tp2": idea.get("risk_reward_2"),
+        "rr_tp1": _finite(idea.get("risk_reward_1")),
+        "rr_tp2": _finite(idea.get("risk_reward_2")),
         "account_bal": None,
         "risk_pct": None,
         "checks_passed": None,
         "checks_total": None,
-        "checks_detail": json.dumps(detail),
+        # Catch-all: any numeric that slipped through (strength_score, confidence,
+        # a page's own float) is made JSONB-legal here rather than failing the row.
+        "checks_detail": json.dumps({
+            k: (_finite(v) if isinstance(v, (int, float, np.floating))
+                and not isinstance(v, bool) else v)
+            for k, v in detail.items()
+        }),
         "notes": (
             f"Market Overview signal · {idea.get('conviction')} · "
             f"score {score}/10 · {str(idea.get('thesis', ''))[:160]}"

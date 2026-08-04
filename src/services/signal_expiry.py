@@ -27,8 +27,16 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-_LONG_MARKERS = ("LONG", "BUY")
-_SHORT_MARKERS = ("SHORT", "SELL")
+# Substring markers, matched case-insensitively, so every vocabulary the app
+# speaks resolves to a side: pages persist "Long"/"Short", the checklist and MT4
+# import use "LONG"/"SHORT", the trend evaluator emits "BUY"/"SELL" and
+# "STRONG_BUY"/"STRONG_SELL", and `bias.house_view` speaks "BULLISH"/"BEARISH".
+# BULL/BEAR were missing until 2026-08-04: no stored row used them yet, but any
+# page wiring a house-view read straight into a signal would have produced rows
+# the Source Scorecard could never resolve — silently, since an unresolvable
+# direction looks identical to a signal still waiting on price.
+_LONG_MARKERS = ("LONG", "BUY", "BULL")
+_SHORT_MARKERS = ("SHORT", "SELL", "BEAR")
 
 
 def extract_entry_price(row: Dict[str, Any]) -> Optional[float]:

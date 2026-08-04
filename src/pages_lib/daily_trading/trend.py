@@ -297,6 +297,10 @@ class TrendController:
                 "pair": pair,
                 "bias": "Long" if direction == "STRONG_BUY" else "Short",
                 "entry": r.get("close"),
+                # This page already tracked bar_time (and an `age`) precisely so a
+                # morning signal isn't mistaken for a fresh one hours later — it
+                # just never persisted it. Now it does.
+                "bar_time": r.get("bar_time"),
                 "conviction": r.get("signal"),
                 "thesis": (f"Trend Signals — {r.get('signal')} · "
                            f"{r.get('score')}/{r.get('max_score')} conditions · "

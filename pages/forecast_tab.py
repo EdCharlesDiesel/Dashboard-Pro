@@ -34,6 +34,7 @@ from src.db.cache import pooled_repository
 from src.db.connection import current_db_config
 from src.instruments.registry import INSTRUMENTS as _REGISTRY
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.signal_store import persist_signals
 from src.ui.theme import BloombergTheme as T
 
 # Compact symbol -> yfinance ticker, derived from the shared registry so this
@@ -279,11 +280,28 @@ def render_instrument(repo, sym: str, ticker: str, horizon_lbl: str) -> None:
     # Shared house view — flags when this page's driver score opposes the
     # canonical Weekly/Daily/4H read.
     registry_pair = _COMPACT_TO_REGISTRY.get(sym)
+    _read = ("Bullish" if "bullish" in label else
+             "Bearish" if "bearish" in label else None)
     if registry_pair:
         from src.services.bias_service import show_house_view
-        _read = ("Bullish" if "bullish" in label else
-                 "Bearish" if "bearish" in label else None)
         show_house_view(registry_pair, page_read=_read, page_label="Forecast")
+
+        # Persist the directional call, but only when the driver score actually
+        # takes a side: "neutral / mixed" is the page declining to forecast, and
+        # the cone on its own is a *range*, which is not a pair+bias trade signal
+        # (the same reason week_ahead stays audit-only). Deduped per
+        # pair/direction/price, tagged source='forecast_dashboard'.
+        if _read:
+            persist_signals("forecast_dashboard", [{
+                "pair": registry_pair,
+                "bias": "Long" if _read == "Bullish" else "Short",
+                "entry": float(cone["spot"]),
+                "bar_time": df.index[-1],
+                "strength_score": abs(score),
+                "conviction": label,
+                "thesis": (f"Forecast — driver score {score:+d}/{len(drivers)} "
+                           f"({label}), GARCH ann. vol {cone['ann_vol']:.1f}%"),
+            }])
 
     st.plotly_chart(build_chart(df, cone, horizon, sym),
                     use_container_width=True, key=f"fc_{sym}")

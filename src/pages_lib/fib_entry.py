@@ -444,9 +444,18 @@ class FibEntryPage(BloombergPage):
                 "risk_reward_1": fib["rr1"],
                 "risk_reward_2": fib["rr2"],
                 "strength_score": sig["score"],
+                # The 15m bar the entry read came from. Critical here more than
+                # anywhere: an intraday trigger swept hours later must not look
+                # like a fresh one, and must not re-persist on every sweep.
+                "bar_time": fib.get("last_time"),
                 "conviction": fib["status"],
                 "thesis": (f"15M Fib Entry — golden-zone {sig['direction']}, "
                            f"setup {sig['score']}/{sig.get('max_score', 7)} ({sig['grade']})"),
+                "quality_passed": sig.get("quality_passed"),
+                # A 15m golden-zone trigger resolves in days, not weeks — marking
+                # it on the same clock as a weekly swing read would flatter or
+                # punish it for moves it never intended to capture.
+                "horizon_days": 5,
             })
         persist_signals("fib_entry", signals)
 

@@ -334,6 +334,9 @@ if signals and signals[-1][1] >= len(df) - 2:
         "bias": "Long" if _side == "LONG" else "Short",
         "entry": float(_px),
         "atr": float(_atr) if _atr else None,
+        # The bar the signal actually fired on (index _i), not merely the last
+        # bar loaded — the guard above allows a one-bar-old fire, so these differ.
+        "bar_time": df.index[_i],
         "conviction": "VWAP+EMA pullback",
         "thesis": f"VWAP-EMA Gold — {_side} rejection at VWAP/EMA pullback",
     }])

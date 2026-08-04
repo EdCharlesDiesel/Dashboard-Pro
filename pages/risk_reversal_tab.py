@@ -269,6 +269,7 @@ def render():
                 "pair": pair,
                 "bias": "Short" if "Overbought" in state else "Long",
                 "entry": float(spot.iloc[-1]),
+                "bar_time": spot.index[-1],
                 "conviction": "RR contrarian",
                 "thesis": f"Risk Reversal — {state} (RR {last:+.2f})",
             }])

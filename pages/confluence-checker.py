@@ -2,13 +2,14 @@ import streamlit as st
 from src.ui.theme import BloombergTheme
 from src.core.config import CANDLE_STYLE
 from src.pages_lib.navigation import render_sidebar_nav
-from src.services.signal_store import persist_signals
+from src.services.alert_service import NotifyCache
+from src.services.tool_log import log_tool_usage
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 
 # ── Page config ────────────────────────────────────────────────────
@@ -493,15 +494,29 @@ with tab_scan:
 
     prog.empty()
 
-    # Persist confluence-met events (≥2/3 elements). Confluence is non-directional
-    # (price sitting at a key zone), so bias is recorded Neutral. source='confluence_checker'.
-    persist_signals("confluence_checker", [{
-        "pair": r["pair"],
-        "bias": "Neutral",
-        "entry": r["price"],
-        "conviction": r["verdict"],
-        "thesis": f"Confluence Checker — {r['verdict']} ({r.get('passed', 0)}/3 elements)",
-    } for r in scan_results if r.get("ok") and r.get("grade") in ("pass3", "pass2")])
+    # Confluence is non-directional — price sitting at a key zone says nothing
+    # about which way it leaves. These rows used to go to `trade_setups` with
+    # bias='Neutral', which the Source Scorecard cannot resolve (it needs a
+    # direction), so they accumulated unresolved while inflating this page's
+    # signal count (40 of one day's 206 rows). Moved to the `tool_usage_log`
+    # audit trail, per the project rule that `trade_setups` holds directional
+    # pair+bias reads only. Deduped per pair+verdict+day.
+    _cc_day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _cc_hits = [r for r in scan_results
+                if r.get("ok") and r.get("grade") in ("pass3", "pass2")]
+    _cc_keys = ["{0}|{1}|{2}".format(r["pair"], r.get("grade"), _cc_day)
+                for r in _cc_hits]
+    if _cc_hits and NotifyCache("confluence_checker_log").filter_new(_cc_keys):
+        log_tool_usage("confluence_checker", {
+            "date": _cc_day,
+            "confluences": [{
+                "pair": r["pair"],
+                "price": r["price"],
+                "verdict": r["verdict"],
+                "passed": r.get("passed", 0),
+                "grade": r.get("grade"),
+            } for r in _cc_hits],
+        })
 
     # ── Summary counts ──────────────────────────
     cnt_3 = sum(1 for r in scan_results if r.get("grade") == "pass3")

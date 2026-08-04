@@ -253,6 +253,10 @@ def _persist_composite_signal(instrument: str, signal: TradeSignal, entry_price:
         "pair": pair,
         "bias": "Long" if long_pair else "Short",
         "entry": entry_price,
+        # CFTC reports are weekly with a 3-day lag, so the report date is the only
+        # honest freshness stamp — and it keeps one week's reading from being
+        # re-persisted every day until the next report lands.
+        "bar_time": merged["date"].iloc[-1],
         "conviction": "High" if (signal.confidence == "high" or signal.collapse_watch) else "Medium",
         "thesis": signal.headline,
     }])
@@ -383,9 +387,19 @@ if __name__ == "__main__":
         st.warning(f"Couldn't load price data for {instrument} — the composite signal needs both series.")
         st.stop()
 
+    # The two sources carry different datetime *resolutions* — CFTC weekly
+    # reports parse to microseconds, yfinance bars to seconds — and pandas 3.x
+    # refuses to merge_asof across them ("incompatible merge keys"). Both hold
+    # date-level values, so pinning each to nanoseconds is lossless and is a
+    # no-op on the pandas 2.2.3 pinned in requirements.txt.
+    cot_left = series[["date", "net_spec"]].sort_values("date").copy()
+    cot_left["date"] = cot_left["date"].astype("datetime64[ns]")
+    price_right = price_df.sort_values("date").copy()
+    price_right["date"] = price_right["date"].astype("datetime64[ns]")
+
     merged = pd.merge_asof(
-        series[["date", "net_spec"]].sort_values("date"),
-        price_df.sort_values("date"),
+        cot_left,
+        price_right,
         on="date",
         direction="backward",
     ).dropna().rename(columns={"net_spec": "net_position"})

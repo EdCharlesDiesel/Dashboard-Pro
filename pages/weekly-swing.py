@@ -633,6 +633,10 @@ with tab_scan:
         "pair": p,
         "bias": "Long" if loaded_s[p]["sw"]["bias"] == "BULLISH" else "Short",
         "entry": loaded_s[p]["dt"]["price"],
+        # The *daily* bar, not the weekly one: this signal is "weekly bias
+        # confirmed by daily trend", so the alignment is genuinely re-evaluated
+        # every day and should key on the finer of the two frames.
+        "bar_time": loaded_s[p]["dt"]["df"].index[-1],
         "conviction": "Aligned",
         "thesis": (f"Weekly Swing — weekly {loaded_s[p]['sw']['bias']} aligned with "
                    f"daily {loaded_s[p]['dt']['trend']}"),

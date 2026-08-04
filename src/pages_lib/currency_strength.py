@@ -192,6 +192,7 @@ class CurrencyStrengthPage(BloombergPage):
             "pair": top["pair"],
             "bias": top["bias"],
             "entry": entry,
+            "bar_time": closes[ticker].dropna().index[-1],
             "conviction": "High" if abs(top["diff"]) >= 2 * _IDEA_THRESHOLD else "Medium",
             "thesis": (f"Currency strength — {top['base']} "
                        f"{top['base_strength']:+.2f}% vs {top['quote']} "
