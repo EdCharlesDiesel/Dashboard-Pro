@@ -298,6 +298,8 @@ class InstrumentPredictorPage(BloombergPage):
             "pair": pair,
             "bias": bias,
             "entry": entry,
+            "bar_time": (closes.index[-1] if closes is not None and not closes.empty
+                         else None),
             "strength_score": round(pred.composite * 10, 1),
             "conviction": pred.confidence,
             "thesis": (f"Instrument Predictor — {pred.label} composite "

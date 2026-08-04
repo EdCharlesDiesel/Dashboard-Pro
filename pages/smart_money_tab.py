@@ -265,6 +265,7 @@ def render():
                 "pair": ticker,
                 "bias": "Long" if v["label"].startswith("Accumulation") else "Short",
                 "entry": float(close.iloc[-1]),
+                "bar_time": close.index[-1],
                 "conviction": "Money flow",
                 "thesis": f"Smart Money — {v['label']} (CMF {cmf_last:+.3f})",
             }])

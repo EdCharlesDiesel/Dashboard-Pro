@@ -310,16 +310,33 @@ weak     = [p for p, c in checks.items() if c["status"].startswith("⚠️")]
 broken   = [p for p, c in checks.items() if c["status"].startswith("❌")]
 failed   = [p for p in INSTRUMENTS if p not in loaded]
 
+# `checks` above is the *display* lens: every pair judged against the side the
+# user picked in the sidebar, so a confirmed downtrend reads "❌ Broken" while
+# the radio says LONG. That is right for the cards and wrong for the journal —
+# what gets persisted must not depend on which radio button a human last
+# clicked. Evaluating each pair in its **own** trend direction makes the page
+# direction-complete: a confirmed downtrend is persisted as a Short instead of
+# being filtered out. Symptom this fixes: 27 stored `daily_trend` signals, every
+# single one Long, because the radio defaults to LONG and the sweep never
+# touches it.
+_own_checks = {p: check_trend(d, "LONG" if d["trend_bull"] else "SHORT")
+               for p, d in loaded.items()}
+_intact_both_ways = [p for p, c in _own_checks.items()
+                     if c["status"].startswith("✅")]
+
 # Persist confirmed (intact) daily trends as directional signals — deduped per
-# pair/direction/price, tagged source='daily_trend'.
+# pair/direction/bar, tagged source='daily_trend'.
 persist_signals("daily_trend", [{
     "pair": p,
     "bias": "Long" if loaded[p]["trend_bull"] else "Short",
     "entry": loaded[p]["close"],
+    # Daily bar this trend read came from — proves the row's freshness and
+    # keys dedupe to the bar rather than the calendar day.
+    "bar_time": loaded[p]["history"].index[-1],
     "conviction": "Trend Intact",
     "thesis": (f"Daily Trend — EMA20 {'>' if loaded[p]['trend_bull'] else '<'} EMA50, "
                f"gap {loaded[p]['gap_pips']}p"),
-} for p in intact])
+} for p in _intact_both_ways])
 
 # Shared house view for the focus pair — flags when this page's EMA20/50 lens
 # opposes the canonical Weekly/Daily/4H read.

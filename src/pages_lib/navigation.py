@@ -114,6 +114,9 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("QNTM", "Quant Models Lab",      "🧮", "pages/quant_models_tab.py"),
         NavEntry("FCST", "Forecast",              "🔭", "pages/forecast_tab.py"),
         NavEntry("SURP", "Surprise Awareness",    "😲", "pages/surprise_tab.py"),
+        NavEntry("SEAS", "Seasonality",           "📅", "pages/seasonality.py"),
+        NavEntry("RSKR", "Risk Reversals",        "🎭", "pages/risk_reversal_tab.py"),
+        NavEntry("SMRT", "Smart Money",           "🕵️", "pages/smart_money_tab.py"),
     ]),
     ("📖 REFERENCE", [
         NavEntry("CHCK", "Daily Checklist (18-point)", "📋", "app.py"),
@@ -124,10 +127,18 @@ NAV_SECTIONS: List[tuple] = [
 
 # Archived (moved to archive/pages/ — not deleted, just off the daily nav):
 # Trading Ideas, Technical Chart, Pivots & Fibonacci, Volume Profile, FRED
-# Macro Grid, Smart Money, Forecast Lab, Macro Bias, Forex Fundamentals,
-# Market Regime, Risk Reversals, Event Impact, Seasonality, ATR Volatility,
-# Weekly RSI, Double Zeros, Backtest Lab, Trading Lab, Reports, System Logs,
-# Stop Structure, R:R Calculator, Account Risk (superseded by Risk Suite).
+# Macro Grid, Forecast Lab, Macro Bias, Forex Fundamentals, Market Regime,
+# Event Impact, ATR Volatility, Weekly RSI, Double Zeros, Backtest Lab,
+# Trading Lab, Reports, System Logs, Stop Structure, R:R Calculator,
+# Account Risk (superseded by Risk Suite).
+#
+# Un-archived 2026-08-04: Seasonality, Risk Reversals and Smart Money were
+# restored to pages/ and re-registered above. All three already called
+# persist_signals before they were archived, so they were feeding the Source
+# Scorecard until the 2026-07-03 cleanup silently cut off three signal sources.
+# They are swept by src/services/signal_sweep.py. (Forecast Lab stays archived —
+# pages/forecast_tab.py is its live successor and now carries the
+# source='forecast_dashboard' tag.)
 
 # Flat list kept for any caller that doesn't care about grouping.
 NAV_ENTRIES: List[NavEntry] = [e for _, entries in NAV_SECTIONS for e in entries]

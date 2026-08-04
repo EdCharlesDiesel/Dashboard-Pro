@@ -29,7 +29,10 @@ The service owns all the cross-cutting concerns so pages don't repeat them:
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable, Dict, Iterable, List, Optional
+
+from src.core.volume_profile import FX_DAY_BREAK_HOUR
 
 from src.core.signals import signal_to_setup_row
 from src.db.cache import clear_read_caches, pooled_repository
@@ -40,17 +43,62 @@ from src.services.session_service import SessionService
 logger = logging.getLogger("ForexDashboard")
 
 
+def _fx_session_day(moment: datetime) -> str:
+    """The FX trading day ``moment`` belongs to, as ``YYYY-MM-DD``.
+
+    The FX day rolls at 21:00 UTC (≈ the 17:00 New York close), not at midnight
+    — `FX_DAY_BREAK_HOUR`, the same break `volume_profile` anchors sessions to.
+    Using the calendar day here would put the three hours from 21:00–24:00 UTC
+    in the *previous* trading day: a sweep in that window (a 23:15 SAST cron is
+    21:15 UTC, squarely inside it) would collide with the earlier session's key
+    and silently drop a genuinely new day's signals.
+    """
+    moment = moment.astimezone(timezone.utc) if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    if moment.hour >= FX_DAY_BREAK_HOUR:
+        moment = moment + timedelta(days=1)
+    return moment.strftime("%Y-%m-%d")
+
+
+def _period_key(sig: Dict) -> str:
+    """The bar the read came from, as ``YYYY-MM-DD``; else the current FX day.
+
+    A page that knows which bar it scored should pass ``bar_time`` (a datetime,
+    date, or ISO-8601 string) so a weekly read doesn't re-fire on a daily sweep.
+    A bar label is used as-is — it already identifies the bar uniquely, and
+    shifting it to a session day would merge two bars that a page means to treat
+    as distinct. The FX-day rule applies only to the "no bar supplied" fallback,
+    where the clock is all there is to key on.
+    """
+    stamp = sig.get("bar_time")
+    if isinstance(stamp, (datetime, date)):   # pd.Timestamp subclasses datetime
+        return stamp.strftime("%Y-%m-%d")
+    if isinstance(stamp, str) and len(stamp) >= 10:
+        return stamp[:10]
+    return _fx_session_day(datetime.now(timezone.utc))
+
+
 def default_dedupe_key(sig: Dict) -> str:
-    """pair + bias + rounded entry — same dedupe Market Overview alerts use, so a
-    fresh alert fires (and saves) again only when price has moved to a new level."""
-    pair = sig.get("pair", "?")
-    bias = sig.get("bias", "?")
-    entry = sig.get("entry")
-    try:
-        price_key = f"{float(entry):.4f}" if entry else "na"
-    except (TypeError, ValueError):
-        price_key = "na"
-    return f"{pair}_{bias}_{price_key}"
+    """pair + bias + period — one stored row per view per bar.
+
+    This used to key on the entry price rounded to 4dp, which on a 5-decimal FX
+    pair is about **one pip**: any tick made an unchanged read look like a brand
+    new signal. Measured on 2026-08-04, two sweeps in a day produced up to 2.9
+    rows per distinct pair+direction view, and the ratio scaled with how often
+    the sweep ran. That is corrosive rather than merely wasteful — the Source
+    Scorecard ranks by per-source expectancy over stored rows, so a source's
+    weight became a function of sweep frequency instead of signal quality.
+
+    Keying on the period fixes the units: one row per pair+direction per bar,
+    however many times the page is rendered. A genuine change still saves — a
+    bias flip is a different key on the same day.
+
+    Note this is *only* the persistence ledger. Email dedupe is a separate
+    `NotifyCache` (`setup_ranker`, keyed pair|direction|price-bucket) shared with
+    the background worker, and is deliberately untouched: alerts should re-fire
+    when price moves to a new level even though the stored row should not.
+    """
+    return "{0}_{1}_{2}".format(sig.get("pair", "?"), sig.get("bias", "?"),
+                                _period_key(sig))
 
 
 def persist_signals(

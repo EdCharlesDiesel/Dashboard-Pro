@@ -146,7 +146,14 @@ class TestSignalToSetupRow:
     def test_unknown_pair_degrades_without_crashing(self):
         row = signal_to_setup_row(self._idea(pair="ZZZ/ZZZ"), "")
         assert row["instrument"] == "ZZZ/ZZZ"
-        assert row["ticker"] is None            # not in the registry
+        # Changed 2026-08-04: this used to assert `ticker is None`. A NULL ticker
+        # is not a graceful degradation — the Source Scorecard fetches price bars
+        # *by ticker*, so those rows could never resolve and sat OPEN forever
+        # while still counting toward their source's totals. Falling back to the
+        # symbol itself lets a free-text ticker (Smart Money's "SPY") resolve; a
+        # genuinely bogus one simply finds no bars, which is the same outcome as
+        # before minus the silent accounting distortion.
+        assert row["ticker"] == "ZZZ/ZZZ"
         assert row["tp1_pips"] == 50.0          # default pip_size 0.0001 used
 
     def test_real_idea_maps_cleanly(self, uptrend_universe):
@@ -155,3 +162,101 @@ class TestSignalToSetupRow:
         row = signal_to_setup_row(ideas[0], "London Kill Zone")
         assert _SAVE_SETUP_COLUMNS <= set(row)
         json.loads(row["checks_detail"])        # serialisable
+
+
+class TestSignalToSetupRowRejectsNonFinite:
+    """NaN in a signal used to silently destroy the row.
+
+    `json.dumps` emits a bare ``NaN`` token — legal Python-flavoured JSON, but
+    Postgres rejects it as JSONB, and `signal_store` catches the failure per row
+    so the signal vanished with only a log line. Seen live: the Smart Money page
+    read the last close of a yfinance frame that had an unfilled final bar.
+    """
+
+    def _idea(self, **over):
+        idea = {
+            "pair": "EUR/USD", "bias": "Long", "conviction": "High",
+            "strength_score": 9, "entry": 1.10000, "take_profit_1": 1.10500,
+        }
+        idea.update(over)
+        return idea
+
+    def _detail(self, row):
+        return json.loads(row["checks_detail"])
+
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+    def test_checks_detail_stays_valid_json(self, bad):
+        row = signal_to_setup_row(self._idea(entry=bad), "NY Kill Zone")
+        # The real assertion: json.loads must not choke, which is what Postgres does.
+        assert self._detail(row)["entry"] == 0.0
+
+    @pytest.mark.parametrize("field", ["take_profit_1", "take_profit_2", "stop_loss"])
+    def test_non_finite_price_levels_become_null(self, field):
+        row = signal_to_setup_row(self._idea(**{field: float("nan")}), "NY Kill Zone")
+        assert self._detail(row)[field] is None
+
+    @pytest.mark.parametrize("field,column", [
+        ("atr", "atr14"), ("stop_loss_pips", "sl_pips"),
+        ("risk_reward_1", "rr_tp1"), ("risk_reward_2", "rr_tp2"),
+    ])
+    def test_non_finite_numeric_columns_become_null(self, field, column):
+        row = signal_to_setup_row(self._idea(**{field: float("nan")}), "NY Kill Zone")
+        assert row[column] is None
+
+    def test_nan_entry_does_not_produce_bogus_pip_distances(self):
+        # entry falls back to 0.0, and _pips treats 0 entry as "no distance" —
+        # a NaN entry must never yield a confident-looking pip number.
+        row = signal_to_setup_row(self._idea(entry=float("nan")), "NY Kill Zone")
+        assert row["tp1_pips"] is None
+
+    def test_finite_values_are_untouched(self):
+        row = signal_to_setup_row(self._idea(atr=0.0015, stop_loss_pips=30.0),
+                                  "NY Kill Zone")
+        assert row["atr14"] == 0.0015 and row["sl_pips"] == 30.0
+        assert self._detail(row)["entry"] == 1.10000
+
+    def test_booleans_are_not_coerced_to_numbers(self):
+        row = signal_to_setup_row(self._idea(confidence=True), "NY Kill Zone")
+        assert self._detail(row)["confidence"] is True
+
+
+class TestSignalToSetupRowSegmentationFields:
+    """Fields recorded so the scorecard can segment, added 2026-08-04."""
+
+    def _row(self, **over):
+        idea = {"pair": "EUR/USD", "bias": "Long", "entry": 1.1}
+        idea.update(over)
+        return signal_to_setup_row(idea, "NY Kill Zone")
+
+    def test_quality_passed_is_recorded_not_enforced(self):
+        # False must still produce a row — the point is to measure the gate,
+        # not to let it silently drop signals before it has been validated.
+        row = self._row(quality_passed=False)
+        assert json.loads(row["checks_detail"])["quality_passed"] is False
+        assert row["instrument"] == "EUR/USD"
+
+    def test_horizon_days_is_recorded(self):
+        assert json.loads(self._row(horizon_days=20)["checks_detail"])["horizon_days"] == 20
+
+    def test_fields_default_to_none_when_page_does_not_supply_them(self):
+        detail = json.loads(self._row()["checks_detail"])
+        assert detail["quality_passed"] is None and detail["horizon_days"] is None
+
+
+class TestFreeTextTickerFallback:
+    """Smart Money takes any symbol; a NULL ticker made its rows unresolvable."""
+
+    def test_non_registry_pair_falls_back_to_itself_as_ticker(self):
+        row = signal_to_setup_row({"pair": "SPY", "bias": "Long", "entry": 600.0},
+                                  "NY Kill Zone")
+        assert row["ticker"] == "SPY"
+
+    def test_registry_pair_still_uses_the_registry_ticker(self):
+        row = signal_to_setup_row({"pair": "EUR/USD", "bias": "Long", "entry": 1.1},
+                                  "NY Kill Zone")
+        assert row["ticker"] == "EURUSD=X"
+
+    def test_blank_pair_stays_null_rather_than_empty_string(self):
+        row = signal_to_setup_row({"pair": "", "bias": "Long", "entry": 1.1},
+                                  "NY Kill Zone")
+        assert row["ticker"] is None

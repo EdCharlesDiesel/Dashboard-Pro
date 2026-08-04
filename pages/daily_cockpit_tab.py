@@ -452,6 +452,9 @@ def render():
                     "stop_loss": s["stop"],
                     "take_profit_1": s["target"],
                     "stop_loss_pips": s.get("risk_pips"),
+                    # Trigger bar of the breakout, not today — an aligned idea stays
+                    # open for days and must not re-persist on every sweep.
+                    "bar_time": s.get("entry_date"),
                     "conviction": f"{lean or 'rate-aligned'}, {rc['label']} regime",
                     "thesis": (f"Daily Cockpit — {name} {s['side']} fresh 20-day breakout, "
                               f"agrees with rate bias ({lean or '—'}) and "

@@ -301,6 +301,7 @@ def _render_relationship(
                 "pair": reg_pair,
                 "bias": "SHORT" if z_now > 0 else "LONG",
                 "entry": float(df["B"].iloc[-1]),
+                "bar_time": df.index[-1],
                 "strength_score": None,
                 "conviction": (f"|z|={abs(z_now):.2f} (thr {thr:.2f})" + _hl_txt),
                 "thesis": (f"Disconnect Monitor — {label}: z={z_now:+.2f}, "

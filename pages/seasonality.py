@@ -180,6 +180,10 @@ if band_color in ("#00ff66", "#ff3344"):
             "pair": selected_pair,
             "bias": "Long" if band_color == "#00ff66" else "Short",
             "entry": _entry,
+            # Last daily bar behind the seasonal stats. A month-bias is slow-moving,
+            # so this also stops one month's read being re-persisted every sweep.
+            "bar_time": (hist.index[-1] if getattr(hist, "index", None) is not None
+                         and len(hist) else None),
             "conviction": f"{cur_month_name} seasonal",
             "thesis": (f"Seasonality — {cur_month_name} avg {cur_avg:+.2f}%, "
                        f"green {cur_wr:.0f}% of {years_covered} years"),

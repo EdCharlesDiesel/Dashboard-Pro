@@ -87,6 +87,7 @@ class DxyGoldPage(BloombergPage):
 
         dxy_last = float(closes["DXY"].iloc[-1])
         xau_last = float(closes["XAU/USD"].iloc[-1])
+        xau_bar_time = closes.index[-1]   # bar behind the persisted read
         dxy_chg = (dxy_last / float(closes["DXY"].iloc[-2]) - 1) * 100
         xau_chg = (xau_last / float(closes["XAU/USD"].iloc[-2]) - 1) * 100
 
@@ -125,6 +126,7 @@ class DxyGoldPage(BloombergPage):
                 "pair": "XAU/USD",
                 "bias": "Long" if sig["action"].startswith("BUY") else "Short",
                 "entry": xau_last,
+                "bar_time": xau_bar_time,
                 "conviction": sig["action"],
                 "thesis": (f"DXY vs Gold — {sig['action']} (corr {current_corr:+.2f}) · "
                            f"{sig['why'][:120]}"),

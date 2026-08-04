@@ -16,6 +16,8 @@ from src.services.source_scorecard import (
     WIN,
     build_scorecard,
     evaluate_row,
+    quality_passed,
+    row_horizon,
 )
 
 
@@ -208,3 +210,38 @@ class TestBuildScorecard:
         row = _row(checks_detail={"entry": 1.1000})
         df = build_scorecard([row], {"EURUSD=X": bars})
         assert df.loc["setup_ranker", "wins"] == 1
+
+
+class TestPerRowHorizon:
+    """A row's own horizon_days overrides the caller's default (added 2026-08-04)."""
+
+    def _row(self, detail):
+        return {"source": "s", "direction": "Long", "checks_detail": detail}
+
+    def test_recorded_horizon_wins(self):
+        assert row_horizon(self._row('{"horizon_days": 20}'), 10) == 20
+
+    def test_dict_detail_works_too(self):
+        # psycopg2 hands back JSONB already deserialized.
+        assert row_horizon(self._row({"horizon_days": 5}), 10) == 5
+
+    def test_missing_falls_back_to_default(self):
+        assert row_horizon(self._row('{"entry": 1.1}'), 10) == 10
+
+    def test_unparseable_detail_falls_back(self):
+        assert row_horizon(self._row("not json"), 10) == 10
+
+    def test_nonsense_horizon_falls_back(self):
+        assert row_horizon(self._row('{"horizon_days": 0}'), 10) == 10
+        assert row_horizon(self._row('{"horizon_days": "soon"}'), 10) == 10
+
+
+class TestQualityPassedRead:
+    def test_reads_recorded_flag(self):
+        assert quality_passed({"checks_detail": '{"quality_passed": true}'}) is True
+        assert quality_passed({"checks_detail": '{"quality_passed": false}'}) is False
+
+    def test_unrecorded_is_none_not_false(self):
+        # None means "this page never told us", which is different from a
+        # recorded failure — conflating them would bias any segmentation.
+        assert quality_passed({"checks_detail": "{}"}) is None

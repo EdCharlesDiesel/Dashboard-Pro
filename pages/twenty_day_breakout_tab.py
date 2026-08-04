@@ -278,6 +278,10 @@ def render():
             "stop_loss": s["stop"],
             "take_profit_1": s["target"],
             "stop_loss_pips": s.get("risk_pips"),
+            # The bar the setup actually triggered on, not today. A setup stays
+            # "open" for days, so keying on the trigger bar stops one breakout
+            # being re-persisted on every sweep until it resolves.
+            "bar_time": s["entry_date"],
             "conviction": "20-day breakout",
             "thesis": (f"20-Day Breakout failure-test ({s['side']}) — entry "
                        f"{s['entry']:.4f}, stop {s['stop']:.4f}, +1R {s['target']:.4f}"),

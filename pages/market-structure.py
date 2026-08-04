@@ -408,6 +408,9 @@ with tab_scan:
         "pair": r["pair"],
         "bias": "Long" if r["struct"]["trend"] == "BULLISH" else "Short",
         "entry": float(r["df"]["Close"].iloc[-1]),
+        # Bar the structure was read from (post-resample, so it reflects the
+        # timeframe actually analysed rather than the raw fetch).
+        "bar_time": r["df"].index[-1],
         "conviction": r["struct"]["trend"],
         "thesis": f"Market Structure — {r['struct']['label']}",
     } for r in scan_results

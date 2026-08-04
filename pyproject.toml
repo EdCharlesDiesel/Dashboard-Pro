@@ -43,6 +43,7 @@ omit = [
     "src/services/evening_sentry.py",   # standalone cron job: SQLAlchemy store, APScheduler, Telegram
     "src/services/news_fetcher.py",     # standalone cron job: live network fetch, SQLAlchemy upsert
     "src/services/mt5_mcp.py",          # standalone MCP entrypoint: live terminal I/O, Windows-only dep
+    "src/services/signal_sweep.py",     # standalone cron job: drives real pages under AppTest (live yfinance + DB)
 ]
 
 [tool.coverage.report]

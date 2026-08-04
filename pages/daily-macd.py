@@ -263,6 +263,9 @@ def analyse_momentum(df: pd.DataFrame,
         "color":        color,
         "grade":        grade,
         "desc":         desc,
+        # Bar this read came from — persisted with the signal so the stored row
+        # can prove its freshness, and so dedupe keys on the bar not the day.
+        "bar_time":     df.index[-1],
         "h_now":        h_now,
         "h_prev":       h_prev,
         "macd_now":     macd_now,
@@ -546,6 +549,7 @@ with tab_scan:
         "pair": p,
         "bias": "Long" if loaded_s[p]["verdict"] == "BULLISH" else "Short",
         "entry": loaded_s[p]["price"],
+        "bar_time": loaded_s[p]["bar_time"],
         "conviction": loaded_s[p]["verdict"],
         "thesis": f"Daily MACD — {loaded_s[p]['verdict']}, hist {loaded_s[p]['h_now']:.5f}",
     } for p in (bull_s + bear_s)])
