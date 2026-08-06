@@ -66,6 +66,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("NEWS", "News Filter",     "📰", "pages/news-filter.py"),
     ]),
     ("📋 PRE-SESSION", [
+        NavEntry("TDAY", "Today's Trades",     "🎯", "pages/todays-trades.py"),
         NavEntry("RANK", "Setup Ranker",       "🎰", "pages/setup-ranker.py"),
         NavEntry("TSIG", "Trend Signals",      "📡", "pages/trend-signals.py"),
         NavEntry("CCYS", "Currency Strength",  "💪", "pages/currency-strength.py"),
@@ -118,6 +119,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("RSKR", "Risk Reversals",        "🎭", "pages/risk_reversal_tab.py"),
         NavEntry("SMRT", "Smart Money",           "🕵️", "pages/smart_money_tab.py"),
         NavEntry("RIBN", "Fibo Ribbon",           "🎗️", "pages/fibo-ribbon.py"),
+        NavEntry("PIVB", "Biased Pivots",         "🧿", "pages/biased-pivots.py"),
     ]),
     ("📖 REFERENCE", [
         NavEntry("CHCK", "Daily Checklist (18-point)", "📋", "app.py"),

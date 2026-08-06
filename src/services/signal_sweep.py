@@ -19,6 +19,7 @@ Run it::
     python -m src.services.signal_sweep --only daily_trend,weekly_ema
     python -m src.services.signal_sweep --no-sync    # pages only
     python -m src.services.signal_sweep --list
+    python -m src.services.signal_sweep --loop 300   # worker container: never stops
 
 Each run first calls `sync_broker_state()` to refresh the stored balance and
 open-position book from the live MT5 terminal, so the pages score against the
@@ -92,6 +93,8 @@ PAGES: Tuple[Tuple[str, str], ...] = (
     ("smart_money", "pages/smart_money_tab.py"),
     # The desk's own chart stack (mt5/FiboRibbon.mq5) scored in Python.
     ("fibo_ribbon", "pages/fibo-ribbon.py"),
+    # FX Bootcamp pivot zones, ported from the BiasedPivots.mq5 on the charts.
+    ("biased_pivots", "pages/biased-pivots.py"),
 )
 
 DEFAULT_TIMEOUT = 300
@@ -262,6 +265,49 @@ def sweep_once(only: Optional[List[str]] = None,
     return results
 
 
+def run_forever(interval: int = 300, timeout: int = DEFAULT_TIMEOUT,
+                sync: bool = True) -> None:  # pragma: no cover - process entrypoint
+    """Sweep on a loop forever, for a dedicated worker container.
+
+    ``interval`` is the time between the **start** of one pass and the start of
+    the next. A full 27-page pass takes ~7 minutes against live yfinance, so at
+    the 300s the desk asks for, passes will simply run back-to-back — the sleep
+    is skipped whenever a pass overruns, and passes are never overlapped. That
+    is the honest ceiling: the pages themselves are the constraint, not the
+    scheduler. What genuinely refreshes every 300s is
+    `background_scanner.run_forever`, which is a separate, much lighter loop.
+
+    Never exits on error. A worker that dies on one bad pass is worse than one
+    that logs it and tries again in five minutes.
+    """
+    from src.core.observability import init_logging
+    try:
+        init_logging()
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+
+    logger.info("[sweep] worker starting — pass every %ds, %d pages", interval, len(PAGES))
+    n = 0
+    while True:
+        n += 1
+        started = time.time()
+        try:
+            results = sweep_once(timeout=timeout, sync=sync)
+            ok = sum(1 for r in results if r["ok"])
+            saved = sum(int(r["saved"]) for r in results)
+            logger.info("[sweep] pass %d: %d/%d pages ok, %d signals, %.0fs",
+                        n, ok, len(results), saved, time.time() - started)
+        except Exception as exc:  # noqa: BLE001 — a worker must outlive a bad pass
+            logger.exception("[sweep] pass %d failed: %s", n, exc)
+
+        slack = interval - (time.time() - started)
+        if slack > 0:
+            time.sleep(slack)
+        else:
+            logger.info("[sweep] pass took longer than the %ds interval — "
+                        "starting the next immediately", interval)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Run every signal page so it persists its signals.")
     ap.add_argument("--only", help="comma-separated source tags to run")
@@ -269,11 +315,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--list", action="store_true", help="list registered pages and exit")
     ap.add_argument("--no-sync", action="store_true",
                     help="skip the pre-run balance/position sync from the MT5 terminal")
+    ap.add_argument("--loop", type=int, metavar="SECONDS",
+                    help="run forever, starting a pass every SECONDS "
+                         "(container entrypoint; passes never overlap)")
     args = ap.parse_args(argv)
 
     if args.list:
         for source, path in PAGES:
             print("{0:22} {1}".format(source, path))
+        return 0
+
+    if args.loop:
+        run_forever(interval=args.loop, timeout=args.timeout, sync=not args.no_sync)
         return 0
 
     only = [s.strip() for s in args.only.split(",")] if args.only else None
