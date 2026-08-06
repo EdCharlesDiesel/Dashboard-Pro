@@ -17,6 +17,7 @@ from typing import Optional
 
 import streamlit as st
 
+from src.core.config import default_config as config
 from src.pages_lib.navigation import render_sidebar_nav
 from src.ui.components import StatusBar
 from src.ui.theme import BloombergTheme
@@ -104,5 +105,7 @@ class BloombergPage:
             f"FN {ctx.code}",
             f"PG {ctx.title.upper()}",
             f"LOCAL {now}",
-            "DASHBOARD PRO v1.0.1",
+            # Sourced from AppConfig so the footer cannot drift from the
+            # real version — it read v1.0.1 for weeks after 1.0.1 shipped.
+            "DASHBOARD PRO v{0}".format(config.version),
         ]).show()

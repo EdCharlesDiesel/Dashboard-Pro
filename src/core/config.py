@@ -14,8 +14,8 @@ def _assets_from_registry() -> Dict[str, str]:
 @dataclass
 class AppConfig:
     """Application configuration — all tuneable parameters in one place."""
-    version: str = "1.0.1"
-    last_updated: str = "2026-06-23"
+    version: str = "1.1.0"
+    last_updated: str = "2026-08-06"
 
     # Mirrors src/instruments/registry.py — never hand-maintain a separate list.
     assets: Dict[str, str] = field(default_factory=_assets_from_registry)

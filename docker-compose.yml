@@ -20,8 +20,15 @@ services:
     environment:
       POSTGRES_USER: postgres
       # $$ escapes the literal $ so Compose doesn't treat it as variable interpolation.
-      POSTGRES_PASSWORD: ""
-      POSTGRES_DB: dashboardprov1
+      #
+      # NOTE: these three are read by initdb ONLY when the data directory is
+      # empty. The pgdata volume was created 2026-06-14, so they have had no
+      # effect since — the live credentials are whatever was set then, and the
+      # real database is OrionMacroEconomicsDb. They previously read
+      # POSTGRES_DB: dashboardprov1, a database that does not exist on this
+      # server, which is why every service failed to connect.
+      POSTGRES_PASSWORD: "$$ta99Ath0"
+      POSTGRES_DB: OrionMacroEconomicsDb
     volumes:
       # postgres:18+ stores data under /var/lib/postgresql (version subdir),
       # not /var/lib/postgresql/data as in 16 and earlier.
@@ -30,14 +37,14 @@ services:
       # Exposed on the host for inspection (psql/GUI). Remove to keep DB internal.
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d dashboardprov1"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d OrionMacroEconomicsDb"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   app:
     build: .
-    image: dashboard-pro:1.0.1
+    image: dashboard-pro:1.1.0
     restart: unless-stopped
     depends_on:
       db:
@@ -48,9 +55,9 @@ services:
       # Database — points the app at the `db` service (not localhost).
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: dashboardprov1
+      DB_NAME: OrionMacroEconomicsDb
       DB_USER: postgres
-      DB_PASSWORD: ""
+      DB_PASSWORD: "$$ta99Ath0"
       # API keys — real values, optional (app degrades gracefully without them).
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
       FMP_API_KEY: "BDIqvTLAhhi04dVyNeGG9xzSGQc5yDLQ"
@@ -71,7 +78,7 @@ services:
   # every watched ticker/FRED series daily (see src/data_backbone/worker.py).
   worker:
     build: .
-    image: dashboard-pro:1.0.1
+    image: dashboard-pro:1.1.0
     restart: unless-stopped
     command: ["python", "-m", "src.data_backbone.worker"]
     depends_on:
@@ -80,10 +87,80 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: dashboardprov1
+      DB_NAME: OrionMacroEconomicsDb
       DB_USER: postgres
       DB_PASSWORD: "$$ta99Ath0"
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
+    # The image bakes a Streamlit HTTP healthcheck; this service serves
+    # no HTTP, so the check can only ever fail. Disable rather than
+    # leave it permanently red and teach everyone to ignore it.
+    healthcheck:
+      disable: true
+
+  # THE SIGNAL ENGINE. Ingests → scores → stores the house-view board every
+  # SCAN_INTERVAL_S (300s), and persists Grade-A Setup Ranker signals + alerts.
+  # `background_scanner.run_forever` was written for exactly this container and
+  # was never wired into compose — the only `worker` above runs the data_backbone
+  # store refresher, which is a different job. That is why the board only ever
+  # stayed fresh while somebody had the Streamlit UI open: the scanner was
+  # running as a daemon *thread inside the UI process*, so closing the browser
+  # tab's server stopped the engine.
+  scanner:
+    build: .
+    image: dashboard-pro:1.1.0
+    restart: unless-stopped
+    command: ["python", "-m", "src.services.background_scanner"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: OrionMacroEconomicsDb
+      DB_USER: postgres
+      DB_PASSWORD: "$$ta99Ath0"
+      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
+      GMAIL_SENDER: "Ckhotso@gmail.com"
+      GMAIL_APP_PASSWORD: "dsqf gaoj gdfw pjvg"
+      GMAIL_RECIPIENT: "Ckhotso@gmail.com"
+    # The image bakes a Streamlit HTTP healthcheck; this service serves
+    # no HTTP, so the check can only ever fail. Disable rather than
+    # leave it permanently red and teach everyone to ignore it.
+    healthcheck:
+      disable: true
+
+  # THE PAGE SWEEP. Runs all 27 signal pages under AppTest so each persists its
+  # own signals to trade_setups — the history the Source Scorecard resolves.
+  #
+  # --loop 300 asks for a pass every 5 minutes. A full pass takes ~7 minutes
+  # against live yfinance, so in practice passes run back-to-back and the sleep
+  # is skipped; they are never overlapped. The pages are the constraint, not the
+  # scheduler. The genuinely-every-300s component is `scanner` above.
+  #
+  # SIGNAL_SWEEP_NO_EMAIL=1 because `scanner` already owns alerting and the two
+  # share one NotifyCache ledger — without this the desk would get each Grade-A
+  # alert from whichever service reached it first, twice as often as intended.
+  sweeper:
+    build: .
+    image: dashboard-pro:1.1.0
+    restart: unless-stopped
+    command: ["python", "-m", "src.services.signal_sweep", "--loop", "300"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: OrionMacroEconomicsDb
+      DB_USER: postgres
+      DB_PASSWORD: "$$ta99Ath0"
+      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
+      SIGNAL_SWEEP_NO_EMAIL: "1"
+    # The image bakes a Streamlit HTTP healthcheck; this service serves
+    # no HTTP, so the check can only ever fail. Disable rather than
+    # leave it permanently red and teach everyone to ignore it.
+    healthcheck:
+      disable: true
 
 volumes:
   pgdata:

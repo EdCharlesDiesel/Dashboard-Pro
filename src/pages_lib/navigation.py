@@ -66,6 +66,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("NEWS", "News Filter",     "📰", "pages/news-filter.py"),
     ]),
     ("📋 PRE-SESSION", [
+        NavEntry("TDAY", "Today's Trades",     "🎯", "pages/todays-trades.py"),
         NavEntry("RANK", "Setup Ranker",       "🎰", "pages/setup-ranker.py"),
         NavEntry("TSIG", "Trend Signals",      "📡", "pages/trend-signals.py"),
         NavEntry("CCYS", "Currency Strength",  "💪", "pages/currency-strength.py"),
