@@ -92,6 +92,8 @@ PAGES: Tuple[Tuple[str, str], ...] = (
     ("smart_money", "pages/smart_money_tab.py"),
     # The desk's own chart stack (mt5/FiboRibbon.mq5) scored in Python.
     ("fibo_ribbon", "pages/fibo-ribbon.py"),
+    # FX Bootcamp pivot zones, ported from the BiasedPivots.mq5 on the charts.
+    ("biased_pivots", "pages/biased-pivots.py"),
 )
 
 DEFAULT_TIMEOUT = 300
