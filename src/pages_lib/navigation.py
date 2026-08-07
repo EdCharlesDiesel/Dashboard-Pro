@@ -113,6 +113,8 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("ONDR", "Overnight Drift",       "🌙", "pages/overnight_drift_tab.py"),
         NavEntry("HOLD", "Optimal Holding Period","⏱️", "pages/holding_period_tab.py"),
         NavEntry("QNTM", "Quant Models Lab",      "🧮", "pages/quant_models_tab.py"),
+        NavEntry("MTGL", "Martingale Diagnostics","🎲", "pages/martingale_tab.py"),
+        NavEntry("STOC", "Stochastic Calculus",  "🎓", "pages/stochastic_tab.py"),
         NavEntry("FCST", "Forecast",              "🔭", "pages/forecast_tab.py"),
         NavEntry("SURP", "Surprise Awareness",    "😲", "pages/surprise_tab.py"),
         NavEntry("SEAS", "Seasonality",           "📅", "pages/seasonality.py"),
