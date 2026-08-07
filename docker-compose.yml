@@ -34,8 +34,13 @@ services:
       # not /var/lib/postgresql/data as in 16 and earlier.
       - pgdata:/var/lib/postgresql
     ports:
-      # Exposed on the host for inspection (psql/GUI). Remove to keep DB internal.
-      - "5432:5432"
+      # Published on 5433, NOT 5432. A native Windows PostgreSQL owns 5432 on
+      # both loopbacks, so a 5432 mapping here is silently shadowed: every host
+      # tool that says "localhost:5432" reaches the native server instead, and
+      # the two databases drift apart with no error anywhere. 5433 makes the
+      # container's database unambiguously addressable from the host without
+      # needing to stop a system service.
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d OrionMacroEconomicsDb"]
       interval: 10s
