@@ -72,12 +72,10 @@ def get_db_connection(cfg):
     )
 
 
-# ``trade_setups`` does double duty: it holds trades the user actually took AND
-# every auto-saved page SIGNAL (src/services/signal_store.py — ~25 pages plus
-# the background worker write those continuously). Counting signals as trades
-# makes win rate / expectancy / profit factor meaningless, so the journal
-# separates them. A NULL source is the schema default 'checklist', i.e. a trade.
-EXECUTED_SOURCES = ("checklist", "mt4_import", "mt5_sync")
+# Which sources represent trades the user actually took (vs auto-saved page
+# signals) lives with the schema it describes, so the journal and the
+# Martingale page can't drift apart on what counts as a trade.
+from src.db.trade_repository import EXECUTED_SOURCES
 
 
 def load_journal_trades(cfg, limit: int = 500, executed_only=None):

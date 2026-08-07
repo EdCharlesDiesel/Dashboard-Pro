@@ -39,6 +39,15 @@ class DBConfig:
         }
 
 
+# ``trade_setups`` does double duty: it holds trades the user actually took AND
+# every auto-saved page SIGNAL (src/services/signal_store.py — ~25 pages plus
+# the background worker write those continuously). Anything analysing *trading
+# performance* must filter to these sources, or the signal firehose drowns the
+# real record. A NULL source is the schema default 'checklist', i.e. a trade.
+# Single source of truth: the Trade Journal and the Martingale page both use it.
+EXECUTED_SOURCES = ("checklist", "mt4_import", "mt5_sync")
+
+
 class TradeRepository:
     """All trade_setups CRUD + analytics behind a single class."""
 
