@@ -155,6 +155,109 @@ def _is_fresh(fetched_at: Optional[datetime], ttl: int) -> bool:
     return (datetime.utcnow() - ref) < timedelta(seconds=ttl)
 
 
+# ── coverage (freshness is not sufficiency) ───────────────────────────────────
+# ``market_bars`` holds whatever window the *last* caller asked for, and
+# ``last_fetched_at`` records only *when* that happened — not how far back it
+# reached. So a symbol first cached at ``period="2y"`` kept serving 2 years to
+# every later ``period="5y"`` request, for as long as the row stayed fresh.
+#
+# Not hypothetical, and it did not self-heal: the stale branch *would* have
+# refetched at the deeper period, but `sweeper` re-warms every symbol every 5
+# minutes, so a row is almost never stale when a deep request arrives. Whichever
+# caller warmed a symbol first therefore pinned its depth permanently. Measured
+# 2026-08-08, before this fix — one interval, one table, five different depths:
+#
+#     CHFZAR=X  260 bars    SPY       503 bars    ^VIX  755 bars
+#     USDJPY=X  780 bars    DX-Y.NYB  503 bars (yfinance holds 1257)
+#
+# The damage is silent by construction — a short frame is still a valid frame.
+# `weekly_ohlc` asks for 2y and resamples: on CHF/ZAR it was building every
+# weekly indicator from 52 weeks instead of 105.
+#
+# A stored window counts as covering the request when its first bar lands within
+# a slack of the requested start. Slack absorbs weekends, holidays and coarse
+# intervals (a monthly bar can legitimately start ~a month late), scaled to the
+# span so it stays proportionate on both 60d and 10y requests.
+_COVERAGE_SLACK_MIN = timedelta(days=10)
+_COVERAGE_SLACK_FRAC = 0.05
+
+# (symbol, interval) -> (earliest bar returned, window start we asked for).
+#
+# Recorded only when a fetch came up *short* of what was asked. Without it a
+# symbol whose history genuinely starts later than the request — a young
+# listing, a delisted ticker — would fail the coverage check forever and refetch
+# live on every single call, turning the cache off for that symbol. Process-local
+# by design: one wasted fetch per symbol per restart is the whole cost, and
+# nothing stale can outlive the process.
+_HISTORY_FLOOR: dict = {}
+
+
+def _naive(value) -> pd.Timestamp:
+    """Any timestamp-ish value as a tz-naive UTC ``pd.Timestamp``.
+
+    ``_window_start`` passes a bare ``date`` straight through, and ``date`` does
+    not subtract from ``datetime`` — without this the comparison would raise and
+    be swallowed as "covered", quietly restoring the very bug this guards.
+    """
+    ts = pd.Timestamp(value)
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("UTC").tz_localize(None)
+    return ts
+
+
+def _covers(df: Optional[pd.DataFrame], want: Optional[datetime]) -> bool:
+    """Does ``df`` actually reach back to ``want``?"""
+    if df is None or df.empty:
+        # Fresh-but-empty is never sufficient: a stamped fetch that stored
+        # nothing would otherwise hand every caller a blank frame until the TTL
+        # expired.
+        return False
+    if want is None:
+        return True  # "max"/ytd/unparseable — no window asked for, nothing to check
+    try:
+        first = _naive(df.index.min())
+        w = _naive(want)
+        slack = max(_COVERAGE_SLACK_MIN,
+                    (_naive(datetime.utcnow()) - w) * _COVERAGE_SLACK_FRAC)
+        return bool(first <= w + slack)
+    except Exception:
+        # A non-datetime index (or anything else unexpected) must not put us in
+        # a refetch loop — treat it as covered and serve what we have.
+        return True
+
+
+def _history_exhausted(symbol: str, interval: str, want: Optional[datetime]) -> bool:
+    """True when we already learned the provider cannot reach back to ``want``."""
+    rec = _HISTORY_FLOOR.get((symbol, interval))
+    if rec is None:
+        return False
+    _, asked = rec
+    if asked is None:
+        return True   # we asked for everything and that was all there was
+    if want is None:
+        return False  # now asking for everything — worth one attempt
+    try:
+        # No more history than the attempt that already fell short.
+        return bool(_naive(want) >= _naive(asked))
+    except Exception:
+        return False
+
+
+def _remember_history_floor(
+    symbol: str, interval: str, want: Optional[datetime], df: pd.DataFrame
+) -> None:
+    """Note that ``symbol`` could not be fetched back as far as ``want``."""
+    if _covers(df, want):
+        return
+    first = None
+    try:
+        if df is not None and not df.empty:
+            first = df.index.min()
+    except Exception:
+        pass
+    _HISTORY_FLOOR[(symbol, interval)] = (first, want)
+
+
 # ── read-through core (undecorated, unit-testable) ────────────────────────────
 # A ``_repo_factory`` seam lets tests inject a fake repository; production passes
 # ``pooled_market_repository`` (the default).
@@ -170,6 +273,7 @@ def _ohlc_impl(
     source: str = "live",
 ) -> pd.DataFrame:
     cfg = _resolve_cfg()
+    want = _window_start(period, start)
     if source == "duka":
         if cfg is None:
             logger.warning("[market_cache] source='duka' requested but DB not "
@@ -177,13 +281,26 @@ def _ohlc_impl(
         else:
             try:
                 repo = repo_factory(cfg)
-                df = repo.load_dukascopy_bars(symbol, interval, start=_window_start(period, start))
-                if not df.empty:
+                df = repo.load_dukascopy_bars(symbol, interval, start=want)
+                if _covers(df, want):
                     return df
-                logger.warning("[market_cache] source='duka' has no archived bars "
-                               "for %s (%s) — falling back to live. Run "
-                               "src/data/dukascopy_backfill.py to backfill it.",
-                               symbol, interval)
+                if not df.empty:
+                    # Same failure as the live cache had: a short archive is
+                    # still a valid frame, so serving it degrades the caller's
+                    # window with nothing to notice. There is no live remedy on
+                    # this path — the archive only deepens when somebody runs the
+                    # backfill — so say exactly that and fall through rather than
+                    # hand back a silently truncated series.
+                    logger.warning("[market_cache] source='duka' archive for %s (%s) "
+                                   "starts %s, short of the requested %s — falling "
+                                   "back to live. Run src/data/dukascopy_backfill.py "
+                                   "to deepen it.",
+                                   symbol, interval, df.index.min(), want)
+                else:
+                    logger.warning("[market_cache] source='duka' has no archived bars "
+                                   "for %s (%s) — falling back to live. Run "
+                                   "src/data/dukascopy_backfill.py to backfill it.",
+                                   symbol, interval)
             except Exception as exc:
                 logger.warning("[market_cache] source='duka' read failed for %s: "
                                "%s — falling back to live", symbol, exc)
@@ -193,9 +310,18 @@ def _ohlc_impl(
     try:
         repo = repo_factory(cfg)
         if _is_fresh(repo.last_fetched_at(symbol, interval), ttl):
-            return repo.load_bars(symbol, interval, start=_window_start(period, start))
+            cached = repo.load_bars(symbol, interval, start=want)
+            if _covers(cached, want) or _history_exhausted(symbol, interval, want):
+                return cached
+            logger.info(
+                "[market_cache] %s (%s) is fresh but stored history starts %s, "
+                "short of the requested %s — backfilling",
+                symbol, interval,
+                (cached.index.min() if not cached.empty else "nothing"), want,
+            )
         df = _fetch_yf(symbol, period, interval, start, end, auto_adjust)
         repo.upsert_bars(symbol, interval, df)
+        _remember_history_floor(symbol, interval, want, df)
         return df
     except Exception:
         # DB unreachable / pool exhausted / schema missing → never break the app.
