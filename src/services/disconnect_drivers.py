@@ -94,6 +94,24 @@ INSTRUMENT_DRIVERS: Dict[str, List[Relationship]] = {
                 Relationship("SPX", -1, "Risk-on → ZAR up → EUR/ZAR down.")],
     "GBP/ZAR": [Relationship("GOLD", -1, "Gold up → ZAR up → GBP/ZAR down."),
                 Relationship("SPX", -1, "Risk-on → ZAR up → GBP/ZAR down.")],
+    # The rand leg dominates every one of these crosses, so the gold and
+    # risk-sentiment links carry through unchanged from the pairs above.
+    "CHF/ZAR": [Relationship("GOLD", -1, "Gold up → ZAR up → CHF/ZAR down."),
+                # CHF is the funding leg here, so risk-on hits it from both
+                # sides: the franc weakens as the rand strengthens.
+                Relationship("SPX", -1, "Risk-on → CHF weak & ZAR up → CHF/ZAR down.")],
+    "NZD/ZAR": [Relationship("GOLD", -1, "Gold up → ZAR up → NZD/ZAR down."),
+                # Both legs are commodity/risk currencies, so the SPX link is
+                # genuinely weaker than on the majors — they tend to rise
+                # together and partly cancel.
+                Relationship("SPX", -1, "Soft link: both legs risk-on, ZAR usually the stronger mover.")],
+    "AUD/ZAR": [Relationship("GOLD", -1, "Soft link: gold lifts both AUD and ZAR, ZAR usually more."),
+                Relationship("SPX", -1, "Soft link: both legs risk-on; ZAR the more volatile leg.")],
+    # Signs are FLIPPED versus every pair above, because the rand is the base
+    # here: ZAR/JPY rises when the rand strengthens. Gold up lifts the rand and
+    # risk-on sells the yen, so both drivers push the same way for once.
+    "ZAR/JPY": [Relationship("GOLD", +1, "SA gold exporter: gold up -> ZAR up -> ZAR/JPY up."),
+                Relationship("SPX", +1, "Risk-on -> yen sold & ZAR bid -> ZAR/JPY up.")],
     # ── metals & oil ─────────────────────────────────────────────────────────
     "XAU/USD": [Relationship("REAL5Y", -1, "Classic: real yields up → gold down (broken since ~2022)."),
                 Relationship("DXY", -1, "Dollar up → gold down."),

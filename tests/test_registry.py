@@ -30,7 +30,10 @@ class TestDictStyleAccess:
         assert "FOO/BAR" not in INSTRUMENTS
 
     def test_len_is_full_universe(self):
-        assert len(INSTRUMENTS) == 22
+        # Deliberately a hard number: the registry drives what every scanner
+        # scans, so a silent addition or removal should fail loudly here.
+        # 22 -> 25 (CHF/NZD/AUD ZAR), then 26 (ZAR/JPY) on 2026-08-07.
+        assert len(INSTRUMENTS) == 26
 
 
 class TestAttributeAccess:
