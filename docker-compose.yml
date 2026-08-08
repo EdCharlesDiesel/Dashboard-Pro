@@ -66,7 +66,7 @@ services:
       # API keys — real values, optional (app degrades gracefully without them).
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
       FMP_API_KEY: "BDIqvTLAhhi04dVyNeGG9xzSGQc5yDLQ"
-      FINNHUB_API_KEY: ""
+      FINNHUB_API_KEY: "d7nieg9r01qppri50290d7nieg9r01qppri5029g"
       ANTHROPIC_API_KEY: ""
       # Gmail SMTP (AMD scanner / market-overview alerts) — optional, unset.
       GMAIL_SENDER: "Ckhotso@gmail.com"
