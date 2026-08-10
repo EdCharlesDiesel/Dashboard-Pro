@@ -1,4 +1,6 @@
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict
 
 from src.instruments.registry import INSTRUMENTS
@@ -11,10 +13,39 @@ def _assets_from_registry() -> Dict[str, str]:
     return {name: inst.ticker for name, inst in INSTRUMENTS.items()}
 
 
+_VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
+_VERSION_FALLBACK = "0.0.0-dev"
+
+
+def _read_version() -> str:
+    """The running build's version: ``APP_VERSION`` env, else the VERSION file.
+
+    Previously a literal here, which is a promise nobody keeps — it read 1.0.1
+    for weeks after 1.0.1 shipped, and 1.1.0 while the container ran 1.4.0. The
+    footer was already sourcing this field, so fixing the footer meant fixing
+    what it reads rather than where it reads from.
+
+    The file is baked into the image at build time, so a container reports the
+    version it was actually built from rather than whatever tag someone typed
+    into compose. ``APP_VERSION`` overrides for one-off builds. A missing file
+    degrades to a visibly fake ``0.0.0-dev`` — better an obvious placeholder in
+    the status bar than a confident wrong number.
+    """
+    env = os.environ.get("APP_VERSION", "").strip()
+    if env:
+        return env
+    try:
+        return _VERSION_FILE.read_text(encoding="utf-8").strip() or _VERSION_FALLBACK
+    except Exception:
+        return _VERSION_FALLBACK
+
+
 @dataclass
 class AppConfig:
     """Application configuration — all tuneable parameters in one place."""
-    version: str = "1.1.0"
+    version: str = field(default_factory=_read_version)
+    # NOTE: unused anywhere in the codebase, and stale. Left rather than
+    # silently removed; see the version note above for why literals rot.
     last_updated: str = "2026-08-06"
 
     # Mirrors src/instruments/registry.py — never hand-maintain a separate list.

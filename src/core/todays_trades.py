@@ -131,6 +131,197 @@ def find_conflict(pair: str, direction: str,
     return None
 
 
+# ── currency exposure ─────────────────────────────────────────────────────────
+# `find_conflict` compares *pair names* against hand-maintained groups, so it can
+# only see collisions someone thought to list. Two blind spots follow from that,
+# and both were live in the book on 2026-08-10:
+#
+#   * Across groups. AUD/USD sits in "USD vs majors", AUD/JPY in "JPY crosses",
+#     so the guard never compares them — it passed AUD/USD long while AUD/JPY
+#     short was open. Both are AUD trades; net AUD was -1,000 units, half a
+#     position paying spread on both sides.
+#   * In aggregate. Four tickets each cleared the guard individually and summed
+#     to -4,056 USD on a 1,939 USD account — 2.1x the balance short dollar,
+#     spread across four symbols so it never looked like concentration.
+#
+# This decomposes every position into its two currency legs instead, which needs
+# no group table and cannot miss a pair nobody listed.
+
+# Units of the base per 1.0 lot. Forex is the 100k standard; the commodities are
+# the contract sizes this desk's broker (Exness) uses. Only the *quote* leg of a
+# commodity is a currency, but it still lands on USD, so the size has to be right.
+CONTRACT_SIZES: Dict[str, float] = {
+    "XAU/USD": 100.0, "XAG/USD": 5000.0, "XPT/USD": 100.0, "WTI/USD": 1000.0,
+}
+DEFAULT_CONTRACT = 100_000.0
+
+# Net exposure to one currency, as a multiple of account balance, above which a
+# further trade in the same direction is refused. 1.0 = "no single currency may
+# exceed the account". Deliberately loose — this is a backstop against the 2.1x
+# case, not a portfolio optimiser.
+CCY_LIMIT_RATIO = 1.0
+
+
+def _pair_ccys(pair: str) -> Optional[Sequence[str]]:
+    """('EUR', 'USD') for 'EUR/USD'; None if it isn't a two-sided symbol."""
+    parts = [p.strip().upper() for p in str(pair or "").split("/")]
+    if len(parts) != 2 or not all(parts):
+        return None
+    return parts
+
+
+# Two schemas reach this code and neither is going to change: `open_positions`
+# stores lot_size/entry_price, the live MT5 read returns volume/price_current.
+# Accepting both here beats making every caller remap and forget a field.
+def pos_volume(pos: Dict[str, Any]) -> float:
+    for key in ("volume", "lots", "lot_size"):
+        value = pos.get(key)
+        if value:
+            return float(value)
+    return 0.0
+
+
+def pos_price(pos: Dict[str, Any]) -> float:
+    for key in ("price", "price_current", "price_open", "entry_price"):
+        value = pos.get(key)
+        if value:
+            return float(value)
+    return 0.0
+
+
+def usd_rates(positions: Sequence[Dict[str, Any]]) -> Dict[str, float]:
+    """USD value of one unit of each currency, derived from the book itself.
+
+    Every open position carries its own price, and any pair with USD on one side
+    fixes that currency outright (AUD/USD at 0.70659 => 1 AUD = 0.70659 USD).
+    Crosses then resolve off whatever is already known (AUD/JPY at 111.569 with
+    AUD fixed gives JPY), so repeated passes converge without a single quote
+    lookup. That matters because this has to run in the Linux container, where
+    there is no MetaTrader and no broker connection at all.
+    """
+    rates: Dict[str, float] = {"USD": 1.0}
+    for _ in range(len(positions) + 1):     # each pass can only fix new currencies
+        progressed = False
+        for pos in positions:
+            ccys = _pair_ccys(pos.get("pair"))
+            price = pos_price(pos)
+            if not ccys or not price:
+                continue
+            base, quote = ccys
+            # 1 base = `price` quote, so base_usd = price * quote_usd.
+            if base not in rates and quote in rates:
+                rates[base] = float(price) * rates[quote]
+                progressed = True
+            elif quote not in rates and base in rates and float(price):
+                rates[quote] = rates[base] / float(price)
+                progressed = True
+        if not progressed:
+            break
+    return rates
+
+
+def currency_legs(pair: str, direction: Any, lots: float, price: float,
+                  rates: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+    """One position as signed USD notional per currency.
+
+    A long is +base / -quote: buying EUR/USD is owning euros funded by dollars.
+    Both legs count — netting only the base is how a book ends up short dollar
+    four times over without anyone noticing.
+    """
+    ccys = _pair_ccys(pair)
+    side = _side(direction)
+    if not ccys or not side or not lots or not price:
+        return {}
+    base, quote = ccys
+    rates = rates or {}
+    units = float(lots) * CONTRACT_SIZES.get(pair, DEFAULT_CONTRACT)
+    sign = 1.0 if side == LONG else -1.0
+    inst = INSTRUMENTS.get(pair)
+    out: Dict[str, float] = {}
+    # A commodity's base leg is metal or oil, not a currency — skip it, but keep
+    # the USD leg, which is the part that concentrates.
+    if not (inst is not None and inst.is_commodity):
+        out[base] = sign * units * rates.get(base, 1.0)
+    out[quote] = out.get(quote, 0.0) - sign * units * float(price) * rates.get(quote, 1.0)
+    return out
+
+
+def net_exposure(positions: Sequence[Dict[str, Any]],
+                 rates: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+    """Signed USD notional per currency across the whole book."""
+    rates = rates if rates is not None else usd_rates(positions)
+    net: Dict[str, float] = {}
+    for pos in positions:
+        legs = currency_legs(pos.get("pair"), pos.get("direction"),
+                             pos_volume(pos), pos_price(pos), rates)
+        for ccy, amount in legs.items():
+            net[ccy] = net.get(ccy, 0.0) + amount
+    return net
+
+
+def exposure_conflict(pair: str, direction: Any,
+                      open_positions: Sequence[Dict[str, Any]],
+                      balance: float,
+                      rates: Optional[Dict[str, float]] = None,
+                      limit_ratio: float = CCY_LIMIT_RATIO) -> Optional[str]:
+    """Why this idea would deepen an already-oversized currency bet, or ``None``.
+
+    Only refuses trades that push a currency *further* the way it is already
+    leaning. A trade that offsets an existing exposure is the opposite of the
+    problem and passes — USD/CHF long against a short-dollar book reduces it.
+    """
+    side = _side(direction)
+    ccys = _pair_ccys(pair)
+    if not side or not ccys or not balance or balance <= 0:
+        return None
+    exposure = net_exposure(open_positions, rates)
+    limit = float(balance) * limit_ratio
+    base, quote = ccys
+    long = side == LONG
+    # What this trade would add to each leg: +1 accumulates, -1 offsets.
+    adds = {base: 1.0 if long else -1.0, quote: -1.0 if long else 1.0}
+    inst = INSTRUMENTS.get(pair)
+    if inst is not None and inst.is_commodity:
+        adds.pop(base, None)
+    for ccy, direction_sign in adds.items():
+        held = exposure.get(ccy, 0.0)
+        if not held or abs(held) < limit:
+            continue
+        if (held > 0) != (direction_sign > 0):
+            continue                      # this trade reduces that exposure
+        return ("deepens {0} exposure — book is already {1} {2:,.0f} USD "
+                "({3:.1f}x balance)".format(
+                    ccy, "long" if held > 0 else "short", abs(held),
+                    abs(held) / float(balance)))
+    return None
+
+
+def offsetting_legs(positions: Sequence[Dict[str, Any]],
+                    rates: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
+    """Currencies the book holds on both sides at once.
+
+    Not an error — a deliberate hedge looks identical — but it is nearly always
+    accidental, and it costs spread and swap on both legs to hold the difference.
+    """
+    rates = rates if rates is not None else usd_rates(positions)
+    by_ccy: Dict[str, Dict[str, List[str]]] = {}
+    for pos in positions:
+        pair = str(pos.get("pair") or "")
+        legs = currency_legs(pair, pos.get("direction"),
+                             pos_volume(pos), pos_price(pos), rates)
+        for ccy, amount in legs.items():
+            if not amount:
+                continue
+            slot = by_ccy.setdefault(ccy, {"long": [], "short": []})
+            slot["long" if amount > 0 else "short"].append(pair)
+    out: List[Dict[str, Any]] = []
+    for ccy, slot in by_ccy.items():
+        if slot["long"] and slot["short"]:
+            out.append({"currency": ccy, "long": sorted(set(slot["long"])),
+                        "short": sorted(set(slot["short"]))})
+    return sorted(out, key=lambda d: d["currency"])
+
+
 def position_size(risk_budget: float, sl_pips: float, pip_value_per_lot: float,
                   volume_min: float = 0.01, volume_step: float = 0.01,
                   volume_max: float = 200.0) -> float:

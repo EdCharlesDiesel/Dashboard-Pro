@@ -32,6 +32,7 @@ Usage::
 """
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import time
@@ -42,9 +43,99 @@ if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
 LOG = os.path.join(_REPO, "logs", "mt5_sync.log")
+LOCK = os.path.join(_REPO, "logs", "mt5_sync.lock")
 
 # Set once the loop starts; single runs just print.
 _LOGGING = False
+
+# The live lock handle. Must stay referenced for the whole process: the OS lock
+# is held by the open file object, so letting it be garbage-collected releases
+# the lock silently while the loop keeps running.
+_LOCK_HANDLE = None
+
+# Returned when the lock file itself cannot be created (read-only disk, missing
+# logs/). That is not evidence another loop is running, so the sync should still
+# start — refusing to sync because we could not write a lock file would be a
+# self-inflicted outage.
+_UNLOCKED = object()
+
+# Which byte the Windows lock claims. Deliberately past the PID text at the top
+# of the file: a msvcrt byte-range lock blocks *other* handles from reading that
+# byte, so locking byte 0 would make the PID unreadable — `type mt5_sync.lock`
+# would fail — precisely while the loop is running and you want to know who
+# holds it. POSIX flock is whole-file and advisory, so the offset is harmless.
+_LOCK_BYTE = 4096
+
+
+def acquire_lock(path=None):
+    """Hold an exclusive OS lock, or return ``None`` if another loop has it.
+
+    ``path`` resolves to :data:`LOCK` at call time, not as a default argument —
+    a default would bind the module value once at import and silently ignore any
+    later reassignment of ``LOCK``.
+
+    **Why an OS lock rather than the previous ``tasklist`` check.** That check
+    only *warned*, and it could not have worked anyway: on 2026-08-07 two loops
+    launched in the same second, so each looked first and saw nothing. Both
+    started. One won `mt5.initialize()` and did all 447 syncs; the other wedged
+    on that call and sat at 0 CPU for two and a half days, alive enough that
+    "is pythonw running?" answered yes while doing nothing at all.
+
+    An OS lock has no race — the kernel arbitrates — and, unlike a PID file, it
+    is released automatically when the process dies, so a crash cannot leave a
+    stale lock that blocks every future start.
+    """
+    path = path or LOCK
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        handle = open(path, "a+")
+    except Exception as exc:                      # noqa: BLE001
+        emit("[lock] cannot create {0} ({1}) - running without a lock".format(path, exc))
+        return _UNLOCKED
+
+    try:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(_LOCK_BYTE)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:                                     # the Linux container path
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None                               # someone else holds it
+
+    try:
+        handle.seek(0)
+        handle.truncate()
+        handle.write("{0}\n".format(os.getpid()))
+        handle.flush()
+    except Exception:                             # noqa: BLE001 - diagnostics only
+        pass
+    return handle
+
+
+def release_lock():
+    """Drop the lock. The OS would do this at exit anyway; this makes it prompt."""
+    global _LOCK_HANDLE
+    handle = _LOCK_HANDLE
+    _LOCK_HANDLE = None
+    if handle is None or handle is _UNLOCKED:
+        return
+    try:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(_LOCK_BYTE)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except Exception:                             # noqa: BLE001
+        pass
+    try:
+        handle.close()
+    except Exception:                             # noqa: BLE001
+        pass
 
 
 def emit(line: str) -> None:
@@ -104,9 +195,21 @@ def main(argv=None) -> int:
         interval = int(argv[i + 1]) if len(argv) > i + 1 else 300
 
     if not interval:
+        # A one-off sync is deliberately NOT locked: forcing a manual refresh
+        # while the loop runs costs one extra write and is exactly what you want
+        # when debugging. Only the perpetual loop is single-instance.
         return sync_once()
 
     _LOGGING = True
+
+    global _LOCK_HANDLE
+    _LOCK_HANDLE = acquire_lock()
+    if _LOCK_HANDLE is None:
+        emit("[loop] another sync loop already holds {0} - exiting. "
+             "This is the guard working, not an error.".format(LOCK))
+        return 0
+    atexit.register(release_lock)
+
     emit("[loop] syncing every {0}s - session-resident, terminal must be open"
          .format(interval))
     while True:

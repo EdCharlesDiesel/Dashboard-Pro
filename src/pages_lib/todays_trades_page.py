@@ -19,7 +19,9 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import streamlit as st
 
-from src.core.todays_trades import LONG, Idea, consensus, find_conflict, size_idea
+from src.core.todays_trades import (LONG, Idea, consensus, exposure_conflict,
+                                    find_conflict, net_exposure,
+                                    offsetting_legs, size_idea)
 from src.instruments.registry import INSTRUMENTS
 from src.indicators.technical import TechnicalIndicators as TI
 from src.pages_lib.base import BloombergPage, PageContext
@@ -67,9 +69,16 @@ class TodaysTradesPage(BloombergPage):
                 return []
             repo = pooled_repository(cfg)
             with closing(repo._connect()) as conn, conn, conn.cursor() as cur:  # noqa: SLF001
+                # Range predicate, not `logged_at::date = CURRENT_DATE`. Casting
+                # the column hides it from idx_trade_setups_logged_at, so that
+                # form seq-scans *and* misestimates badly — the planner guessed
+                # 4 rows against an actual 57, because it cannot see statistics
+                # through the cast. This form is sargable: index scan, 0.524ms
+                # -> 0.123ms, and no new index needed to get it.
                 cur.execute(
                     "SELECT instrument, direction, source FROM trade_setups "
-                    "WHERE logged_at::date = CURRENT_DATE")
+                    "WHERE logged_at >= CURRENT_DATE "
+                    "AND logged_at < CURRENT_DATE + INTERVAL '1 day'")
                 return [{"instrument": r[0], "direction": r[1], "source": r[2]}
                         for r in cur.fetchall()]
         except Exception:
@@ -80,8 +89,12 @@ class TodaysTradesPage(BloombergPage):
         """Open positions from the durable store (works without a terminal)."""
         try:
             from src.services.open_positions import load
+            # entry_price rides along for the currency-exposure guard, which
+            # needs a price per position to convert legs into one comparable
+            # unit. Dropping it here is what limited the guard to name matching.
             return [{"pair": p.get("pair"), "direction": p.get("direction"),
-                     "lot_size": p.get("lot_size")} for p in (load() or [])]
+                     "lot_size": p.get("lot_size"),
+                     "entry_price": p.get("entry_price")} for p in (load() or [])]
         except Exception:
             return []
 
@@ -123,7 +136,13 @@ class TodaysTradesPage(BloombergPage):
 
         ideas = [i for i in consensus(rows) if len(i.agree) >= min_src]
         for idea in ideas:
-            idea.conflict = find_conflict(idea.pair, idea.direction, book)
+            # Two independent guards, and the order matters only for which
+            # reason gets shown: the group check names a specific position, so
+            # it reads better when both fire. The exposure check catches what
+            # the group table structurally cannot — see todays_trades.py.
+            idea.conflict = (find_conflict(idea.pair, idea.direction, book)
+                             or exposure_conflict(idea.pair, idea.direction,
+                                                  book, balance))
             pa = self._price_and_atr(idea.pair)
             if pa:
                 size_idea(idea, pa["price"], pa["atr"], balance, risk_pct=risk_pct)
@@ -151,16 +170,117 @@ class TodaysTradesPage(BloombergPage):
             for idea in takeable[:3]:
                 self._card(idea)
 
+        self._probabilities(takeable)
+
         if blocked and st.session_state.get("tday_show_blocked", True):
             st.markdown("### ⛔ Blocked by your open book")
             st.caption("Real signals — they would just double a bet you already have.")
             st.dataframe(self._table(blocked, blocked_col=True),
                          width="stretch", hide_index=True)
 
+        self._exposure(book, balance)
+
         st.caption("A view over signals already persisted by other pages — this "
                    "page writes nothing and is not part of the sweep.")
 
     # ── rendering ───────────────────────────────────────────────────────────
+    @staticmethod
+    @st.cache_data(ttl=900, show_spinner=False)
+    def _gbm(pair: str):
+        """Calibrated GBM for one pair. Cached: it refits the whole daily series."""
+        from src.services.position_risk import calibrate
+        return calibrate(pair)
+
+    @classmethod
+    def _probabilities(cls, takeable: List[Idea]) -> None:
+        """Will the target be reached before the stop — and does that pay?
+
+        Sits above the blocked table because it answers a different question
+        from everything else on this page. Consensus says the *direction* is
+        agreed; sizing says the position is affordable. Neither says the target
+        is reachable before the stop, which is the only one of the three that
+        decides whether the trade makes money.
+        """
+        if not takeable:
+            return
+        from src.services.position_risk import assess, position_from_idea, verdict
+
+        st.markdown("### 🎲 Target before stop")
+        rows: List[Dict[str, Any]] = []
+        reasons: List[tuple] = []
+        for idea in takeable:
+            position = position_from_idea(idea)
+            params = cls._gbm(idea.pair) if position is not None else None
+            if position is None or params is None:
+                rows.append({"Pair": idea.pair, "Side": idea.direction,
+                             "P(target 1st)": "—", "P(stop 1st)": "—",
+                             "R:R": "—", "Needs": "—", "Edge": "—",
+                             "EV": "—", "Verdict": "no price history"})
+                continue
+            risk = assess(position, params, use_monte_carlo=False)
+            if risk is None:
+                rows.append({"Pair": idea.pair, "Side": idea.direction,
+                             "P(target 1st)": "—", "P(stop 1st)": "—",
+                             "R:R": "—", "Needs": "—", "Edge": "—",
+                             "EV": "—", "Verdict": "unsized"})
+                continue
+            call = verdict(risk)
+            rows.append({
+                "Pair": risk.pair, "Side": risk.side,
+                "P(target 1st)": "{0:.1f}%".format(risk.p_target * 100),
+                "P(stop 1st)": "{0:.1f}%".format(risk.p_stop * 100),
+                "R:R": "{0:.2f}".format(risk.reward_risk),
+                "Needs": "{0:.1f}%".format(risk.breakeven * 100),
+                "Edge": "{0:+.1f}pp".format(risk.edge_pp),
+                "EV": "{0:+.2f}".format(risk.ev_usd),
+                "Verdict": "✅ TAKE" if call["verdict"] == "TAKE" else "⛔ SKIP",
+            })
+            reasons.append((risk.pair, call["verdict"], call["reason"]))
+
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        st.caption("**Edge**, not probability, is the column that decides. A 2:1 "
+                   "target sits twice as far as its stop, so being stopped more "
+                   "often than not is the design — what matters is whether the "
+                   "hit rate beats the one the payoff requires.")
+        for pair, call, reason in reasons:
+            (st.success if call == "TAKE" else st.warning)(
+                "**{0}** — {1}".format(pair, reason))
+
+    @staticmethod
+    def _exposure(book: List[Dict[str, Any]], balance: float) -> None:
+        """What the book actually bets on, currency by currency.
+
+        The blocked list says *this* trade is refused; this says why the book is
+        shaped the way it is. Without it the guard is an oracle — it refuses a
+        metal trade for a dollar reason the user cannot see anywhere on screen.
+        """
+        if not book or not balance:
+            return
+        exposure = net_exposure(book)
+        if not exposure:
+            return
+        st.markdown("### 🌍 Net currency exposure")
+        ranked = sorted(exposure.items(), key=lambda kv: -abs(kv[1]))
+        frame = pd.DataFrame([{
+            "Currency": ccy,
+            "Side": "Long" if amount > 0 else "Short",
+            "Notional (USD)": round(amount, 0),
+            "x Balance": round(abs(amount) / balance, 2),
+            "Over limit": "⚠️" if abs(amount) >= balance else "",
+        } for ccy, amount in ranked if abs(amount) >= 1])
+        st.dataframe(frame, width="stretch", hide_index=True)
+        st.caption("Every position split into its two currency legs. Tickets on "
+                   "different symbols can be one bet — four separate trades summed "
+                   "to 2.1x the account short USD on 2026-08-10, each of which "
+                   "passed the correlation check on its own.")
+
+        for clash in offsetting_legs(book):
+            st.warning("**{0}** is held both ways — long via {1}, short via {2}. "
+                       "Usually accidental, and you pay spread and swap on both "
+                       "legs to hold the difference.".format(
+                           clash["currency"], ", ".join(clash["long"]),
+                           ", ".join(clash["short"])))
+
     @staticmethod
     def _px(value: Optional[float]) -> str:
         """Format a price the way the desk reads it (see CLAUDE.md domain rules).
