@@ -75,11 +75,18 @@ class TodaysTradesPage(BloombergPage):
                 # 4 rows against an actual 57, because it cannot see statistics
                 # through the cast. This form is sargable: index scan, 0.524ms
                 # -> 0.123ms, and no new index needed to get it.
+                # Widened from "today" to the longest horizon any source
+                # declares, because `consensus` now holds each signal for its
+                # own horizon rather than to midnight. A one-day window made the
+                # board reverse whenever yesterday's votes aged out — nothing in
+                # the market had to change. logged_at and checks_detail come
+                # along because that is what liveness is computed from.
                 cur.execute(
-                    "SELECT instrument, direction, source FROM trade_setups "
-                    "WHERE logged_at >= CURRENT_DATE "
-                    "AND logged_at < CURRENT_DATE + INTERVAL '1 day'")
-                return [{"instrument": r[0], "direction": r[1], "source": r[2]}
+                    "SELECT instrument, direction, source, logged_at, checks_detail "
+                    "FROM trade_setups "
+                    "WHERE logged_at >= CURRENT_DATE - INTERVAL '45 days'")
+                return [{"instrument": r[0], "direction": r[1], "source": r[2],
+                         "logged_at": r[3], "checks_detail": r[4]}
                         for r in cur.fetchall()]
         except Exception:
             return []

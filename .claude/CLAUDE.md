@@ -103,6 +103,53 @@ EOF
 - Changes to `.streamlit/config.toml` need a server restart; code/CSS changes only need a browser reload.
 - AppTest runs hit live yfinance (~5–60 s per page). "No pairs scored" usually means real market conditions, not a bug.
 
+## The architecture scan (`.foglamp/`) — keep it current
+
+`.foglamp/scan.json` is the map of this repo as a graph: entry points, the
+scheduled workers, the AI surfaces, the internal services the product is built
+from, and the stores and third parties they touch. `render.py` validates it and
+splices it into `template.html` to produce a standalone, offline `scan.html`.
+
+`introspect.py` then walks the real source with `ast` and writes `code.json` —
+the classes (with bases and methods), public function signatures and internal
+imports behind each node, plus the provisioning surface (compose service, run
+command, env var **names**) for the infrastructure ones. That is what the map's
+**Blueprint** view renders as a build manual.
+
+```bash
+python .foglamp/introspect.py        # re-read the source tree -> code.json
+python .foglamp/render.py            # validate + regenerate scan.html
+python .foglamp/render.py --check    # validate only (CI-friendly, exits 1 on breach)
+```
+
+Run them in that order; `introspect.py` exits 1 if a `sourceRef` in `scan.json`
+no longer exists on disk, which is the cheapest way to catch a moved module.
+
+**Update the scan in the same change that adds the feature.** Add a node (and
+its edges) whenever you add: a page or other entry point, a background worker or
+scheduled job, an AI/LLM call, a service module under `src/services` or
+`src/core`, a new table, or a third-party dependency. Edges carry the business
+logic — prefer a specific phrase (`"charges on trial end"`, `"only on state
+change"`) over a bare arrow.
+
+Two rules that are easy to get wrong:
+
+- **Never hand-number anything.** The rebuild order shown in the map (step
+  numbers, phases, "build these first") is *derived from the graph at render
+  time* — a node's phase is the longest dependency path beneath it. Adding one
+  node renumbers the map correctly on its own.
+- **`scan.json` is a published contract**, not a free-form doc. `render.py`
+  enforces foglamp.dev's caps (≤60 nodes, ≤120 edges, ≤3 topModels, label ≤28
+  chars, sub ≤40, edge label ≤24, fixed `kind` vocabularies). Make an edit fit
+  the caps; do not relax them. Tracked: `scan.json`, `template.html`,
+  `render.py`, `introspect.py`. Gitignored: `scan.html` and `code.json` (both
+  generated) and `scan.lock.json` (the publish edit token — **a secret**).
+
+`scan.json` describes architecture only: no code, no credentials, no host/port
+— it is built to be shareable. `code.json` goes deeper (signatures, env var
+names) but still records **no values**: `introspect.py` splits environment
+entries on `:`/`=` and keeps only the key. If you extend it, preserve that.
+
 ## Architecture
 
 ### The multipage system
