@@ -35,3 +35,13 @@ src/services/cot_cache/
 logs/
 .claude/settings.local.json
 .streamlit/secrets.toml
+
+# foglamp architecture scan (.foglamp/). Tracked: scan.json (the map),
+# template.html (the renderer), render.py + introspect.py (the tooling).
+# Not tracked:
+#   scan.lock.json  holds the publish edit token, which is a secret
+#   code.json       introspect.py regenerates it from the source tree
+#   scan.html       render.py regenerates it from the two JSON files
+.foglamp/scan.lock.json
+.foglamp/code.json
+.foglamp/scan.html

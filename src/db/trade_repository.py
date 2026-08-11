@@ -415,16 +415,25 @@ class TradeRepository:
         sql = """
             INSERT INTO trade_setups (
                 logged_at, instrument, ticker, direction, session,
-                score, verdict, atr14, atr20, sl_pips, tp1_pips, tp2_pips,
+                score, verdict, atr14, atr20, entry_price, sl_pips, tp1_pips, tp2_pips,
                 lot_size, risk_amount, rr_tp1, rr_tp2, account_bal, risk_pct,
                 checks_passed, checks_total, checks_detail, notes
             ) VALUES (
                 %(logged_at)s, %(instrument)s, %(ticker)s, %(direction)s, %(session)s,
-                %(score)s, %(verdict)s, %(atr14)s, %(atr20)s, %(sl_pips)s, %(tp1_pips)s, %(tp2_pips)s,
+                %(score)s, %(verdict)s, %(atr14)s, %(atr20)s, %(entry_price)s, %(sl_pips)s, %(tp1_pips)s, %(tp2_pips)s,
                 %(lot_size)s, %(risk_amount)s, %(rr_tp1)s, %(rr_tp2)s, %(account_bal)s, %(risk_pct)s,
                 %(checks_passed)s, %(checks_total)s, %(checks_detail)s, %(notes)s
             )
         """
+        # entry_price is NOT optional decoration: `source_scorecard.evaluate_row`
+        # needs the price a signal was proposed at to measure subsequent bars
+        # against, and without it every row is permanently unresolvable.
+        # `signal_to_setup_row` had been producing the value all along; this
+        # INSERT silently dropped it, so 724 of 724 stored signals carried NULL
+        # and only the 12 whose idea leaked `entry` into checks_detail could ever
+        # be scored. A row builder test cannot catch that — see
+        # tests/test_trade_repository_columns.py, which asserts the INSERT and
+        # the builder agree.
         params: Dict[str, Any] = row
         if source is not None:
             # Add the source column without mutating the caller's row dict.

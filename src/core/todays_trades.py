@@ -22,12 +22,100 @@ MetaTrader5 package does not exist.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+import pandas as pd
 
 from src.instruments.registry import CORR_GROUPS, INSTRUMENTS
 
 LONG, SHORT = "Long", "Short"
+
+# A swing signal counts for as long as its own thesis is meant to run, not for a
+# fixed 24 hours. Judging a 10-day view on a rolling one-day window means the
+# board reverses whenever yesterday's votes age out — nothing in the market has
+# to change. Measured 2026-08-11: 12 of 27 instruments carried BOTH directions
+# inside 7 days, and XPT/USD was recommended short one day and read long by
+# three sources the next.
+#
+# Matches `source_scorecard.DEFAULT_HORIZON` so a signal is scored on the same
+# clock it is voted on.
+DEFAULT_HORIZON_DAYS = 10
+
+# Horizons are quoted in *trading* days (the scorecard's convention); liveness is
+# wall-clock. 10 trading days is about 14 calendar days, and expiring a signal on
+# day 10 would cut a fortnight's thesis short by a weekend and change.
+_TRADING_TO_CALENDAR = 7.0 / 5.0
+
+
+def signal_horizon_days(row: Dict[str, Any],
+                        default: int = DEFAULT_HORIZON_DAYS) -> int:
+    """The row's own intended horizon in trading days, else ``default``.
+
+    A 15-minute fib trigger and a weekly-swing read must not share a clock, so
+    pages that know their horizon record it in ``checks_detail``; the rest take
+    the default.
+    """
+    detail = row.get("checks_detail")
+    if isinstance(detail, str):
+        try:
+            detail = json.loads(detail)
+        except (TypeError, ValueError):
+            detail = None
+    if not isinstance(detail, dict):
+        return default
+    try:
+        horizon = int(detail.get("horizon_days"))
+    except (TypeError, ValueError):
+        return default
+    return horizon if horizon > 0 else default
+
+
+def is_live(row: Dict[str, Any], now: Optional[datetime] = None,
+            default: int = DEFAULT_HORIZON_DAYS) -> bool:
+    """Is this signal still inside its own horizon?
+
+    A row with no usable timestamp counts as live: dropping a signal because we
+    could not read its clock would silently shrink the board, and a missing
+    timestamp is a data problem, not an expiry.
+    """
+    stamp = row.get("logged_at")
+    if stamp is None:
+        return True
+    try:
+        moment = pd.Timestamp(stamp).to_pydatetime()
+    except Exception:
+        return True
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(timezone.utc).replace(tzinfo=None)
+    reference = now or datetime.utcnow()
+    if getattr(reference, "tzinfo", None) is not None:
+        reference = reference.astimezone(timezone.utc).replace(tzinfo=None)
+    span = signal_horizon_days(row, default) * _TRADING_TO_CALENDAR
+    return moment + timedelta(days=span) > reference
+
+
+def unstable_sources(rows: Iterable[Dict[str, Any]]) -> Dict[str, set]:
+    """Sources holding *both* directions on one instrument, keyed by instrument.
+
+    A source that says long and short on the same pair inside one horizon has no
+    view — counting it as a vote for either side launders a contradiction into
+    consensus. Seen on 2026-08-10: `biased_pivots` emitted both directions on
+    XPT/USD on the same day, and both were counted.
+    """
+    seen: Dict[str, Dict[str, set]] = {}
+    for row in rows:
+        pair = str(row.get("instrument") or "").strip()
+        side = _side(row.get("direction"))
+        source = str(row.get("source") or "").strip()
+        if not pair or not side or not source:
+            continue
+        seen.setdefault(pair, {}).setdefault(source, set()).add(side)
+    return {pair: {src for src, sides in by_source.items() if len(sides) > 1}
+            for pair, by_source in seen.items()
+            if any(len(sides) > 1 for sides in by_source.values())}
 
 
 def _side(direction: Any) -> Optional[str]:
@@ -50,6 +138,10 @@ class Idea:
     direction: str
     agree: List[str] = field(default_factory=list)     # sources on this side
     against: List[str] = field(default_factory=list)   # sources on the other
+    # Sources that said both directions inside the horizon and were excluded
+    # from the count. Surfaced rather than hidden: a pair whose sources keep
+    # contradicting themselves is a fact about the pair worth seeing.
+    unstable: List[str] = field(default_factory=list)
     conflict: Optional[str] = None                     # why it can't be taken
     entry: Optional[float] = None
     stop: Optional[float] = None
@@ -75,19 +167,39 @@ class Idea:
         return d
 
 
-def consensus(rows: Iterable[Dict[str, Any]]) -> List[Idea]:
+def consensus(rows: Iterable[Dict[str, Any]], now: Optional[datetime] = None,
+              respect_horizon: bool = True) -> List[Idea]:
     """Aggregate persisted signal rows into one Idea per instrument.
 
-    ``rows`` need only carry ``instrument``, ``direction`` and ``source``. A
-    source is counted once per side however many rows it wrote, so a page that
-    fires more often cannot outvote one that fires less.
+    ``rows`` need only carry ``instrument``, ``direction`` and ``source``; add
+    ``logged_at`` and ``checks_detail`` and each signal is also held for its own
+    horizon rather than an arbitrary window. A source is counted once per side
+    however many rows it wrote, so a page that fires more often cannot outvote
+    one that fires less.
+
+    Two filters run before the count, and both exist because the board was
+    reversing on its own noise:
+
+    * **Horizon.** A signal votes until its stated horizon expires. Pass
+      ``respect_horizon=False`` for the old rolling-window behaviour.
+    * **Stability.** A source holding both directions on one instrument is
+      dropped for that instrument — it is contradicting itself, not voting.
     """
+    rows = list(rows)
+    if respect_horizon:
+        rows = [r for r in rows if is_live(r, now)]
+    conflicted = unstable_sources(rows)
+
     sides: Dict[str, Dict[str, set]] = {}
+    unstable_by_pair: Dict[str, set] = {}
     for r in rows:
         pair = str(r.get("instrument") or "").strip()
         side = _side(r.get("direction"))
         src = str(r.get("source") or "").strip()
         if not pair or not side or not src:
+            continue
+        if src in conflicted.get(pair, ()):
+            unstable_by_pair.setdefault(pair, set()).add(src)
             continue
         sides.setdefault(pair, {LONG: set(), SHORT: set()})[side].add(src)
 
@@ -101,7 +213,8 @@ def consensus(rows: Iterable[Dict[str, Any]]) -> List[Idea]:
         direction = LONG if len(longs) > len(shorts) else SHORT
         agree, against = (longs, shorts) if direction == LONG else (shorts, longs)
         out.append(Idea(pair=pair, direction=direction,
-                        agree=sorted(agree), against=sorted(against)))
+                        agree=sorted(agree), against=sorted(against),
+                        unstable=sorted(unstable_by_pair.get(pair, ()))))
     out.sort(key=lambda i: (i.score, len(i.agree)), reverse=True)
     return out
 

@@ -95,18 +95,34 @@ def read(df: pd.DataFrame, zone_frac: float = DEFAULT_ZONE_FRAC) -> Optional[Piv
     """Pivot read for the current period from a completed daily frame.
 
     Uses the last **closed** bar as the pivot period and the bar before it for
-    the close, matching the indicator's ``shft`` / ``shft+1`` pairing. The
-    still-forming bar supplies the price being judged, never the levels — levels
-    that move intrabar would repaint.
+    the close, matching the indicator's ``shft`` / ``shft+1`` pairing. Levels
+    never come from the forming bar — levels that move intrabar would repaint.
+
+    The **price judged against those levels is the closed bar's close**, not the
+    forming bar's live price. That was the original design and it repainted the
+    *direction* instead of the levels: the sweep re-reads every 5 minutes, so as
+    price drifted across a zone boundary the same bar produced opposite calls.
+    Measured 2026-08-11 — AUD/USD long at 23:43 and short 40 minutes later, both
+    stamped ``bar_time = 2026-08-09``, and both persisted because the dedupe key
+    is (pair, direction, period) and the direction differed. `biased_pivots`
+    contradicted itself on 20 of 27 instruments this way, more than any other
+    source.
+
+    A live zone read is a legitimate *intraday* construct — the module's own
+    ``_HORIZON_DAYS = 5`` comment says pivot zones are a day-trade idea. But this
+    desk swings, and a signal that is persisted, deduped and later scored has to
+    be a function of the bar it names. One bar, one answer.
     """
     if df is None or df.empty or len(df) < 3:
         return None
     if not {"High", "Low", "Close"}.issubset(df.columns):
         return None
 
-    period = df.iloc[-2]           # last completed period -> high/low
+    period = df.iloc[-2]           # last completed period -> high/low, and the
+                                   # close being judged (same bar it is stamped
+                                   # with, so the read cannot drift intrabar)
     earlier = df.iloc[-3]          # one older -> close (the source's shft+1)
-    price = float(df["Close"].iloc[-1])
+    price = float(period["Close"])
 
     high, low = float(period["High"]), float(period["Low"])
     close_prev = float(earlier["Close"])

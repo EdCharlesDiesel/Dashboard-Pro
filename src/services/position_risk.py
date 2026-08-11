@@ -364,9 +364,15 @@ def load_candidates(min_sources: int = 2, risk_pct: float = 1.0
         return []
     repo = pooled_repository(cfg)
     with closing(repo._connect()) as conn, conn, conn.cursor() as cur:  # noqa: SLF001
-        cur.execute("SELECT instrument, direction, source FROM trade_setups "
-                    "WHERE logged_at > now() - interval '24 hours'")
-        rows = [{"instrument": r[0], "direction": r[1], "source": r[2]}
+        # 45 days, not 24 hours: `consensus` holds each signal for its own
+        # horizon, so the query only has to be wide enough to contain the
+        # longest one. Selecting the timestamp and detail is what makes that
+        # possible — without them every row looks equally fresh.
+        cur.execute("SELECT instrument, direction, source, logged_at, checks_detail "
+                    "FROM trade_setups "
+                    "WHERE logged_at > now() - interval '45 days'")
+        rows = [{"instrument": r[0], "direction": r[1], "source": r[2],
+                 "logged_at": r[3], "checks_detail": r[4]}
                 for r in cur.fetchall()]
 
     stored = load_book()

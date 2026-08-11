@@ -3,8 +3,11 @@
 The formulas are pinned against hand-computed values, because the whole value of
 this module is agreeing with what `BiasedPivots.mq5` draws on the chart. The two
 non-obvious behaviours get their own tests: the close comes from one period
-*earlier* than the high/low, and the levels come from the last **closed** bar
-while only the price comes from the forming one.
+*earlier* than the high/low, and everything — levels *and* the price judged
+against them — comes from the last **closed** bar, so one bar always yields one
+answer. The forming bar is ignored entirely; it used to supply the price, which
+let a single bar produce opposite calls as the live price drifted across a zone
+boundary.
 """
 from __future__ import annotations
 
@@ -77,7 +80,22 @@ class TestCloseComesFromOnePeriodEarlier:
 class TestZones:
     def _at(self, price):
         # H=110 L=90 Cprev=100 -> PP=100, S1=90, R1=110, M2=95, M3=105
-        return bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 0.0), (1, 1, price)]))
+        #
+        # `price` now sits on the *period* bar (index -2), not the forming one.
+        # It used to go on the forming bar with the period close set to a
+        # don't-care 0.0 — which is exactly the behaviour that let one bar
+        # produce opposite calls as the live price drifted across a boundary.
+        # The forming bar's close is the don't-care now, and is genuinely
+        # ignored.
+        return bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, price), (1, 1, 0.0)]))
+
+    def test_the_forming_bar_close_is_ignored(self):
+        # The inversion of the old contract, pinned: same period bar, absurd
+        # live prices, identical read.
+        reads = {bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 95.0),
+                                 (1, 1, tick)])).direction
+                 for tick in (0.0, 50.0, 105.0, 1e6)}
+        assert reads == {bp.LONG}
 
     def test_price_at_m2_reads_long(self):
         r = self._at(95.0)
@@ -98,7 +116,7 @@ class TestZones:
 
 class TestTargets:
     def _long(self):
-        return bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 0.0), (1, 1, 95.0)]))
+        return bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 95.0), (1, 1, 0.0)]))
 
     def test_long_targets_are_the_bullish_labels(self):
         r = self._long()
@@ -108,13 +126,13 @@ class TestTargets:
         assert t["stop_ref"] == pytest.approx(r.s1)
 
     def test_short_targets_are_the_bearish_labels(self):
-        r = bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 0.0), (1, 1, 105.0)]))
+        r = bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 105.0), (1, 1, 0.0)]))
         t = bp.targets(r)
         assert t["conservative"] == pytest.approx(r.m1)
         assert t["aggressive"] == pytest.approx(r.s2)
 
     def test_neutral_has_no_targets(self):
-        t = bp.targets(bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 0.0), (1, 1, 100.0)])))
+        t = bp.targets(bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 100.0), (1, 1, 0.0)])))
         assert all(v is None for v in t.values())
 
 
@@ -135,3 +153,57 @@ class TestGuards:
         r = bp.read(_frame([(1, 1, 100.0), (110.0, 90.0, 0.0), (1, 1, 95.0)]))
         d = {k: v for k, v in r.to_dict().items() if k != "bar_time"}
         json.loads(json.dumps(d))
+
+
+# ── determinism: one bar, one answer ─────────────────────────────────────────
+# The bug: the zone was judged against the *forming* bar's live close while
+# being stamped with the last *closed* bar. The sweep re-reads every 5 minutes,
+# so as price drifted across a zone boundary the same bar produced opposite
+# calls -- AUD/USD long at 23:43 and short 40 minutes later, both stamped
+# bar_time=2026-08-09, and both persisted because the dedupe key is
+# (pair, direction, period) and the direction differed. `biased_pivots`
+# contradicted itself on 20 of 27 instruments, more than any other source.
+
+
+def _close_frame(closes, highs=None, lows=None):
+    """A daily frame; the last row is the still-forming bar."""
+    n = len(closes)
+    idx = pd.date_range("2026-08-01", periods=n, freq="D")
+    return pd.DataFrame({
+        "Open": closes,
+        "High": highs if highs is not None else [c * 1.002 for c in closes],
+        "Low": lows if lows is not None else [c * 0.998 for c in closes],
+        "Close": closes,
+    }, index=idx)
+
+
+class TestOneBarOneAnswer:
+    def test_forming_bar_price_does_not_change_the_direction(self):
+        # Identical history, wildly different live price. The read must not move.
+        base = [1.1000, 1.1050, 1.1020]
+        low_tick = _close_frame(base + [1.0800])
+        high_tick = _close_frame(base + [1.1400])
+        a, b = bp.read(low_tick), bp.read(high_tick)
+        assert a is not None and b is not None
+        assert a.direction == b.direction
+        assert a.price == b.price          # judged on the closed bar, not the tick
+
+    def test_the_judged_price_is_the_stamped_bar(self):
+        df = _close_frame([1.1000, 1.1050, 1.1020, 1.1400])
+        read = bp.read(df)
+        assert read is not None
+        # bar_time names df.index[-2]; the price must come from that same row.
+        assert read.price == pytest.approx(float(df["Close"].iloc[-2]))
+        assert read.bar_time == df.index[-2]
+
+    def test_repeated_reads_of_one_frame_agree(self):
+        df = _close_frame([1.1000, 1.1050, 1.1020, 1.1100])
+        directions = {bp.read(df).direction for _ in range(5)}
+        assert len(directions) == 1
+
+    def test_a_new_closed_bar_is_allowed_to_change_the_read(self):
+        # Determinism per bar, not permanence: appending a genuinely new closed
+        # bar may legitimately flip the zone.
+        short_frame = _close_frame([1.1000, 1.1050, 1.1020, 1.1100])
+        long_frame = _close_frame([1.1000, 1.1050, 1.1020, 1.1100, 1.0900])
+        assert bp.read(short_frame).bar_time != bp.read(long_frame).bar_time
