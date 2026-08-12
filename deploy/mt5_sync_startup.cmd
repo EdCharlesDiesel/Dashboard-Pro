@@ -13,6 +13,9 @@ REM  pythonw.exe (not python.exe) so no console window appears at login. Because
 REM  pythonw has no stdout, mt5_sync.py writes logs\mt5_sync.log itself rather
 REM  than relying on shell redirection.
 REM
+REM  Safe to run twice: mt5_sync.py takes an exclusive OS lock on
+REM  logs\mt5_sync.lock, so a second launch logs one line and exits.
+REM
 REM  Stop it:  taskkill /F /IM pythonw.exe        (or Task Manager)
 REM  Run once: .venv\Scripts\python.exe deploy\mt5_sync.py
 REM ---------------------------------------------------------------------------
@@ -21,11 +24,10 @@ cd /d "%~dp0.."
 if not exist "logs" mkdir "logs"
 set "PYTHONIOENCODING=utf-8"
 
-REM Warn if a pythonw is already up -- two loops would double every write.
-REM find.exe is fully qualified: a Git Bash shell puts Unix find on PATH, which
-REM does not understand /I and makes this check fail noisily.
-tasklist /FI "IMAGENAME eq pythonw.exe" /FO CSV 2>nul | "%SystemRoot%\System32\find.exe" /I "pythonw.exe" >nul
-if not errorlevel 1 echo [startup] pythonw.exe already running - check it is not a second sync loop >> "logs\mt5_sync.log"
-
+REM No tasklist pre-check here any more. It only warned, and it could not work:
+REM on 2026-08-07 two loops launched in the same second, each looked first and
+REM saw nothing, and both started. One wedged in mt5.initialize() at 0 CPU for
+REM two and a half days while still appearing alive in Task Manager. The lock in
+REM mt5_sync.py is arbitrated by the kernel, so it has no such race.
 start "" /B ".venv\Scripts\pythonw.exe" "deploy\mt5_sync.py" --loop 300
 endlocal

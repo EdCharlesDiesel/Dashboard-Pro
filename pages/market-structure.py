@@ -311,14 +311,22 @@ def build_structure_chart(df: pd.DataFrame, pair: str, struct: dict,
 with st.sidebar:
     st.markdown("### 🏗️ Market Structure")
 
+    # (interval, days, resample, horizon_days)
+    #
+    # The horizon is how long a structure read stays a live vote in consensus.
+    # It was never declared, so every read inherited the 10-day default — a 4H
+    # structure call held for a fortnight. Structure legitimately changes on a
+    # 4H chart inside that window, so the same source ended up on both sides of
+    # 14 instruments and was excluded as self-contradicting. The read was right;
+    # the shelf life was wrong.
     tf_options = {
-        "4H (recommended)": ("1h",  90, "4h"),
-        "Daily":            ("1d", 300, None),
-        "Weekly":           ("1d", 730, "1W"),
-        "1H":               ("1h",  30, None),
+        "4H (recommended)": ("1h",  90, "4h", 3),
+        "Daily":            ("1d", 300, None, 10),
+        "Weekly":           ("1d", 730, "1W", 20),
+        "1H":               ("1h",  30, None, 1),
     }
     selected_tf  = st.selectbox("Timeframe", list(tf_options.keys()), index=0)
-    interval, days, resample = tf_options[selected_tf]
+    interval, days, resample, horizon_days = tf_options[selected_tf]
 
     from src.core.config import default_config as _cfg
     from src.ui.components import lens_caption
@@ -407,14 +415,22 @@ with tab_scan:
     persist_signals("market_structure", [{
         "pair": r["pair"],
         "bias": "Long" if r["struct"]["trend"] == "BULLISH" else "Short",
-        "entry": float(r["df"]["Close"].iloc[-1]),
+        # Closed bar, not the forming one. Reading index[-1] meant the entry
+        # and the bar stamp both moved intrabar, so a structure call could flip
+        # while still naming the same bar -- the same repaint that made
+        # biased_pivots contradict itself on 20 instruments.
+        "entry": float(r["df"]["Close"].iloc[-2]),
         # Bar the structure was read from (post-resample, so it reflects the
         # timeframe actually analysed rather than the raw fetch).
-        "bar_time": r["df"].index[-1],
+        "bar_time": r["df"].index[-2],
+        # Declared so consensus expires this read on its own timeframe's clock
+        # rather than the 10-day default (see tf_options).
+        "horizon_days": horizon_days,
         "conviction": r["struct"]["trend"],
         "thesis": f"Market Structure — {r['struct']['label']}",
     } for r in scan_results
-        if r.get("ok") and r["struct"]["trend"] in ("BULLISH", "BEARISH")])
+        if r.get("ok") and r["struct"]["trend"] in ("BULLISH", "BEARISH")
+        and len(r["df"]) >= 2])
 
     # ── Summary counts ──────────────────────────────────────────
     cnt_bull    = sum(1 for r in scan_results if r.get("ok") and r["struct"]["trend"] == "BULLISH")

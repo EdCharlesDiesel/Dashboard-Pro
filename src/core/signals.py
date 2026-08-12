@@ -716,6 +716,42 @@ def generate_trading_ideas(data_by_timeframe: Dict) -> Tuple[List[Dict], List[st
     return ideas, skipped
 
 
+def _canonical_direction(value) -> Optional[str]:
+    """Store one spelling per direction.
+
+    Delegates to ``todays_trades._side`` so the write path and every read path
+    agree on what "long" means — a second parser here would be a second source
+    of truth, which is how LONG/Long/Short came to coexist in one column.
+    """
+    from src.core.todays_trades import _side
+    canonical = _side(value)
+    if canonical is not None:
+        return canonical
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
+def _first_price(idea, *keys) -> Optional[float]:
+    """First usable price among ``keys``, else None.
+
+    "Usable" means finite and non-zero, and both exclusions are load-bearing:
+
+    * ``0.0`` is *not None*, so a naive ``is not None`` check takes it literally
+      and stamps a zero entry — which reads as a valid price and produces
+      nonsense R-multiples in the scorecard rather than an honest "unscoreable".
+    * ``NaN`` is **truthy** in Python, so a plain ``if value`` check lets it
+      through to become invalid JSONB (the failure that silently destroyed whole
+      signal rows before ``_finite`` existed).
+
+    A page reporting neither has no price, not a price of zero.
+    """
+    for key in keys:
+        value = _finite(idea.get(key))
+        if value:
+            return value
+    return None
+
+
 def _finite(value) -> Optional[float]:
     """The number, or ``None`` when it isn't a real finite one.
 
@@ -808,7 +844,13 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
         "logged_at": datetime.now(timezone.utc).replace(tzinfo=None),
         "instrument": pair,
         "ticker": ticker,
-        "direction": idea.get("bias"),
+        # Canonical "Long"/"Short", not whatever dialect the page used. The
+        # column held LONG, Long and Short simultaneously, so a plain
+        # `count(DISTINCT direction)` reported three directions for two, and any
+        # `WHERE direction = 'Long'` silently missed the LONG rows. Unrecognised
+        # values (a page emitting something genuinely other) pass through
+        # untouched rather than being lost to None.
+        "direction": _canonical_direction(idea.get("bias")),
         "session": session,
         "score": f"{score}/10" if score is not None else None,
         # verdict column is VARCHAR(20) — cap so a long conviction label can't
@@ -817,6 +859,18 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
                     if idea.get("conviction") is not None else None),
         "atr14": _finite(idea.get("atr")),
         "atr20": None,
+        # The price the signal was actually proposed at. Without this the
+        # Source Scorecard cannot score anything: `evaluate_row` needs an entry
+        # to measure subsequent bars against, and levels recomputed later by
+        # `size_idea` are anchored to *today's* price, so the same signal shows
+        # different levels tomorrow and is never judged on what it proposed.
+        #
+        # Measured 2026-08-10, before this: entry_price was NULL on all 724
+        # stored signals, and only 12 had ever resolved — the handful whose idea
+        # happened to carry `entry` inside checks_detail, which
+        # `signal_expiry.extract_entry_price` reads as a fallback. Promoting it
+        # to the column makes every source scoreable, and queryable.
+        "entry_price": _first_price(idea, "entry", "price", "close"),
         "sl_pips": _finite(idea.get("stop_loss_pips")),
         "tp1_pips": _pips(tp1),
         "tp2_pips": _pips(tp2),
