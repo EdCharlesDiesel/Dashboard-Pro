@@ -449,15 +449,24 @@ class TradeRepository:
             cur.execute(sql, params)
             conn.commit()
 
-    def imported_tickets(self) -> set:
-        """MT4 tickets already imported (parsed from the notes tag), for dedupe."""
-        sql = "SELECT notes FROM trade_setups WHERE source = 'mt4_import' AND notes IS NOT NULL"
+    def imported_tickets(self, source: str = "mt4_import",
+                         tag: str = "MT4") -> set:
+        """Broker tickets already imported (parsed from the notes tag), for dedupe.
+
+        Defaults keep the original MT4 behaviour; ``source``/``tag`` let the MT5
+        importer dedupe against its own rows. Scoping by *both* matters — the
+        two feeds number their tickets independently, so a shared pool would let
+        an MT4 ticket suppress an unrelated MT5 position that happened to
+        collide on the same integer.
+        """
+        sql = "SELECT notes FROM trade_setups WHERE source = %s AND notes IS NOT NULL"
+        pattern = re.compile(r"{0} #(\d+)".format(re.escape(tag)))
         out = set()
         try:
             with closing(self._connect()) as conn, conn, conn.cursor() as cur:
-                cur.execute(sql)
+                cur.execute(sql, (source,))
                 for (notes,) in cur.fetchall():
-                    m = re.search(r"MT4 #(\d+)", notes or "")
+                    m = pattern.search(notes or "")
                     if m:
                         out.add(int(m.group(1)))
         except Exception:
@@ -467,6 +476,18 @@ class TradeRepository:
     def import_mt4_rows(self, rows: List[Dict[str, Any]]) -> int:
         """Bulk-insert mapped MT4 rows as closed, source='mt4_import'. Returns
         the number inserted. Caller is responsible for dedupe."""
+        return self.import_closed_rows(rows, source="mt4_import")
+
+    def import_closed_rows(self, rows: List[Dict[str, Any]],
+                           source: str = "mt4_import") -> int:
+        """Bulk-insert mapped broker rows as closed trades. Returns the number
+        inserted. Caller is responsible for dedupe.
+
+        ``source`` is parameterised rather than baked into the SQL so a second
+        broker feed (MT5) stays attributable — the Source Scorecard groups by
+        it, and merging two feeds under one tag would make each one's record
+        unreadable.
+        """
         if not rows:
             return 0
         sql = """
@@ -477,13 +498,13 @@ class TradeRepository:
             ) VALUES (
                 %(logged_at)s, %(instrument)s, %(ticker)s, %(direction)s, %(session)s, %(lot_size)s,
                 %(entry_price)s, %(close_price)s, %(outcome)s, %(pips_gained)s, %(r_multiple)s,
-                %(sl_pips)s, FALSE, 'mt4_import', %(notes)s, %(profit)s
+                %(sl_pips)s, FALSE, %(source)s, %(notes)s, %(profit)s
             )
         """
-        payload = [{k: r.get(k) for k in (
+        payload = [dict({k: r.get(k) for k in (
             "logged_at", "instrument", "ticker", "direction", "session", "lot_size",
             "entry_price", "close_price", "outcome", "pips_gained", "r_multiple",
-            "sl_pips", "notes", "profit")} for r in rows]
+            "sl_pips", "notes", "profit")}, source=source) for r in rows]
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
             psycopg2.extras.execute_batch(cur, sql, payload)
             conn.commit()
