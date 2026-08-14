@@ -1,3 +1,8 @@
+---
+name: the-appication-needs-to-do
+description: Dashboard-Pro project conventions - forex price formatting, the ATR risk model and 18-point checklist, session windows, metals naming, correlation stacking, and repo code rules. Use before writing or reviewing any code in this repository.
+---
+
 # Project AI Instructions
 
 Authoritative project guidance lives in the root **CLAUDE.md** (architecture,
