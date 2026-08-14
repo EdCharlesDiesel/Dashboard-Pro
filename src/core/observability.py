@@ -328,6 +328,16 @@ CREATE TABLE IF NOT EXISTS app_events (
     message    TEXT,
     data       JSONB
 );
+
+-- The only read this table serves is `ORDER BY ts DESC LIMIT n` (see
+-- recent_events below), and the PRIMARY KEY on id does nothing for it. Without
+-- this, every read was a parallel seq scan plus a top-N heapsort over the whole
+-- table: measured at 62.9 ms for LIMIT 200 across 59,123 rows, and growing with
+-- every logged event. A descending index on ts answers the ordering directly.
+--
+-- This is the one index worth adding here. `trade_setups` documents the same
+-- rule from the other side: an index nothing queries is pure write-time cost.
+CREATE INDEX IF NOT EXISTS idx_app_events_ts ON app_events (ts DESC);
 """
 
 

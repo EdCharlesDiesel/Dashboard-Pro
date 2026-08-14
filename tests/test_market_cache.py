@@ -19,12 +19,15 @@ from src.db.trade_repository import DBConfig
 # ── fakes ─────────────────────────────────────────────────────────────────────
 class FakeRepo:
     def __init__(self, fetched_at=None, blob_at=None, blob=None, duka_bars=None,
-                duka_raises=None):
+                duka_raises=None, bars=None):
         self._fetched_at = fetched_at
         self._blob_at = blob_at
         self._blob = blob
         self._duka_bars = duka_bars if duka_bars is not None else pd.DataFrame()
         self._duka_raises = duka_raises
+        # ``bars`` overrides the stored frame so coverage tests can control how
+        # far back the DB actually reaches; None keeps the indexless default.
+        self._bars = bars
         self.upserted = []
         self.set_blobs = []
         self.loaded = []
@@ -35,6 +38,9 @@ class FakeRepo:
 
     def load_bars(self, symbol, interval, start=None):
         self.loaded.append((symbol, interval, start))
+        if self._bars is not None:
+            df = self._bars
+            return df if start is None else df[df.index >= start]
         return pd.DataFrame({"Close": [1.0]})
 
     def upsert_bars(self, symbol, interval, df):
@@ -190,6 +196,137 @@ class TestOhlcImpl:
         assert calls["n"] == 1 and out["Close"].iloc[0] == 9.9
 
 
+# ── coverage: freshness alone must not satisfy a longer request ───────────────
+# The regression these lock down: DX-Y.NYB was cached at a 2-year window and
+# then served 503 bars to every 5-year caller for as long as the meta row stayed
+# fresh. disconnect_monitor needs 564, so it reported "insufficient data" with no
+# error anywhere — a permanently blank panel that looked like a data outage.
+def _reaching(back_days: int, *, ending: datetime | None = None) -> pd.DataFrame:
+    """A daily frame whose earliest bar sits ``back_days`` before ``ending``.
+
+    Reach is what coverage is about, so the helper takes reach — expressing it
+    as a bar count silently conflates trading days with calendar days.
+    """
+    end = ending or datetime.utcnow()
+    idx = pd.date_range(start=end - timedelta(days=back_days), end=end, freq="D")
+    return pd.DataFrame({"Close": [1.0] * len(idx)}, index=idx)
+
+
+@pytest.fixture(autouse=True)
+def _clear_floor():
+    """The provider-floor memo is process-global — never leak it between tests."""
+    mc._HISTORY_FLOOR.clear()
+    yield
+    mc._HISTORY_FLOOR.clear()
+
+
+class TestCovers:
+    def test_empty_is_never_covered(self):
+        # Fresh-but-empty would otherwise hand back a blank frame until the TTL.
+        assert mc._covers(pd.DataFrame(), datetime.utcnow() - timedelta(days=60)) is False
+
+    def test_no_window_requested_is_always_covered(self):
+        assert mc._covers(_reaching(3), None) is True
+
+    def test_short_window_is_not_covered(self):
+        # The DXY case: 2 years stored, 5 years asked for.
+        assert mc._covers(_reaching(730), datetime.utcnow() - timedelta(days=1826)) is False
+
+    def test_full_window_is_covered(self):
+        assert mc._covers(_reaching(1826), datetime.utcnow() - timedelta(days=1826)) is True
+
+    def test_weekend_shortfall_is_within_slack(self):
+        # A first bar a few days late (weekend/holiday) must not force a refetch.
+        want = datetime.utcnow() - timedelta(days=60)
+        assert mc._covers(_reaching(57), want) is True
+
+    def test_slack_scales_with_span(self):
+        # A month-late first bar on a 10y request is proportionate, not a miss.
+        want = datetime.utcnow() - timedelta(days=3650)
+        assert mc._covers(_reaching(3620), want) is True
+
+    def test_date_typed_start_is_compared_not_swallowed(self):
+        # _window_start passes a bare date through; date-vs-datetime arithmetic
+        # raises, and a swallowed raise would read as "covered".
+        assert mc._covers(_reaching(730), date(2021, 8, 9)) is False
+        assert mc._covers(_reaching(1826), date(2021, 8, 9)) is True
+
+    def test_tz_aware_index_is_compared(self):
+        df = _reaching(730)
+        df.index = df.index.tz_localize("UTC")
+        assert mc._covers(df, datetime.utcnow() - timedelta(days=1826)) is False
+
+    def test_non_datetime_index_is_treated_as_covered(self):
+        # Never let an odd frame put the caller in a refetch loop.
+        assert mc._covers(pd.DataFrame({"Close": [1.0]}),
+                          datetime.utcnow() - timedelta(days=60)) is True
+
+
+class TestCoverageBackfill:
+    def test_fresh_but_short_triggers_backfill(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(fetched_at=datetime.utcnow() - timedelta(seconds=5),
+                        bars=_reaching(730))
+        out = mc._ohlc_impl("DX-Y.NYB", "5y", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo)
+        assert calls["n"] == 1                        # went live despite being fresh
+        assert repo.upserted                          # and persisted the deeper history
+        assert out["Close"].iloc[0] == 9.9            # caller got the fetched frame
+
+    def test_fresh_and_covering_still_serves_from_db(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(fetched_at=datetime.utcnow() - timedelta(seconds=5),
+                        bars=_reaching(1826))
+        out = mc._ohlc_impl("DX-Y.NYB", "5y", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo)
+        assert calls["n"] == 0 and len(out) > 500
+
+    def test_fresh_but_empty_backfills(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(fetched_at=datetime.utcnow() - timedelta(seconds=5),
+                        bars=_reaching(1, ending=datetime(2000, 1, 1)))
+        mc._ohlc_impl("DEAD=X", "5y", "1d", None, None, 300, True,
+                      repo_factory=lambda cfg: repo)
+        assert calls["n"] == 1
+
+    def test_short_history_symbol_refetches_only_once(self, cfg_set, monkeypatch):
+        # The provider genuinely has 2y for this ticker. Without the memo the
+        # coverage check would fail forever and every call would go live —
+        # switching the cache off for exactly the symbols it should protect.
+        calls = {"n": 0}
+
+        def fake(symbol, period, interval, start, end, auto_adjust):
+            calls["n"] += 1
+            return _reaching(730)
+
+        monkeypatch.setattr(mc, "_fetch_yf", fake)
+        repo = FakeRepo(fetched_at=datetime.utcnow() - timedelta(seconds=5),
+                        bars=_reaching(730))
+        for _ in range(3):
+            mc._ohlc_impl("YOUNG=X", "5y", "1d", None, None, 300, True,
+                          repo_factory=lambda cfg: repo)
+        assert calls["n"] == 1
+
+    def test_memo_does_not_block_a_genuinely_longer_request(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        mc._HISTORY_FLOOR[("YOUNG=X", "1d")] = (
+            None, datetime.utcnow() - timedelta(days=1826))   # a 5y attempt fell short
+        repo = FakeRepo(fetched_at=datetime.utcnow() - timedelta(seconds=5),
+                        bars=_reaching(730))
+        mc._ohlc_impl("YOUNG=X", "10y", "1d", None, None, 300, True,
+                      repo_factory=lambda cfg: repo)
+        assert calls["n"] == 1     # 10y > the 5y that failed — worth one attempt
+
+    def test_short_fetch_is_remembered_per_symbol(self, cfg_set, monkeypatch):
+        monkeypatch.setattr(mc, "_fetch_yf",
+                            lambda *a, **k: _reaching(730))
+        repo = FakeRepo(fetched_at=None, bars=_reaching(730))
+        mc._ohlc_impl("YOUNG=X", "5y", "1d", None, None, 300, True,
+                      repo_factory=lambda cfg: repo)
+        assert ("YOUNG=X", "1d") in mc._HISTORY_FLOOR
+        assert ("OTHER=X", "1d") not in mc._HISTORY_FLOOR
+
+
 # ── _blob_impl read-through contract ──────────────────────────────────────────
 class TestBlobImpl:
     def test_no_cfg_calls_fetch_fn(self, monkeypatch):
@@ -307,6 +444,34 @@ class TestOhlcImplDuka:
                             repo_factory=lambda cfg: repo, source="duka")
         assert calls["n"] == 1
         assert out["Close"].iloc[0] == 9.9
+
+    def test_short_archive_falls_back_to_live(self, cfg_set, monkeypatch):
+        # A 2-year archive cannot answer a 5-year request. Serving it anyway is
+        # the same silent truncation the live cache had — and unlike the live
+        # path there is no self-healing remedy here, so the warning has to name
+        # dukascopy_backfill.py and the caller has to get a complete series.
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(duka_bars=_reaching(730))
+        out = mc._ohlc_impl("EURUSD=X", "5y", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo, source="duka")
+        assert calls["n"] == 1
+        assert out["Close"].iloc[0] == 9.9
+
+    def test_covering_archive_is_still_served(self, cfg_set, monkeypatch):
+        calls = _track_fetch(monkeypatch)
+        repo = FakeRepo(duka_bars=_reaching(1826))
+        out = mc._ohlc_impl("EURUSD=X", "5y", "1d", None, None, 300, True,
+                            repo_factory=lambda cfg: repo, source="duka")
+        assert calls["n"] == 0 and len(out) > 500
+
+    def test_short_archive_warns_naming_the_backfill_script(self, cfg_set, monkeypatch, caplog):
+        _track_fetch(monkeypatch)
+        repo = FakeRepo(duka_bars=_reaching(730))
+        with caplog.at_level("WARNING"):
+            mc._ohlc_impl("EURUSD=X", "5y", "1d", None, None, 300, True,
+                          repo_factory=lambda cfg: repo, source="duka")
+        assert "dukascopy_backfill.py" in caplog.text
+        assert "short of the requested" in caplog.text
 
     def test_duka_read_error_falls_back_to_live(self, cfg_set, monkeypatch):
         calls = _track_fetch(monkeypatch)

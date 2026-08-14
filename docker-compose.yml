@@ -24,11 +24,14 @@ services:
       # NOTE: these three are read by initdb ONLY when the data directory is
       # empty. The pgdata volume was created 2026-06-14, so they have had no
       # effect since — the live credentials are whatever was set then, and the
-      # real database is OrionMacroEconomicsDb. They previously read
-      # POSTGRES_DB: dashboardprov1, a database that does not exist on this
-      # server, which is why every service failed to connect.
+      # real database is DashboardproDBv1 -- renamed from OrionMacroEconomicsDb
+      # on 2026-08-10 via ALTER DATABASE, which is metadata-only and does not
+      # touch the pgdata volume. POSTGRES_DB here matters only if the volume
+      # is ever recreated from empty; the healthcheck below reads it for real,
+      # so a stale name there leaves db permanently unhealthy and blocks all
+      # four dependent services from starting.
       POSTGRES_PASSWORD: "$$ta99Ath0"
-      POSTGRES_DB: OrionMacroEconomicsDb
+      POSTGRES_DB: DashboardproDBv1
     volumes:
       # postgres:18+ stores data under /var/lib/postgresql (version subdir),
       # not /var/lib/postgresql/data as in 16 and earlier.
@@ -42,14 +45,20 @@ services:
       # needing to stop a system service.
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d OrionMacroEconomicsDb"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d DashboardproDBv1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   app:
     build: .
-    image: dashboard-pro:1.1.0
+    # Tag comes from .env (APP_VERSION), which deploy/sync_version.py generates
+    # from the VERSION file -- the single source the status bar also reads. A
+    # literal here is how the footer came to say v1.1.0 while the running image
+    # was 1.4.0. .env is gitignored, so a fresh clone tags ":dev" until you run
+    # `python deploy/sync_version.py` -- an obvious placeholder, never a
+    # confident wrong number.
+    image: dashboard-pro:${APP_VERSION:-dev}
     restart: unless-stopped
     depends_on:
       db:
@@ -60,13 +69,13 @@ services:
       # Database — points the app at the `db` service (not localhost).
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: OrionMacroEconomicsDb
+      DB_NAME: DashboardproDBv1
       DB_USER: postgres
       DB_PASSWORD: "$$ta99Ath0"
       # API keys — real values, optional (app degrades gracefully without them).
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
       FMP_API_KEY: "BDIqvTLAhhi04dVyNeGG9xzSGQc5yDLQ"
-      FINNHUB_API_KEY: ""
+      FINNHUB_API_KEY: "d7nieg9r01qppri50290d7nieg9r01qppri5029g"
       ANTHROPIC_API_KEY: ""
       # Gmail SMTP (AMD scanner / market-overview alerts) — optional, unset.
       GMAIL_SENDER: "Ckhotso@gmail.com"
@@ -83,7 +92,7 @@ services:
   # every watched ticker/FRED series daily (see src/data_backbone/worker.py).
   worker:
     build: .
-    image: dashboard-pro:1.1.0
+    image: dashboard-pro:${APP_VERSION:-dev}
     restart: unless-stopped
     command: ["python", "-m", "src.data_backbone.worker"]
     depends_on:
@@ -92,7 +101,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: OrionMacroEconomicsDb
+      DB_NAME: DashboardproDBv1
       DB_USER: postgres
       DB_PASSWORD: "$$ta99Ath0"
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
@@ -112,7 +121,7 @@ services:
   # tab's server stopped the engine.
   scanner:
     build: .
-    image: dashboard-pro:1.1.0
+    image: dashboard-pro:${APP_VERSION:-dev}
     restart: unless-stopped
     command: ["python", "-m", "src.services.background_scanner"]
     depends_on:
@@ -121,7 +130,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: OrionMacroEconomicsDb
+      DB_NAME: DashboardproDBv1
       DB_USER: postgres
       DB_PASSWORD: "$$ta99Ath0"
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
@@ -147,7 +156,7 @@ services:
   # alert from whichever service reached it first, twice as often as intended.
   sweeper:
     build: .
-    image: dashboard-pro:1.1.0
+    image: dashboard-pro:${APP_VERSION:-dev}
     restart: unless-stopped
     command: ["python", "-m", "src.services.signal_sweep", "--loop", "300"]
     depends_on:
@@ -156,7 +165,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_NAME: OrionMacroEconomicsDb
+      DB_NAME: DashboardproDBv1
       DB_USER: postgres
       DB_PASSWORD: "$$ta99Ath0"
       FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"

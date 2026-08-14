@@ -20,7 +20,13 @@ from src.instruments.registry import INSTRUMENTS
 
 # Display name (e.g. "EUR/USD") keyed by its compact form ("EURUSD").
 _SYMBOL_KEYS: Dict[str, str] = {name.replace("/", ""): name for name in INSTRUMENTS}
-_ALIASES = {"GOLD": "XAU/USD", "SILVER": "XAG/USD", "PLATINUM": "XPT/USD"}
+_ALIASES = {"GOLD": "XAU/USD", "SILVER": "XAG/USD", "PLATINUM": "XPT/USD",
+            # Energy: brokers name crude in words far more often than by the
+            # XTI/XBR symbols. Without these a real oil trade maps to None and
+            # the MT5 importer drops it as "unmapped" — silent data loss in the
+            # journal rather than a visible error. Seen live as Exness "USOIL".
+            "USOIL": "WTI/USD", "WTI": "WTI/USD", "XTIUSD": "WTI/USD",
+            "CRUDE": "WTI/USD"}
 
 
 def normalize_symbol(item: str) -> Optional[str]:

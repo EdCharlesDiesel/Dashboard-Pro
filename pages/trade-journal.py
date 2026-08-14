@@ -5,7 +5,7 @@ from src.instruments.registry import INSTRUMENTS
 from src.db.trade_repository import TradeRepository, DBConfig
 from src.db.cache import pooled_repository
 from src.db.market_cache import cached_closes
-from src.services import mt4_import, account_state, open_positions, mt5_link
+from src.services import mt4_import, account_state, open_positions, mt5_link, mt5_trade
 from src.services import signal_expiry
 import os
 import pandas as pd
@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
+from datetime import datetime, timezone
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
@@ -355,6 +355,255 @@ def _render_mt5_link() -> None:
                "you already hold.")
 
 
+# ══════════════════════════════════════════════════════════════════
+# TRADE CONTROL — open/close/modify against the live MT5 terminal.
+#
+# Off by default (TRADE_JOURNAL_ALLOW_TRADING unset) — a deliberate reversal
+# of mt5_link's read-only design, gated independently of the MCP server's own
+# trading switch. Every form has a Review step before any Confirm & Send
+# button appears; the armed/reviewed state is tied to a snapshot of the form's
+# own inputs (any edit disarms it) and expires after 90s (walking away and
+# coming back requires a fresh review). See src/services/mt5_trade.py for the
+# guardrails this calls through.
+# ══════════════════════════════════════════════════════════════════
+
+_TC_REVIEW_TTL_S = 90
+
+
+def _tc_disarm() -> None:
+    st.session_state["tc_armed"] = False
+    st.session_state["tc_pending"] = None
+    st.session_state["tc_armed_action"] = None
+
+
+def _tc_arm(action: str, params: dict, signature: tuple) -> None:
+    st.session_state["tc_armed"] = True
+    st.session_state["tc_armed_action"] = action
+    st.session_state["tc_armed_at"] = datetime.now(timezone.utc)
+    st.session_state["tc_pending"] = {"params": params, "signature": signature}
+
+
+def _tc_still_armed(action: str, signature: tuple) -> bool:
+    """False (and auto-disarms) if nothing is armed, a different action is
+    armed, the form changed since Review, or the review window expired."""
+    if not st.session_state.get("tc_armed") or st.session_state.get("tc_armed_action") != action:
+        return False
+    pending = st.session_state.get("tc_pending") or {}
+    if pending.get("signature") != signature:
+        _tc_disarm()
+        return False
+    armed_at = st.session_state.get("tc_armed_at")
+    if armed_at is None or (datetime.now(timezone.utc) - armed_at).total_seconds() > _TC_REVIEW_TTL_S:
+        _tc_disarm()
+        return False
+    return True
+
+
+def _tc_gate_banner() -> bool:
+    """Renders the enable/disable status. Returns True when trading is live-enabled."""
+    if not mt5_trade.available():
+        st.info("MetaTrader5 package isn't available here (Windows-only).")
+        return False
+    if not mt5_trade.trading_enabled():
+        st.warning(
+            "🔒 Trade Control is **disabled** on this deployment (default). "
+            "Set `TRADE_JOURNAL_ALLOW_TRADING=1` and restart the app to enable it. "
+            "This is independent of the MT5 MCP server's own trading gate — "
+            "enabling one does not enable the other."
+        )
+        return False
+    st.error(
+        f"🔴 **LIVE TRADING ENABLED** — orders placed here move real money on "
+        f"account **{account_state.get().get('login', '—') if account_state.get() else '—'}**. "
+        f"Client-side cap: **{mt5_trade.MAX_VOLUME} lots** per order."
+    )
+    return True
+
+
+def _tc_open_positions() -> list:
+    """Fresh read-only snapshot for the Close/Modify ticket pickers — never
+    writes, just reuses mt5_link's existing read."""
+    res = mt5_link.read_terminal()
+    return res.get("rows", []) if res.get("ok") else []
+
+
+def _render_trade_open() -> None:
+    st.caption("Opens a new market position. Entry is whatever price the "
+               "broker fills at the moment Confirm & Send is pressed.")
+    c1, c2, c3 = st.columns(3)
+    pair = c1.selectbox("Instrument", sorted(INSTRUMENTS.keys()), key="tc_open_pair")
+    direction = c2.selectbox("Direction", ["buy", "sell"], key="tc_open_dir")
+    volume = c3.number_input("Volume (lots)", min_value=0.01,
+                             max_value=float(mt5_trade.MAX_VOLUME), value=0.01,
+                             step=0.01, key="tc_open_vol",
+                             help=f"Hard-capped at {mt5_trade.MAX_VOLUME} lots in this UI.")
+    c4, c5 = st.columns(2)
+    stop_loss = c4.number_input("Stop loss (0 = none)", min_value=0.0, value=0.0,
+                                format="%.5f", key="tc_open_sl")
+    take_profit = c5.number_input("Take profit (0 = none)", min_value=0.0, value=0.0,
+                                  format="%.5f", key="tc_open_tp")
+
+    signature = (pair, direction, volume, stop_loss, take_profit)
+
+    if st.button("🔍 Review", key="tc_open_review"):
+        if volume > mt5_trade.MAX_VOLUME:
+            st.error(f"Volume exceeds the {mt5_trade.MAX_VOLUME}-lot cap.")
+        else:
+            _tc_arm("open", {"pair": pair, "direction": direction, "volume": volume,
+                             "stop_loss": stop_loss, "take_profit": take_profit}, signature)
+
+    if _tc_still_armed("open", signature):
+        est = mt5_trade.estimate_margin(pair, direction, volume)
+        st.markdown("#### 📋 Review")
+        st.markdown(
+            f"**{direction.upper()} {volume} lots of {pair}**"
+            + (f", stop **{stop_loss:.5f}**" if stop_loss else ", **no stop**")
+            + (f", target **{take_profit:.5f}**" if take_profit else ", no target")
+        )
+        if est.get("success"):
+            st.caption(f"Est. price ≈ {est['price']:.5f} · est. margin ≈ "
+                      f"{est['margin']:,.2f} {est.get('currency', '')} · "
+                      f"free margin ≈ {est.get('margin_free', 0):,.2f}")
+        else:
+            st.caption(f"⚠ Could not estimate margin: {est.get('error')}")
+        if not stop_loss:
+            st.warning("⚠ No stop loss set — this position will carry unbounded risk.")
+
+        cc1, cc2 = st.columns(2)
+        if cc1.button("✅ Confirm & Send", key="tc_open_confirm", type="primary"):
+            result = mt5_trade.open_position(pair, direction, volume, stop_loss,
+                                             take_profit, confirm=True)
+            _tc_disarm()
+            if result.get("success"):
+                st.success(f"✅ Opened {direction} {volume} {pair} @ {result.get('price')} "
+                          f"(order #{result.get('order')})")
+            else:
+                st.error(f"❌ Rejected: {result.get('error')}")
+        if cc2.button("✖ Cancel", key="tc_open_cancel"):
+            _tc_disarm()
+            st.rerun()
+
+
+def _render_trade_close() -> None:
+    st.caption("Closes an open position at market, in whole or in part.")
+    positions = _tc_open_positions()
+    if not positions:
+        st.info("No open positions (or terminal unreadable — check the Live MT5 terminal tab).")
+        return
+
+    labels = {f"{p['label']} · {p['pair']} {p['direction']} {p['lot_size']} lots": p
+             for p in positions}
+    choice = st.selectbox("Position", list(labels.keys()), key="tc_close_pick")
+    pos = labels[choice]
+    ticket = pos["ticket"]
+    full_vol = float(pos["lot_size"])
+    partial = st.checkbox("Partial close", key="tc_close_partial")
+    volume = (st.number_input("Volume to close", min_value=0.01, max_value=full_vol,
+                              value=full_vol, step=0.01, key="tc_close_vol")
+             if partial else full_vol)
+
+    signature = (ticket, volume)
+
+    if st.button("🔍 Review", key="tc_close_review"):
+        _tc_arm("close", {"ticket": ticket, "volume": volume if partial else 0.0}, signature)
+
+    if _tc_still_armed("close", signature):
+        st.markdown("#### 📋 Review")
+        st.markdown(f"**Close {volume} of {full_vol} lots** — {pos['pair']} {pos['direction']} "
+                   f"(ticket {ticket}, entry {pos['entry_price']})")
+        cc1, cc2 = st.columns(2)
+        if cc1.button("✅ Confirm & Send", key="tc_close_confirm", type="primary"):
+            result = mt5_trade.close_position(ticket, confirm=True,
+                                              volume=volume if partial else 0.0)
+            _tc_disarm()
+            if result.get("success"):
+                st.success(f"✅ Closed {result.get('closed_volume')} lots @ {result.get('price')} "
+                          f"— {result.get('remaining_volume', 0)} remaining")
+            else:
+                st.error(f"❌ Rejected: {result.get('error')}")
+        if cc2.button("✖ Cancel", key="tc_close_cancel"):
+            _tc_disarm()
+            st.rerun()
+
+
+def _render_trade_modify() -> None:
+    st.caption("Changes the stop-loss / take-profit of an open position. No new market risk from size.")
+    positions = _tc_open_positions()
+    if not positions:
+        st.info("No open positions (or terminal unreadable — check the Live MT5 terminal tab).")
+        return
+
+    labels = {f"{p['label']} · {p['pair']} {p['direction']} {p['lot_size']} lots": p
+             for p in positions}
+    choice = st.selectbox("Position", list(labels.keys()), key="tc_mod_pick")
+    pos = labels[choice]
+    ticket = pos["ticket"]
+    st.caption(f"Current: stop {pos.get('stop_loss') or '—'} · target {pos.get('take_profit') or '—'}")
+
+    c1, c2 = st.columns(2)
+    change_sl = c1.checkbox("Change stop loss", key="tc_mod_change_sl")
+    new_sl = c1.number_input("New stop loss", min_value=0.0, format="%.5f",
+                             value=float(pos.get("stop_loss") or 0.0),
+                             key="tc_mod_sl", disabled=not change_sl)
+    change_tp = c2.checkbox("Change take profit", key="tc_mod_change_tp")
+    new_tp = c2.number_input("New take profit", min_value=0.0, format="%.5f",
+                             value=float(pos.get("take_profit") or 0.0),
+                             key="tc_mod_tp", disabled=not change_tp)
+
+    sl_arg = new_sl if change_sl else -1.0
+    tp_arg = new_tp if change_tp else -1.0
+    signature = (ticket, sl_arg, tp_arg)
+
+    if st.button("🔍 Review", key="tc_mod_review"):
+        if not change_sl and not change_tp:
+            st.warning("Nothing to change — check a box above.")
+        else:
+            _tc_arm("modify", {"ticket": ticket, "stop_loss": sl_arg, "take_profit": tp_arg}, signature)
+
+    if _tc_still_armed("modify", signature):
+        st.markdown("#### 📋 Review")
+        parts = [f"**{pos['pair']} {pos['direction']}** (ticket {ticket})"]
+        if change_sl:
+            parts.append(f"stop → **{new_sl:.5f}**")
+        if change_tp:
+            parts.append(f"target → **{new_tp:.5f}**")
+        st.markdown(", ".join(parts))
+        cc1, cc2 = st.columns(2)
+        if cc1.button("✅ Confirm & Send", key="tc_mod_confirm", type="primary"):
+            result = mt5_trade.modify_position(ticket, confirm=True,
+                                               stop_loss=sl_arg, take_profit=tp_arg)
+            _tc_disarm()
+            if result.get("success"):
+                st.success(f"✅ Updated ticket {ticket} — stop {result.get('stop_loss')}, "
+                          f"target {result.get('take_profit')}")
+            else:
+                st.error(f"❌ Rejected: {result.get('error')}")
+        if cc2.button("✖ Cancel", key="tc_mod_cancel"):
+            _tc_disarm()
+            st.rerun()
+
+
+def _render_trade_control() -> None:
+    st.session_state.setdefault("tc_armed", False)
+    is_live = _tc_gate_banner()
+    if not mt5_trade.available():
+        return
+    sub_open, sub_close, sub_modify = st.tabs(["🟢 Open", "🔴 Close", "✏️ Modify"])
+    # The forms render regardless of the gate so the desk can see the UI shape
+    # and rehearse Review — only Confirm & Send's actual send is blocked
+    # (mt5_trade.open_position/close_position/modify_position re-check
+    # ALLOW_TRADING themselves; this disabled-state is a courtesy, not the gate).
+    if not is_live:
+        st.caption("Forms below are visible but Confirm & Send will be refused "
+                  "by mt5_trade's own guardrail until the gate above is enabled.")
+    with sub_open:
+        _render_trade_open()
+    with sub_close:
+        _render_trade_close()
+    with sub_modify:
+        _render_trade_modify()
+
+
 def _render_manual_import(cfg, offset: float) -> None:
     up = st.file_uploader("MT4 statement", type=["htm", "html"], key="mt4_file",
                           label_visibility="collapsed")
@@ -494,14 +743,17 @@ def render_mt4_import(cfg):
             help="MT4 times are broker server time (often UTC+2, +3 in summer). "
                  "Set this so sessions line up — leave 0 if your broker reports UTC.")
 
-        tab_live, tab_manual, tab_auto = st.tabs(
-            ["🔌 Live MT5 terminal", "⬆ Manual upload", "🔄 Auto-import (5 min)"])
+        tab_live, tab_manual, tab_auto, tab_trade = st.tabs(
+            ["🔌 Live MT5 terminal", "⬆ Manual upload", "🔄 Auto-import (5 min)",
+             "⚡ Trade Control"])
         with tab_live:
             _render_mt5_link()
         with tab_manual:
             _render_manual_import(cfg, offset)
         with tab_auto:
             _render_auto_import(cfg, offset)
+        with tab_trade:
+            _render_trade_control()
 
 
 # ══════════════════════════════════════════════════════════════════

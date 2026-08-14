@@ -223,8 +223,20 @@ class TestImportedTickets:
                                         ("no ticket here",)])
         repo, _ = _repo(cur)
         assert repo.imported_tickets() == {123, 456}
-        sql, _ = cur.executed[0]
-        assert "source = 'mt4_import'" in sql
+        sql, params = cur.executed[0]
+        # Source is bound, not interpolated, so a second broker feed can reuse
+        # this without rewriting the query.
+        assert "source = %s" in sql
+        assert params == ("mt4_import",)
+
+    def test_scopes_to_the_requested_source_and_tag(self):
+        cur = FakeCursor(fetchall_rows=[("MT5 #900",), ("MT4 #123",)])
+        repo, _ = _repo(cur)
+        # The MT4 row must not leak into the MT5 dedupe pool: the two feeds
+        # number tickets independently and could collide on the same integer.
+        assert repo.imported_tickets(source="mt5_import", tag="MT5") == {900}
+        _, params = cur.executed[0]
+        assert params == ("mt5_import",)
 
     def test_swallows_errors(self):
         repo = TradeRepository(DBConfig(), connect_factory=lambda: (_ for _ in ()).throw(OSError()))
