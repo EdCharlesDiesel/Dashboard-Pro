@@ -29,7 +29,7 @@ function, degrade to a message, never raise at module scope.
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 # Position type constants as MT5 reports them (mt5.POSITION_TYPE_BUY/SELL).
@@ -277,3 +277,75 @@ def margin_warning(account: Optional[Dict[str, Any]],
             if free is not None else "")
     return ("⚠ Margin level {0:.0f}% — below {1:.0f}%.{2} New positions reduce "
             "it further.".format(level, danger, tail))
+
+
+def closed_deals(days: int = 7, lookback_days: int = 180,
+                 mt5=None) -> Dict[str, Any]:
+    """Closed deals whose *exit* falls in the last ``days``, as plain dicts.
+
+    Returns ``{"ok", "message", "deals"}``. Read-only and never raises — same
+    contract as :func:`read_terminal`.
+
+    ``lookback_days`` is deliberately much wider than ``days``. A position
+    closed yesterday may have been opened months ago, and the round trip is
+    only reconstructable with *both* of its deals. Fetching just ``days`` would
+    silently drop every such trade — the long holds, which are exactly the ones
+    worth grading. The window is filtered down to ``days`` by exit time later,
+    in :func:`src.services.mt5_trade_import.pair_deals`, so the wider fetch
+    costs a little IO and buys correctness.
+    """
+    mod = mt5 or _import_mt5()
+    out: Dict[str, Any] = {"ok": False, "message": "", "deals": []}
+    if mod is None:
+        out["message"] = "MetaTrader5 package not installed (Windows only)."
+        return out
+    if not mod.initialize():
+        out["message"] = "Terminal not reachable: {0}".format(_fmt_error(mod))
+        return out
+    try:
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(days=max(int(lookback_days), int(days)))
+        raw = mod.history_deals_get(start, now + timedelta(days=1))
+        if raw is None:
+            code = 0
+            try:
+                code = mod.last_error()[0]
+            except Exception:
+                pass
+            if code not in (0, 1):
+                out["message"] = "Could not read history: {0}".format(
+                    _fmt_error(mod))
+                return out
+            raw = []
+
+        deals = []
+        for d in raw:
+            deals.append({
+                "ticket": int(getattr(d, "ticket", 0) or 0),
+                "position_id": int(getattr(d, "position_id", 0) or 0),
+                "symbol": str(getattr(d, "symbol", "") or ""),
+                # 0 = buy, 1 = sell.
+                "type": int(getattr(d, "type", -1)),
+                # 0 = entry (in), 1 = exit (out), 2 = reversal, 3 = out-by.
+                "entry": int(getattr(d, "entry", -1)),
+                "volume": float(getattr(d, "volume", 0.0) or 0.0),
+                "price": float(getattr(d, "price", 0.0) or 0.0),
+                "profit": float(getattr(d, "profit", 0.0) or 0.0),
+                "commission": float(getattr(d, "commission", 0.0) or 0.0),
+                "swap": float(getattr(d, "swap", 0.0) or 0.0),
+                "comment": str(getattr(d, "comment", "") or ""),
+                "time": datetime.fromtimestamp(
+                    int(getattr(d, "time", 0) or 0), tz=timezone.utc),
+            })
+        out.update(ok=True, deals=deals,
+                   message="{0} deal(s) over {1}d".format(len(deals),
+                                                          lookback_days))
+        return out
+    except Exception as exc:  # noqa: BLE001 — a link read must never break a page
+        out["message"] = "MT5 history read failed: {0}".format(exc)
+        return out
+    finally:
+        try:
+            mod.shutdown()
+        except Exception:
+            pass

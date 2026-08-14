@@ -808,6 +808,28 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
             return None
         return round(abs(float(level) - entry) / pip_size, 1)
 
+    def _sl_pips() -> Optional[float]:
+        """Stop distance in pips, from an explicit pip field or the price level.
+
+        Pages overwhelmingly supply the stop as a *price level* (`stop_loss` —
+        the same value `detail` records), not as a pip distance. This column
+        only ever read `stop_loss_pips`, which almost nothing emits, so targets
+        were converted from levels via `_pips` while the stop silently stayed
+        NULL. Measured 2026-08-14: 79 rows written since the 08-10 entry_price
+        fix carried `stop_loss` in checks_detail with `sl_pips` NULL — every
+        one of them.
+
+        The cost is not cosmetic. `source_scorecard.evaluate_row` needs
+        `sl_pips` for both its TP/SL replay and its horizon mark; without it a
+        row falls through to a direction-only hit, which yields no R at all.
+        That is why the horizon tier held exactly zero rows: nothing had a stop
+        without a target because nothing reliably had a stop.
+        """
+        explicit = _finite(idea.get("stop_loss_pips"))
+        if explicit is not None:
+            return explicit
+        return _pips(_finite(idea.get("stop_loss")))
+
     detail = {
         "entry": entry,
         "take_profit_1": tp1,
@@ -871,7 +893,7 @@ def signal_to_setup_row(idea: Dict, session: str) -> Dict:
         # `signal_expiry.extract_entry_price` reads as a fallback. Promoting it
         # to the column makes every source scoreable, and queryable.
         "entry_price": _first_price(idea, "entry", "price", "close"),
-        "sl_pips": _finite(idea.get("stop_loss_pips")),
+        "sl_pips": _sl_pips(),
         "tp1_pips": _pips(tp1),
         "tp2_pips": _pips(tp2),
         "lot_size": None,
