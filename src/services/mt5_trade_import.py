@@ -10,8 +10,14 @@ real close was ever stored.
 
 MT5 models a round trip as two or more *deals* sharing a ``position_id`` — one
 or more entries (``entry == 0``) and one or more exits (``entry == 1``). This
-module reassembles them, which is what makes partial closes and scale-ins come
-out as a single honest row rather than several half-trades.
+module reassembles them, so a position scaled into and out of in pieces lands
+as a single row rather than several half-trades.
+
+Reassembly is only attempted once a position is **fully** closed: a position
+still carrying open volume is held back until the week it settles, because a
+row written from a partial close would be stored as closed with only part of
+the trade's P/L, and dedupe on position id would then block the correction
+permanently. What is held back is counted and reported, never silently dropped.
 
 Pure mapping (``pair_deals`` / ``trips_to_journal_rows``) is separated from IO
 (``import_closed_trades``) so the arithmetic is testable without a terminal.
@@ -19,6 +25,7 @@ Pure mapping (``pair_deals`` / ``trips_to_journal_rows``) is separated from IO
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,8 +42,17 @@ _LEVEL_RE = re.compile(r"\[(sl|tp)\s+([0-9]*\.?[0-9]+)\]", re.IGNORECASE)
 
 DEAL_ENTRY_IN = 0
 DEAL_ENTRY_OUT = 1
+# A reversal deal closes the existing position *and* opens an opposing one in a
+# single fill. The deal carries the combined volume, and how it splits between
+# the close and the new open is not recoverable from the deal alone.
+DEAL_ENTRY_INOUT = 2
+# A close-by deal settles a position against an opposing one. Unlike a reversal
+# it only ever closes, so it is an exit like any other.
+DEAL_ENTRY_OUT_BY = 3
 DEAL_TYPE_BUY = 0
 DEAL_TYPE_SELL = 1
+
+EXIT_ENTRIES = (DEAL_ENTRY_OUT, DEAL_ENTRY_OUT_BY)
 
 
 def parse_close_level(comment: str) -> Tuple[Optional[str], Optional[float]]:
@@ -61,35 +77,88 @@ def _weighted(pairs: List[Tuple[float, float]]) -> Optional[float]:
 
 
 def pair_deals(deals: List[Dict[str, Any]], days: int = 7,
-               now: Optional[datetime] = None) -> List[Dict[str, Any]]:
+               now: Optional[datetime] = None,
+               ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     """Reassemble deals into round trips closed within the last ``days``.
 
-    A trip needs both legs. Positions still open (entries with no exit) are
-    skipped — they are the live book's business, not the journal's — and so are
-    exits whose entry fell outside the fetch window, because a round trip with
-    no entry price cannot be scored and a guessed one would be worse than none.
+    Returns ``(trips, held)`` — the same results-plus-diagnostics shape as
+    :func:`trips_to_journal_rows` — where ``held`` counts what was deliberately
+    *not* emitted, so an incomplete week is visible instead of merely absent.
+
+    A trip needs both legs and must be **fully** closed. Three cases are held
+    back rather than emitted:
+
+    - *still open* — entries with no exit at all; the live book's business.
+    - *partially closed* — exit volume short of entry volume. Emitting these was
+      the bug this guard exists for: the row would be stored ``is_open = FALSE``
+      with only the scaled-out portion's P/L, and because dedupe keys on
+      position id, the remainder closing later would be filtered out and the
+      correction could never land. A half-recorded trade is worse than a
+      missing one, because nothing downstream can tell it is wrong.
+    - *unpaired exit* — an exit whose entry fell outside the fetch window, so
+      there is no entry price to score against and a guessed one would be worse
+      than none.
+    - *reversal* — a position touched by a ``DEAL_ENTRY_INOUT`` fill, whose
+      volume spans a close and an opposing open that cannot be separated from
+      the deal alone.
+
+    Close-by fills (``DEAL_ENTRY_OUT_BY``) are *not* held: they only ever close,
+    so they count as ordinary exits.
+
+    A partially-closed position is not lost: it is simply held until the week it
+    closes in full, at which point every leg is inside the lookback and the trip
+    is emitted complete.
     """
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(days=int(days))
+    held = {"still_open": 0, "partially_closed": 0, "unpaired_exits": 0,
+            "reversals": 0}
 
     grouped: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
     for d in deals:
         pid = d.get("position_id") or 0
         if not pid:
             continue
-        slot = grouped.setdefault(pid, {"in": [], "out": []})
+        slot = grouped.setdefault(pid, {"in": [], "out": [], "reversal": []})
         if d.get("entry") == DEAL_ENTRY_IN:
             slot["in"].append(d)
-        elif d.get("entry") == DEAL_ENTRY_OUT:
+        elif d.get("entry") in EXIT_ENTRIES:
             slot["out"].append(d)
+        elif d.get("entry") == DEAL_ENTRY_INOUT:
+            slot["reversal"].append(d)
 
     trips: List[Dict[str, Any]] = []
     for pid, slot in grouped.items():
         ins, outs = slot["in"], slot["out"]
-        if not ins or not outs:
+        if slot["reversal"]:
+            # The deal's volume spans a close and a new open, and splitting it
+            # needs the position's size immediately before the fill — which is
+            # only knowable if every earlier deal is inside the lookback. Rather
+            # than guess a split and book a wrong P/L, hold the position and say
+            # so. Hedging accounts (this one included) do not generate these;
+            # netting accounts do.
+            held["reversals"] += 1
+            continue
+        if not outs:
+            held["still_open"] += 1
+            continue
+        if not ins:
+            held["unpaired_exits"] += 1
             continue
         close_time = max(d["time"] for d in outs)
         if close_time < cutoff:
+            continue
+
+        # Lot volumes are 2dp, so this tolerance is far inside any real
+        # partial fill while still absorbing float noise from summing.
+        in_volume = sum(d.get("volume", 0.0) for d in ins)
+        out_volume = sum(d.get("volume", 0.0) for d in outs)
+        if abs(in_volume - out_volume) > 1e-6:
+            # Covers both directions: exit volume short of entry means the
+            # position is still partly open, and exit volume *exceeding* entry
+            # means some entry legs fell outside the window, which would poison
+            # the volume-weighted entry price.
+            held["partially_closed"] += 1
             continue
 
         first_in = min(ins, key=lambda d: d["time"])
@@ -108,7 +177,10 @@ def pair_deals(deals: List[Dict[str, Any]], days: int = 7,
             "position_id": pid,
             "symbol": first_in.get("symbol", ""),
             "direction": direction,
-            "volume": sum(d.get("volume", 0.0) for d in outs),
+            # Size opened, not size closed. The two are equal by the guard
+            # above, but entries are the honest basis: `lot_size` is read as
+            # the exposure the trade carried.
+            "volume": in_volume,
             "entry_price": _weighted([(d.get("volume", 0.0), d.get("price", 0.0))
                                       for d in ins]),
             "close_price": _weighted([(d.get("volume", 0.0), d.get("price", 0.0))
@@ -123,7 +195,7 @@ def pair_deals(deals: List[Dict[str, Any]], days: int = 7,
         })
 
     trips.sort(key=lambda t: t["close_time"])
-    return trips
+    return trips, held
 
 
 def trips_to_journal_rows(
@@ -192,22 +264,45 @@ def trips_to_journal_rows(
     return rows, skipped
 
 
-def import_closed_trades(days: int = 7, cfg=None, mt5=None) -> Dict[str, Any]:
+def broker_utc_offset() -> float:
+    """Broker timezone in hours east of UTC, from ``MT5_BROKER_UTC_OFFSET``.
+
+    Defaults to 0.0 — correct for this desk's Exness server, measured, and the
+    only safe default: assuming a nonzero offset for a broker that runs UTC
+    would corrupt timestamps just as surely as the reverse. A bad value in the
+    env is ignored rather than raised, because a scheduled import must not die
+    over a typo.
+    """
+    raw = os.environ.get("MT5_BROKER_UTC_OFFSET", "").strip()
+    if not raw:
+        return 0.0
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("[mt5_import] Ignoring bad MT5_BROKER_UTC_OFFSET=%r", raw)
+        return 0.0
+
+
+def import_closed_trades(days: int = 7, cfg=None, mt5=None,
+                         utc_offset: Optional[float] = None) -> Dict[str, Any]:
     """Read closed MT5 deals and store the new ones. Never raises.
 
-    Returns ``{"ok", "message", "imported", "skipped", "seen"}``.
+    Returns ``{"ok", "message", "imported", "skipped", "seen", "held"}``.
+    ``utc_offset`` overrides the ``MT5_BROKER_UTC_OFFSET`` environment default.
     """
     out: Dict[str, Any] = {"ok": False, "message": "", "imported": 0,
-                           "skipped": {}, "seen": 0}
+                           "skipped": {}, "seen": 0, "held": {}}
     from src.services import mt5_link
 
-    read = mt5_link.closed_deals(days=days, mt5=mt5)
+    offset = broker_utc_offset() if utc_offset is None else float(utc_offset)
+    read = mt5_link.closed_deals(days=days, mt5=mt5, broker_utc_offset=offset)
     if not read.get("ok"):
         out["message"] = read.get("message", "MT5 history unavailable")
         return out
 
-    trips = pair_deals(read["deals"], days=days)
+    trips, held = pair_deals(read["deals"], days=days)
     out["seen"] = len(trips)
+    out["held"] = held
     if not trips:
         out.update(ok=True, message="No closed trades in the last {0}d".format(days))
         return out
