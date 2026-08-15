@@ -1,0 +1,3058 @@
+{
+ "cockpit": {
+  "file": {
+   "path": "app.py",
+   "loc": 9,
+   "doc": "Daily Trading System — Bloomberg-terminal entry point.",
+   "classes": [],
+   "functions": [],
+   "imports": [
+    "src.pages_lib.daily_trading"
+   ]
+  },
+  "ops": {
+   "service": "app",
+   "compose": {
+    "command": "",
+    "image": "dashboard-pro:${APP_VERSION:-dev}",
+    "ports": [
+     "8501:8501"
+    ],
+    "depends_on": [
+     "db"
+    ],
+    "env_keys": [
+     "DB_HOST",
+     "DB_PORT",
+     "DB_NAME",
+     "DB_USER",
+     "DB_PASSWORD",
+     "FRED_API_KEY",
+     "FMP_API_KEY",
+     "FINNHUB_API_KEY",
+     "ANTHROPIC_API_KEY",
+     "GMAIL_SENDER",
+     "GMAIL_APP_PASSWORD",
+     "GMAIL_RECIPIENT"
+    ]
+   }
+  }
+ },
+ "pages": {
+  "dir": {
+   "path": "pages/",
+   "count": 56,
+   "loc": 22042,
+   "sample": [
+    {
+     "path": "pages/15m-fib-entry.py",
+     "loc": 9,
+     "doc": "15M Fibonacci Entry — Bloomberg-terminal entry point.",
+     "classes": [],
+     "functions": [],
+     "imports": [
+      "src.pages_lib.fib_entry"
+     ]
+    },
+    {
+     "path": "pages/4H-confluence-zone.py",
+     "loc": 883,
+     "doc": "",
+     "classes": [],
+     "functions": [
+      {
+       "name": "fetch_4h_data",
+       "sig": "(ticker, days=…) -> pd.DataFrame",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "calc_ema",
+       "sig": "(series, period) -> pd.Series",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "calc_fibonacci_levels",
+       "sig": "(high, low) -> dict[str, float]",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "calc_pivot_points",
+       "sig": "(df) -> dict[str, float]",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "find_confluence_zones",
+       "sig": "(price, fib_levels, pivots, ema_values, tolerance_pct=…) -> list[dict]",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "safe_rgba",
+       "sig": "(hex_color, opacity) -> str",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "get_pdh_pdl",
+       "sig": "(ticker)",
+       "doc": "Return previous day High/Low from daily data.",
+       "kind": "public"
+      }
+     ],
+     "imports": [
+      "src.core.config",
+      "src.db.market_cache",
+      "src.pages_lib.navigation",
+      "src.services.alert_service",
+      "src.services.bias_service",
+      "src.services.market_data",
+      "src.services.tool_log",
+      "src.ui",
+      "src.ui.components",
+      "src.ui.theme"
+     ]
+    },
+    {
+     "path": "pages/abr_toolkit_tab.py",
+     "loc": 678,
+     "doc": "abr_toolkit_tab.py",
+     "classes": [
+      {
+       "name": "StructEvent",
+       "bases": [],
+       "doc": "",
+       "methods": []
+      },
+      {
+       "name": "OrderBlock",
+       "bases": [],
+       "doc": "",
+       "methods": []
+      },
+      {
+       "name": "ABRResult",
+       "bases": [],
+       "doc": "",
+       "methods": []
+      }
+     ],
+     "functions": [
+      {
+       "name": "_point_value",
+       "sig": "(name, inst) -> float",
+       "doc": "",
+       "kind": "private"
+      },
+      {
+       "name": "_atr",
+       "sig": "(df, n=…) -> pd.Series",
+       "doc": "",
+       "kind": "private"
+      },
+      {
+       "name": "_ema_bias",
+       "sig": "(close, fast, slow) -> int",
+       "doc": "",
+       "kind": "private"
+      },
+      {
+       "name": "_find_pivots",
+       "sig": "(df, L) -> tuple[np.ndarray, np.ndarray]",
+       "doc": "Boolean arrays: bar i is a swing high/low vs L bars each side (strict).",
+       "kind": "private"
+      },
+      {
+       "name": "run_engine",
+       "sig": "(df, swing_len=…, ob_search=…, ob_max_age=…, max_ob=…, tl_lookback=…, sl_buf_atr=…, tp_r=…, risk_usd=…, point_value=…, h",
+       "doc": "df: OHLC indexed by datetime, oldest first.",
+       "kind": "public"
+      },
+      {
+       "name": "_fetch_ohlc_mt5",
+       "sig": "(symbol, tf) -> pd.DataFrame",
+       "doc": "Candles straight from a running Deriv/MT5 terminal — matches your",
+       "kind": "private"
+      },
+      {
+       "name": "_fetch_ohlc_yfinance",
+       "sig": "(ticker, tf) -> pd.DataFrame",
+       "doc": "H1/D1 native; H4/H6 resampled from 1h. Returns OHLC, oldest first.",
+       "kind": "private"
+      },
+      {
+       "name": "fetch_ohlc",
+       "sig": "(symbol, yf_ticker, tf) -> pd.DataFrame",
+       "doc": "Tries the local MT5 terminal first (exact broker candles, all four",
+       "kind": "public"
+      },
+      {
+       "name": "journal_signal",
+       "sig": "(repo, symbol, tf, r) -> None",
+       "doc": "`repo`: a TradeRepository (see src/db/cache.py's pooled_repository).",
+       "kind": "public"
+      },
+      {
+       "name": "build_chart",
+       "sig": "(df, r, symbol) -> go.Figure",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "_render_abr_tv",
+       "sig": "(df, r, symbol) -> None",
+       "doc": "TradingView (lightweight-charts) view of the ABR chart.",
+       "kind": "private"
+      },
+      {
+       "name": "_bias_str",
+       "sig": "(b) -> str",
+       "doc": "",
+       "kind": "private"
+      },
+      {
+       "name": "render_instrument",
+       "sig": "(repo, name, cfg, params) -> None",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "render",
+       "sig": "(repo=…) -> None",
+       "doc": "",
+       "kind": "public"
+      }
+     ],
+     "imports": [
+      "src.db.cache",
+      "src.db.connection",
+      "src.instruments.registry",
+      "src.pages_lib.navigation",
+      "src.ui",
+      "src.ui.theme"
+     ]
+    },
+    {
+     "path": "pages/amd-scanner.py",
+     "loc": 1088,
+     "doc": "AMD Market-Phase Scanner — Streamlit page",
+     "classes": [],
+     "functions": [
+      {
+       "name": "send_gmail",
+       "sig": "(sender, app_password, recipient, subject, body) -> tuple[bool, str]",
+       "doc": "Send an email via Gmail SMTP using an App Password.",
+       "kind": "public"
+      },
+      {
+       "name": "atr",
+       "sig": "(df, period=…) -> pd.Series",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "normalize_columns",
+       "sig": "(df) -> pd.DataFrame",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "detect_phases",
+       "sig": "(df, range_window=…, atr_period=…, consolidation_pctile=…, sweep_atr_mult=…, expansion_atr_mult=…) -> pd.DataFrame",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "summarize_phases",
+       "sig": "(labeled) -> pd.DataFrame",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "current_assessment",
+       "sig": "(labeled, tail=…) -> dict",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "load_yfinance",
+       "sig": "(symbol, period, interval) -> pd.DataFrame",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "_this_week",
+       "sig": "(labeled) -> pd.DataFrame",
+       "doc": "Bars from Monday of the current trading week, anchored on the last bar",
+       "kind": "private"
+      },
+      {
+       "name": "_period_boundaries",
+       "sig": "(idx, interval) -> list",
+       "doc": "X-positions where a major calendar period begins, used to draw separator",
+       "kind": "private"
+      },
+      {
+       "name": "_volume_profile",
+       "sig": "(labeled, y_series, bins=…) -> tuple[np.ndarray, np.ndarray, np.ndarray]",
+       "doc": "Volume-by-price: distribute each bar's volume across the price bins its",
+       "kind": "private"
+      },
+      {
+       "name": "_profile_colors",
+       "sig": "(up_share) -> list",
+       "doc": "",
+       "kind": "private"
+      },
+      {
+       "name": "make_chart",
+       "sig": "(labeled, symbol, interval=…) -> go.Figure",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "_frvp_rows",
+       "sig": "(fig, profile, max_width) -> None",
+       "doc": "Add one buy/sell rectangle pair per price bin.",
+       "kind": "private"
+      },
+      {
+       "name": "make_frvp_chart",
+       "sig": "(view, profile, symbol, breaks) -> go.Figure",
+       "doc": "Candles for `view` with the fixed-range profile overlaid at its anchor.",
+       "kind": "public"
+      }
+     ],
+     "imports": [
+      "src.core",
+      "src.core.config",
+      "src.db.market_cache",
+      "src.instruments",
+      "src.pages_lib.navigation",
+      "src.services.alert_service",
+      "src.services.bias_service",
+      "src.services.signal_store",
+      "src.services.tool_log",
+      "src.ui",
+      "src.ui.charts",
+      "src.ui.theme"
+     ]
+    },
+    {
+     "path": "pages/biased-pivots.py",
+     "loc": 7,
+     "doc": "Biased Pivots — Bloomberg-terminal entry point.",
+     "classes": [],
+     "functions": [],
+     "imports": [
+      "src.pages_lib.biased_pivots_page"
+     ]
+    },
+    {
+     "path": "pages/bonds_gold_dxy_app.py",
+     "loc": 360,
+     "doc": "Bonds → Gold → DXY : Interactive learning module",
+     "classes": [],
+     "functions": [
+      {
+       "name": "style_axes",
+       "sig": "(fig, **kwargs) -> None",
+       "doc": "",
+       "kind": "public"
+      },
+      {
+       "name": "load_data",
+       "sig": "(period=…) -> pd.DataFrame",
+       "doc": "",
+       "kind": "public"
+      }
+     ],
+     "imports": [
+      "src.pages_lib.navigation",
+      "src.ui.theme"
+     ]
+    }
+   ]
+  }
+ },
+ "journal": {
+  "file": {
+   "path": "pages/trade-journal.py",
+   "loc": 1543,
+   "doc": "",
+   "classes": [],
+   "functions": [
+    {
+     "name": "get_db_connection",
+     "sig": "(cfg)",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "load_journal_trades",
+     "sig": "(cfg, limit=…, executed_only=…)",
+     "doc": "Rows from ``trade_setups``, newest first.",
+     "kind": "public"
+    },
+    {
+     "name": "_run_invalidation_check",
+     "sig": "(df_all, cfg) -> None",
+     "doc": "Price-based signal invalidation: flag open rows whose stop level has",
+     "kind": "private"
+    },
+    {
+     "name": "_existing_tickets",
+     "sig": "(cfg) -> set",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_capture_open_positions",
+     "sig": "(content) -> int",
+     "doc": "Snapshot the statement's **open** positions into the durable store that",
+     "kind": "private"
+    },
+    {
+     "name": "_ingest_statement",
+     "sig": "(cfg, content, offset) -> dict",
+     "doc": "Non-interactive ingest used by the auto-importer: parse, auto-map, import",
+     "kind": "private"
+    },
+    {
+     "name": "_do_auto_import",
+     "sig": "(cfg, path, offset, force) -> None",
+     "doc": "Read a watched MT4 file and import it if it changed (or `force`).",
+     "kind": "private"
+    },
+    {
+     "name": "_render_mt5_link",
+     "sig": "() -> None",
+     "doc": "Read the running MT5 terminal directly — no file export step.",
+     "kind": "private"
+    },
+    {
+     "name": "_tc_disarm",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_tc_arm",
+     "sig": "(action, params, signature) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_tc_still_armed",
+     "sig": "(action, signature) -> bool",
+     "doc": "False (and auto-disarms) if nothing is armed, a different action is",
+     "kind": "private"
+    },
+    {
+     "name": "_tc_gate_banner",
+     "sig": "() -> bool",
+     "doc": "Renders the enable/disable status. Returns True when trading is live-enabled.",
+     "kind": "private"
+    },
+    {
+     "name": "_tc_open_positions",
+     "sig": "() -> list",
+     "doc": "Fresh read-only snapshot for the Close/Modify ticket pickers — never",
+     "kind": "private"
+    },
+    {
+     "name": "_render_trade_open",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_render_trade_close",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_render_trade_modify",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_render_trade_control",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_render_manual_import",
+     "sig": "(cfg, offset) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_render_auto_import",
+     "sig": "(cfg, offset) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "render_mt4_import",
+     "sig": "(cfg)",
+     "doc": "Upload (or auto-import from a watched file) + parse + map + persist an MT4",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.db.cache",
+    "src.db.connection",
+    "src.db.market_cache",
+    "src.db.trade_repository",
+    "src.instruments.registry",
+    "src.pages_lib.navigation",
+    "src.services",
+    "src.services.market_data",
+    "src.services.source_scorecard",
+    "src.ui.theme"
+   ]
+  }
+ },
+ "mcp-server": {
+  "file": {
+   "path": "src/services/mt5_mcp.py",
+   "loc": 721,
+   "doc": "MCP server exposing the live MetaTrader 5 terminal to an AI client.",
+   "classes": [
+    {
+     "name": "MT5Error",
+     "bases": [
+      "RuntimeError"
+     ],
+     "doc": "Raised with the terminal's own error code and message attached.",
+     "methods": []
+    }
+   ],
+   "functions": [
+    {
+     "name": "_flag",
+     "sig": "(name) -> bool",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "iso",
+     "sig": "(epoch) -> str",
+     "doc": "MT5 epoch seconds → ISO 8601 UTC. Terminal times are broker server time.",
+     "kind": "public"
+    },
+    {
+     "name": "stamp",
+     "sig": "(row) -> Dict[str, Any]",
+     "doc": "Add `*_iso` alongside each epoch-second time field MT5 returns.",
+     "kind": "public"
+    },
+    {
+     "name": "round_volume",
+     "sig": "(volume, step, vol_min, vol_max) -> float",
+     "doc": "Snap a lot size to the symbol's volume step and clamp to its limits.",
+     "kind": "public"
+    },
+    {
+     "name": "pick_filling",
+     "sig": "(filling_mode) -> int",
+     "doc": "Choose a filling policy the symbol actually supports.",
+     "kind": "public"
+    },
+    {
+     "name": "instrument_for",
+     "sig": "(symbol) -> Optional[str]",
+     "doc": "Broker symbol → registry display name ('EURUSDm' → 'EUR/USD'), or None.",
+     "kind": "public"
+    },
+    {
+     "name": "_fail",
+     "sig": "(what) -> MT5Error",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_connect",
+     "sig": "() -> None",
+     "doc": "Attach to (or launch) the terminal. Idempotent; holds the handle open.",
+     "kind": "private"
+    },
+    {
+     "name": "_asdict",
+     "sig": "(obj) -> Dict[str, Any]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_symbol",
+     "sig": "(name) -> Any",
+     "doc": "Resolve a symbol, pulling it into Market Watch if the terminal hides it.",
+     "kind": "private"
+    },
+    {
+     "name": "_confirmed",
+     "sig": "(confirm) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_check_tradable",
+     "sig": "(symbol, volume) -> None",
+     "doc": "Every guardrail except `confirm`, applied before anything reaches the broker.",
+     "kind": "private"
+    },
+    {
+     "name": "_send",
+     "sig": "(request) -> Dict[str, Any]",
+     "doc": "`order_check` as a dry run, then `order_send`. Never sends a doomed request.",
+     "kind": "private"
+    },
+    {
+     "name": "_position",
+     "sig": "(ticket) -> Any",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "mt5_status",
+     "sig": "() -> Dict[str, Any]",
+     "doc": "Connection health: terminal build, broker link, and this server's guardrails.",
+     "kind": "public"
+    },
+    {
+     "name": "account_info",
+     "sig": "() -> Dict[str, Any]",
+     "doc": "Balance, equity, margin, leverage — the broker's own figures.",
+     "kind": "public"
+    },
+    {
+     "name": "list_symbols",
+     "sig": "(search=…, limit=…) -> Dict[str, Any]",
+     "doc": "Search tradable broker symbols by case-insensitive substring.",
+     "kind": "public"
+    },
+    {
+     "name": "symbol_info",
+     "sig": "(symbol) -> Dict[str, Any]",
+     "doc": "Full contract spec plus the current tick.",
+     "kind": "public"
+    },
+    {
+     "name": "get_quote",
+     "sig": "(symbols) -> Dict[str, Any]",
+     "doc": "Current bid/ask/spread for one or more symbols.",
+     "kind": "public"
+    },
+    {
+     "name": "get_candles",
+     "sig": "(symbol, timeframe=…, count=…, start_pos=…) -> Dict[str, Any]",
+     "doc": "OHLCV candles by bar position. `start_pos=0` is the still-forming bar.",
+     "kind": "public"
+    },
+    {
+     "name": "get_candles_range",
+     "sig": "(symbol, timeframe, date_from, date_to) -> Dict[str, Any]",
+     "doc": "OHLCV candles between two UTC timestamps (ISO 8601, '2026-07-01T00:00:00').",
+     "kind": "public"
+    },
+    {
+     "name": "get_positions",
+     "sig": "(symbol=…) -> Dict[str, Any]",
+     "doc": "Open positions with floating P/L, each tagged with its registry `pair`.",
+     "kind": "public"
+    },
+    {
+     "name": "get_pending_orders",
+     "sig": "(symbol=…) -> Dict[str, Any]",
+     "doc": "Working (not yet filled) pending orders.",
+     "kind": "public"
+    },
+    {
+     "name": "get_history",
+     "sig": "(days=…, symbol=…) -> Dict[str, Any]",
+     "doc": "Closed deals from the last N days, with realised P/L, commission and swap.",
+     "kind": "public"
+    },
+    {
+     "name": "calc_margin",
+     "sig": "(symbol, direction, volume) -> Dict[str, Any]",
+     "doc": "Margin required for a hypothetical order. A sizing aid — sends nothing.",
+     "kind": "public"
+    },
+    {
+     "name": "open_position",
+     "sig": "(symbol, direction, volume, confirm=…, stop_loss=…, take_profit=…, deviation_points=…, comment=…) -> Dict[str, Any]",
+     "doc": "Open a position at market. REAL MONEY.",
+     "kind": "public"
+    },
+    {
+     "name": "close_position",
+     "sig": "(ticket, confirm=…, volume=…) -> Dict[str, Any]",
+     "doc": "Close an open position by ticket. REAL MONEY.",
+     "kind": "public"
+    },
+    {
+     "name": "modify_position",
+     "sig": "(ticket, confirm=…, stop_loss=…, take_profit=…) -> Dict[str, Any]",
+     "doc": "Change the stop-loss / take-profit of an open position. REAL MONEY.",
+     "kind": "public"
+    },
+    {
+     "name": "place_pending_order",
+     "sig": "(symbol, order_type, volume, price, confirm=…, stop_loss=…, take_profit=…, comment=…) -> Dict[str, Any]",
+     "doc": "Place a pending limit/stop order. REAL MONEY once it triggers.",
+     "kind": "public"
+    },
+    {
+     "name": "cancel_pending_order",
+     "sig": "(ticket, confirm=…) -> Dict[str, Any]",
+     "doc": "Cancel a working pending order by ticket.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.instruments.registry",
+    "src.services.broker_symbols",
+    "src.services.mt5_link"
+   ]
+  },
+  "ops": {
+   "how": "python -m src.services.mt5_mcp",
+   "note": "Registered with the MCP client at user scope; Windows only."
+  }
+ },
+ "scanner": {
+  "file": {
+   "path": "src/services/background_scanner.py",
+   "loc": 309,
+   "doc": "Unattended ingest + score daemon — the app's data streams in day & night.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "ensure_started",
+     "sig": "(interval=…) -> bool",
+     "doc": "Start the background daemon once per server process.",
+     "kind": "public"
+    },
+    {
+     "name": "_loop",
+     "sig": "(interval) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_pair_frames",
+     "sig": "(ticker)",
+     "doc": "Fetch the three canonical timeframes for a ticker through the spine.",
+     "kind": "private"
+    },
+    {
+     "name": "_find_confluences",
+     "sig": "(grade_a, board_pairs) -> List",
+     "doc": "Grade-A ranker reads that ALSO carry a same-side house view and a live",
+     "kind": "private"
+    },
+    {
+     "name": "_setup_summary",
+     "sig": "(r) -> dict",
+     "doc": "Compact, JSON-safe best-setup read for the board (what pages display).",
+     "kind": "private"
+    },
+    {
+     "name": "scan_once",
+     "sig": "() -> dict",
+     "doc": "One full cycle: ingest → score → store board → persist/email Grade A.",
+     "kind": "public"
+    },
+    {
+     "name": "run_forever",
+     "sig": "(interval=…) -> None",
+     "doc": "Foreground ingest→score loop for a **dedicated worker process/container**",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.bias",
+    "src.core.observability",
+    "src.instruments",
+    "src.pages_lib.fib_entry",
+    "src.pages_lib.setup_ranker",
+    "src.services",
+    "src.services.market_data",
+    "src.services.precomputed"
+   ]
+  },
+  "ops": {
+   "service": "scanner",
+   "compose": {
+    "command": "[\"python\", \"-m\", \"src.services.background_scanner\"]",
+    "image": "dashboard-pro:${APP_VERSION:-dev}",
+    "ports": [],
+    "depends_on": [
+     "db"
+    ],
+    "env_keys": [
+     "DB_HOST",
+     "DB_PORT",
+     "DB_NAME",
+     "DB_USER",
+     "DB_PASSWORD",
+     "FRED_API_KEY",
+     "GMAIL_SENDER",
+     "GMAIL_APP_PASSWORD",
+     "GMAIL_RECIPIENT"
+    ]
+   }
+  }
+ },
+ "sweeper": {
+  "file": {
+   "path": "src/services/signal_sweep.py",
+   "loc": 347,
+   "doc": "Run every signal page headlessly so its own code persists its signals.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "_rr_use_free_proxy",
+     "sig": "(at) -> None",
+     "doc": "Switch Risk Reversals off its synthetic-demo default.",
+     "kind": "private"
+    },
+    {
+     "name": "_counts_by_source",
+     "sig": "() -> Dict[str, int]",
+     "doc": "Rows per source currently in ``trade_setups``, or {} when the DB is down.",
+     "kind": "private"
+    },
+    {
+     "name": "_suppress_email",
+     "sig": "() -> None",
+     "doc": "Stub `send_email` to a refusal, which leaves the dedupe ledger untouched.",
+     "kind": "private"
+    },
+    {
+     "name": "run_page",
+     "sig": "(source, path, timeout=…) -> Dict[str, object]",
+     "doc": "Run one page under AppTest. Returns a result dict; never raises.",
+     "kind": "public"
+    },
+    {
+     "name": "sync_broker_state",
+     "sig": "() -> Dict[str, object]",
+     "doc": "Refresh the stored balance and open-position book from the live terminal.",
+     "kind": "public"
+    },
+    {
+     "name": "sweep_once",
+     "sig": "(only=…, timeout=…, sync=…) -> List[Dict[str, object]]",
+     "doc": "Run every registered signal page once and report what each persisted.",
+     "kind": "public"
+    },
+    {
+     "name": "run_forever",
+     "sig": "(interval=…, timeout=…, sync=…) -> None",
+     "doc": "Sweep on a loop forever, for a dedicated worker container.",
+     "kind": "public"
+    },
+    {
+     "name": "main",
+     "sig": "(argv=…) -> int",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.observability",
+    "src.db.cache",
+    "src.db.market_cache",
+    "src.services"
+   ]
+  },
+  "ops": {
+   "service": "sweeper",
+   "compose": {
+    "command": "[\"python\", \"-m\", \"src.services.signal_sweep\", \"--loop\", \"300\"]",
+    "image": "dashboard-pro:${APP_VERSION:-dev}",
+    "ports": [],
+    "depends_on": [
+     "db"
+    ],
+    "env_keys": [
+     "DB_HOST",
+     "DB_PORT",
+     "DB_NAME",
+     "DB_USER",
+     "DB_PASSWORD",
+     "FRED_API_KEY",
+     "SIGNAL_SWEEP_NO_EMAIL"
+    ]
+   }
+  }
+ },
+ "bb-worker": {
+  "file": {
+   "path": "src/data_backbone/worker.py",
+   "loc": 72,
+   "doc": "worker.py — background service.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "refresh_ticker",
+     "sig": "(ticker) -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "refresh_fred",
+     "sig": "(series_id) -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "refresh_all",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "main",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  },
+  "ops": {
+   "service": "worker",
+   "compose": {
+    "command": "[\"python\", \"-m\", \"src.data_backbone.worker\"]",
+    "image": "dashboard-pro:${APP_VERSION:-dev}",
+    "ports": [],
+    "depends_on": [
+     "db"
+    ],
+    "env_keys": [
+     "DB_HOST",
+     "DB_PORT",
+     "DB_NAME",
+     "DB_USER",
+     "DB_PASSWORD",
+     "FRED_API_KEY"
+    ]
+   }
+  }
+ },
+ "sentry": {
+  "file": {
+   "path": "src/services/evening_sentry.py",
+   "loc": 422,
+   "doc": "evening_sentry.py  (v2)",
+   "classes": [
+    {
+     "name": "SignalResult",
+     "bases": [],
+     "doc": "",
+     "methods": []
+    },
+    {
+     "name": "SignalProvider",
+     "bases": [
+      "Protocol"
+     ],
+     "doc": "",
+     "methods": [
+      "evaluate(self, symbol) -> SignalResult"
+     ]
+    },
+    {
+     "name": "DemoBreakoutProvider",
+     "bases": [],
+     "doc": "20-day breakout with staleness validation. Replace evaluate()",
+     "methods": [
+      "evaluate(self, symbol) -> SignalResult"
+     ]
+    },
+    {
+     "name": "Store",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "_utcnow() -> datetime",
+      "last_state(self, symbol) -> str | None",
+      "record(self, r, alerted, news_tagged=…) -> None",
+      "record_run(self, job, symbols_ok, errors) -> None",
+      "runs_today(self, job=…) -> int",
+      "today_rows(self) -> list",
+      "news_near(self, currencies, when, window_min=…) -> list"
+     ]
+    },
+    {
+     "name": "Telegram",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "send(self, text) -> None"
+     ]
+    },
+    {
+     "name": "Heartbeat",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "ping(self, ok=…) -> None"
+     ]
+    },
+    {
+     "name": "EveningSentry",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "_news_tag(self, symbol) -> bool",
+      "scan(self) -> list[SignalResult]",
+      "briefing(self) -> None",
+      "digest(self) -> None",
+      "run(self) -> None"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "main",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  }
+ },
+ "mt5-sync": {
+  "file": {
+   "path": "deploy/mt5_sync.py",
+   "loc": 224,
+   "doc": "Push the live MT5 terminal's balance and open positions into the database.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "acquire_lock",
+     "sig": "(path=…)",
+     "doc": "Hold an exclusive OS lock, or return ``None`` if another loop has it.",
+     "kind": "public"
+    },
+    {
+     "name": "release_lock",
+     "sig": "()",
+     "doc": "Drop the lock. The OS would do this at exit anyway; this makes it prompt.",
+     "kind": "public"
+    },
+    {
+     "name": "emit",
+     "sig": "(line) -> None",
+     "doc": "Print, and in loop mode also append to the log.",
+     "kind": "public"
+    },
+    {
+     "name": "sync_once",
+     "sig": "() -> int",
+     "doc": "One sync. Returns 0 on success, 1 if the terminal could not be read.",
+     "kind": "public"
+    },
+    {
+     "name": "main",
+     "sig": "(argv=…) -> int",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.services"
+   ]
+  },
+  "ops": {
+   "how": "deploy/mt5_sync_startup.cmd in the Startup folder",
+   "note": "Must stay a shortcut, not a copy."
+  }
+ },
+ "mt5-watchdog": {
+  "file": {
+   "path": "deploy/mt5_watchdog.py",
+   "loc": 349,
+   "doc": "Keep the MT5 sync loop alive, in the logged-on desktop session.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "emit",
+     "sig": "(line) -> None",
+     "doc": "Print, and in loop mode also append to this module's own log.",
+     "kind": "public"
+    },
+    {
+     "name": "_stamp",
+     "sig": "() -> str",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "load_sync",
+     "sig": "()",
+     "doc": "Import ``deploy/mt5_sync.py`` by path - ``deploy/`` is not a package.",
+     "kind": "public"
+    },
+    {
+     "name": "heartbeat_age",
+     "sig": "(now=…)",
+     "doc": "Seconds since the sync log last grew, or ``None`` if it does not exist.",
+     "kind": "public"
+    },
+    {
+     "name": "last_ok_age",
+     "sig": "(now=…)",
+     "doc": "Seconds since the last *successful* sync line, or ``None`` if none found.",
+     "kind": "public"
+    },
+    {
+     "name": "holder_pid",
+     "sig": "()",
+     "doc": "PID recorded in the sync lock file, or ``None``.",
+     "kind": "public"
+    },
+    {
+     "name": "kill",
+     "sig": "(pid) -> bool",
+     "doc": "Stop a wedged loop. ``/T`` because the venv's `pythonw.exe` is a stub that",
+     "kind": "public"
+    },
+    {
+     "name": "lock_is_free",
+     "sig": "(sync, timeout=…) -> bool",
+     "doc": "Whether the sync lock can be taken, polling up to ``timeout``.",
+     "kind": "public"
+    },
+    {
+     "name": "start_loop",
+     "sig": "() -> bool",
+     "doc": "Launch a detached sync loop from the repo root.",
+     "kind": "public"
+    },
+    {
+     "name": "restart",
+     "sig": "(sync, reason) -> bool",
+     "doc": "Kill whatever holds the lock, confirm it let go, and start a fresh loop.",
+     "kind": "public"
+    },
+    {
+     "name": "check",
+     "sig": "(sync, state) -> bool",
+     "doc": "One health check. Returns True if a restart was performed.",
+     "kind": "public"
+    },
+    {
+     "name": "main",
+     "sig": "(argv=…) -> int",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  },
+  "ops": {
+   "how": "deploy/mt5_watchdog_startup.cmd in the Startup folder"
+  }
+ },
+ "ranker-polish": {
+  "file": {
+   "path": "src/pages_lib/setup_ranker.py",
+   "loc": 1598,
+   "doc": "Setup Ranker page — Bloomberg-terminal version.",
+   "classes": [
+    {
+     "name": "_SetupRankerDataFeed",
+     "bases": [],
+     "doc": "Encapsulates the 3 timeframe pulls so the page logic is testable.",
+     "methods": [
+      "daily(ticker, days=…) -> pd.DataFrame",
+      "four_hour(ticker) -> pd.DataFrame",
+      "weekly(ticker) -> pd.DataFrame",
+      "currency_strength_diff(pair) -> Optional[float]",
+      "score(cls, pair, info, direction) -> dict"
+     ]
+    },
+    {
+     "name": "SetupRankerPage",
+     "bases": [
+      "BloombergPage"
+     ],
+     "doc": "Bloomberg-styled multi-pair scoring scanner.",
+     "methods": [
+      "configure(self) -> PageContext",
+      "sidebar(self, ctx) -> None",
+      "body(self, ctx) -> None",
+      "_scan(pairs, directions) -> list",
+      "_track_score_history(cls, all_results) -> list",
+      "_render_stale_panel(stale) -> None",
+      "_net_exposure(results, account_bal, risk_pct, rr_ratio) -> dict",
+      "_render_exposure_strip(cls, results, account_bal, risk_pct, rr_ratio) -> None",
+      "_held_positions() -> list",
+      "_stack_warnings(pair, direction, held) -> list",
+      "_render_held_book(cls, held) -> None",
+      "_exposure_badge(cls, pair, direction, held)",
+      "_cockpit_context(pairs) -> dict",
+      "_cockpit_badge(r, cockpit) -> tuple"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "alert_price_bucket",
+     "sig": "(price, band=…) -> int",
+     "doc": "Coarse, instrument-agnostic price bucket for alert dedupe. Log-space",
+     "kind": "public"
+    },
+    {
+     "name": "fmt_price",
+     "sig": "(p) -> str",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "trade_levels",
+     "sig": "(entry, sl_pips, pip_size, direction, rr) -> dict",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "money_breakdown",
+     "sig": "(sl_pips, pip_value, account_balance, risk_pct, rr) -> dict",
+     "doc": "Lot size, target $ risk, actual $ risk (after lot rounding), and $ won",
+     "kind": "public"
+    },
+    {
+     "name": "risk_deviates",
+     "sig": "(mb, tolerance=…) -> bool",
+     "doc": "True when lot-rounding pushed actual $ risk >tolerance away from the",
+     "kind": "public"
+    },
+    {
+     "name": "trade_rationale_template",
+     "sig": "(r, lv, rr_ratio) -> str",
+     "doc": "Deterministic 'why this trade' facts built from the scored criteria —",
+     "kind": "public"
+    },
+    {
+     "name": "polished_rationale",
+     "sig": "(template) -> Optional[str]",
+     "doc": "Optional Claude API polish of the rationale facts (fail soft to the",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "pages.daily_cockpit_tab",
+    "src.core.bias",
+    "src.core.secrets",
+    "src.core.signals",
+    "src.debug",
+    "src.instruments",
+    "src.pages_lib.base",
+    "src.pages_lib.currency_strength",
+    "src.services",
+    "src.services.bias_service",
+    "src.services.exposure",
+    "src.services.market_data",
+    "src.services.mt5_link",
+    "src.services.open_positions",
+    "src.services.parallel_fetch",
+    "src.services.signal_store",
+    "src.ui.components",
+    "src.ui.theme"
+   ]
+  }
+ },
+ "forecast-narrator": {
+  "file": {
+   "path": "pages/forecast_tab.py",
+   "loc": 376,
+   "doc": "forecast_tab.py",
+   "classes": [],
+   "functions": [
+    {
+     "name": "garch_cone",
+     "sig": "(close, horizon) -> dict",
+     "doc": "Random-walk center with GARCH(1,1)-t vol cone. Returns band arrays.",
+     "kind": "public"
+    },
+    {
+     "name": "compute_drivers",
+     "sig": "(df, abr_row) -> list[dict]",
+     "doc": "Transparent, price-based drivers (+ ABR structure bias if journaled).",
+     "kind": "public"
+    },
+    {
+     "name": "score_drivers",
+     "sig": "(drivers) -> tuple[int, str]",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "template_narrative",
+     "sig": "(sym, cone, drivers, score, label, horizon_days, chg_1m) -> str",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "polished_narrative",
+     "sig": "(template) -> str | None",
+     "doc": "Optional Claude API polish. Returns None on any failure (fail soft).",
+     "kind": "public"
+    },
+    {
+     "name": "journal_forecast",
+     "sig": "(repo, sym, horizon, cone, drivers, score, label) -> None",
+     "doc": "`repo`: a TradeRepository (see src/db/cache.py's pooled_repository).",
+     "kind": "public"
+    },
+    {
+     "name": "evaluate_forecasts",
+     "sig": "(repo, sym, close) -> pd.DataFrame",
+     "doc": "Fill realized prices for matured forecasts; return scored history.",
+     "kind": "public"
+    },
+    {
+     "name": "fetch_daily",
+     "sig": "(ticker) -> pd.DataFrame",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "build_chart",
+     "sig": "(df, cone, horizon, sym) -> go.Figure",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_latest_abr_signal",
+     "sig": "(repo, sym) -> dict | None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "render_instrument",
+     "sig": "(repo, sym, ticker, horizon_lbl) -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "render",
+     "sig": "(repo=…) -> None",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.secrets",
+    "src.db.cache",
+    "src.db.connection",
+    "src.instruments.registry",
+    "src.pages_lib.navigation",
+    "src.services.bias_service",
+    "src.services.market_data",
+    "src.services.signal_store",
+    "src.ui.charts",
+    "src.ui.theme"
+   ]
+  }
+ },
+ "report-summariser": {
+  "file": {
+   "path": "src/core/ai_reports.py",
+   "loc": 93,
+   "doc": "Optional Claude-powered narrative summaries for the Reports page.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "is_available",
+     "sig": "() -> bool",
+     "doc": "True when an AI summary can actually be produced.",
+     "kind": "public"
+    },
+    {
+     "name": "unavailable_reason",
+     "sig": "() -> str",
+     "doc": "Human-readable reason the AI summary is disabled (for the UI).",
+     "kind": "public"
+    },
+    {
+     "name": "summarize_report",
+     "sig": "(title, data, model=…) -> str",
+     "doc": "Return a narrative summary of ``data`` (a report dict), or raise.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core"
+   ]
+  }
+ },
+ "market-data": {
+  "file": {
+   "path": "src/services/market_data.py",
+   "loc": 123,
+   "doc": "Canonical market-data spine — the one OHLC feed every page reads from.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "_ohlcv",
+     "sig": "(df) -> pd.DataFrame",
+     "doc": "Trim to the OHLCV columns and drop incomplete bars.",
+     "kind": "private"
+    },
+    {
+     "name": "_resample",
+     "sig": "(df, rule) -> pd.DataFrame",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "daily_ohlc",
+     "sig": "(ticker, period=…) -> pd.DataFrame",
+     "doc": "Canonical daily bars (default 300d, ttl 300).",
+     "kind": "public"
+    },
+    {
+     "name": "weekly_ohlc",
+     "sig": "(ticker, period=…) -> pd.DataFrame",
+     "doc": "Canonical weekly bars: daily bars resampled to W (default 2y, ttl 300).",
+     "kind": "public"
+    },
+    {
+     "name": "h4_ohlc",
+     "sig": "(ticker, days=…) -> pd.DataFrame",
+     "doc": "Canonical 4-hour bars: hourly bars resampled to 4h (default 90d, ttl 300).",
+     "kind": "public"
+    },
+    {
+     "name": "hourly_ohlc",
+     "sig": "(ticker, days=…) -> pd.DataFrame",
+     "doc": "Canonical hourly bars (default 30d, ttl 300).",
+     "kind": "public"
+    },
+    {
+     "name": "data_asof",
+     "sig": "(*frames) -> Optional[pd.Timestamp]",
+     "doc": "Latest bar timestamp across the given frames — the page's \"data as of\".",
+     "kind": "public"
+    },
+    {
+     "name": "asof_caption",
+     "sig": "(*frames) -> str",
+     "doc": "Human caption for the shared strip, e.g. ``data as of 2026-07-17 08:00 UTC``.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.db.market_cache"
+   ]
+  }
+ },
+ "data-provider": {
+  "file": {
+   "path": "src/core/data_provider.py",
+   "loc": 258,
+   "doc": "",
+   "classes": [
+    {
+     "name": "MarketDataProvider",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "get_data(self, symbol, interval, period)"
+     ]
+    },
+    {
+     "name": "QuantConnectProvider",
+     "bases": [
+      "MarketDataProvider"
+     ],
+     "doc": "",
+     "methods": [
+      "get_data(self, symbol, interval, period)"
+     ]
+    },
+    {
+     "name": "FallbackProvider",
+     "bases": [
+      "MarketDataProvider"
+     ],
+     "doc": "",
+     "methods": [
+      "get_data(self, symbol, interval, period)"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "get_provider",
+     "sig": "()",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_get_provider_lazy",
+     "sig": "() -> MarketDataProvider",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "fetch_data",
+     "sig": "(symbol, interval, period) -> pd.DataFrame",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_latest_value",
+     "sig": "(series) -> Optional[float]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_yoy_pct",
+     "sig": "(series) -> Optional[float]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "get_macro_data",
+     "sig": "(api_key) -> Tuple[Dict[str, Dict[str, float]], bool]",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_get_macro_data_impl",
+     "sig": "(fred, fetch) -> Tuple[Dict[str, Dict[str, float]], bool]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "fetch_fred_series",
+     "sig": "(series_id, fred_key, limit=…)",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core",
+    "src.core.config",
+    "src.db.market_cache"
+   ]
+  }
+ },
+ "bias": {
+  "file": {
+   "path": "src/core/bias.py",
+   "loc": 209,
+   "doc": "Canonical directional bias — the single definition of BULLISH / BEARISH /",
+   "classes": [
+    {
+     "name": "TimeframeBias",
+     "bases": [],
+     "doc": "One timeframe's canonical read: three votes, unanimous or NEUTRAL.",
+     "methods": []
+    },
+    {
+     "name": "HouseView",
+     "bases": [],
+     "doc": "The composite directional read for one instrument.",
+     "methods": [
+      "timeframe(self, name) -> Optional[TimeframeBias]",
+      "asof(self) -> Optional[pd.Timestamp]"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "timeframe_bias",
+     "sig": "(df, timeframe, fast=…, slow=…) -> Optional[TimeframeBias]",
+     "doc": "The canonical read for one OHLC frame, or ``None`` when there isn't",
+     "kind": "public"
+    },
+    {
+     "name": "house_view",
+     "sig": "(pair, weekly=…, daily=…, h4=…) -> HouseView",
+     "doc": "Combine the canonical timeframe reads into one weighted house view.",
+     "kind": "public"
+    },
+    {
+     "name": "timeframe_agreement",
+     "sig": "(view, trade_direction) -> Tuple[Dict, ...]",
+     "doc": "Per-timeframe verdict on a proposed trade direction.",
+     "kind": "public"
+    },
+    {
+     "name": "dissenting_timeframes",
+     "sig": "(view, trade_direction) -> Tuple[str, ...]",
+     "doc": "Names of the timeframes actively pointing the other way — the short",
+     "kind": "public"
+    },
+    {
+     "name": "normalize_direction",
+     "sig": "(text) -> str",
+     "doc": "Map a page's own vocabulary (Long/Short, BUY/SELL, Bullish/Bearish,",
+     "kind": "public"
+    },
+    {
+     "name": "is_conflict",
+     "sig": "(house_direction, page_direction) -> bool",
+     "doc": "True only when both reads are directional and on opposite sides —",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.config",
+    "src.indicators.technical"
+   ]
+  }
+ },
+ "ranker": {
+  "file": {
+   "path": "src/pages_lib/setup_ranker.py",
+   "loc": 1598,
+   "doc": "Setup Ranker page — Bloomberg-terminal version.",
+   "classes": [
+    {
+     "name": "_SetupRankerDataFeed",
+     "bases": [],
+     "doc": "Encapsulates the 3 timeframe pulls so the page logic is testable.",
+     "methods": [
+      "daily(ticker, days=…) -> pd.DataFrame",
+      "four_hour(ticker) -> pd.DataFrame",
+      "weekly(ticker) -> pd.DataFrame",
+      "currency_strength_diff(pair) -> Optional[float]",
+      "score(cls, pair, info, direction) -> dict"
+     ]
+    },
+    {
+     "name": "SetupRankerPage",
+     "bases": [
+      "BloombergPage"
+     ],
+     "doc": "Bloomberg-styled multi-pair scoring scanner.",
+     "methods": [
+      "configure(self) -> PageContext",
+      "sidebar(self, ctx) -> None",
+      "body(self, ctx) -> None",
+      "_scan(pairs, directions) -> list",
+      "_track_score_history(cls, all_results) -> list",
+      "_render_stale_panel(stale) -> None",
+      "_net_exposure(results, account_bal, risk_pct, rr_ratio) -> dict",
+      "_render_exposure_strip(cls, results, account_bal, risk_pct, rr_ratio) -> None",
+      "_held_positions() -> list",
+      "_stack_warnings(pair, direction, held) -> list",
+      "_render_held_book(cls, held) -> None",
+      "_exposure_badge(cls, pair, direction, held)",
+      "_cockpit_context(pairs) -> dict",
+      "_cockpit_badge(r, cockpit) -> tuple"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "alert_price_bucket",
+     "sig": "(price, band=…) -> int",
+     "doc": "Coarse, instrument-agnostic price bucket for alert dedupe. Log-space",
+     "kind": "public"
+    },
+    {
+     "name": "fmt_price",
+     "sig": "(p) -> str",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "trade_levels",
+     "sig": "(entry, sl_pips, pip_size, direction, rr) -> dict",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "money_breakdown",
+     "sig": "(sl_pips, pip_value, account_balance, risk_pct, rr) -> dict",
+     "doc": "Lot size, target $ risk, actual $ risk (after lot rounding), and $ won",
+     "kind": "public"
+    },
+    {
+     "name": "risk_deviates",
+     "sig": "(mb, tolerance=…) -> bool",
+     "doc": "True when lot-rounding pushed actual $ risk >tolerance away from the",
+     "kind": "public"
+    },
+    {
+     "name": "trade_rationale_template",
+     "sig": "(r, lv, rr_ratio) -> str",
+     "doc": "Deterministic 'why this trade' facts built from the scored criteria —",
+     "kind": "public"
+    },
+    {
+     "name": "polished_rationale",
+     "sig": "(template) -> Optional[str]",
+     "doc": "Optional Claude API polish of the rationale facts (fail soft to the",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "pages.daily_cockpit_tab",
+    "src.core.bias",
+    "src.core.secrets",
+    "src.core.signals",
+    "src.debug",
+    "src.instruments",
+    "src.pages_lib.base",
+    "src.pages_lib.currency_strength",
+    "src.services",
+    "src.services.bias_service",
+    "src.services.exposure",
+    "src.services.market_data",
+    "src.services.mt5_link",
+    "src.services.open_positions",
+    "src.services.parallel_fetch",
+    "src.services.signal_store",
+    "src.ui.components",
+    "src.ui.theme"
+   ]
+  }
+ },
+ "signal-store": {
+  "file": {
+   "path": "src/services/signal_store.py",
+   "loc": 159,
+   "doc": "Shared trade-signal persistence — save any page's signals to ``trade_setups``.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "_fx_session_day",
+     "sig": "(moment) -> str",
+     "doc": "The FX trading day ``moment`` belongs to, as ``YYYY-MM-DD``.",
+     "kind": "private"
+    },
+    {
+     "name": "_period_key",
+     "sig": "(sig) -> str",
+     "doc": "The bar the read came from, as ``YYYY-MM-DD``; else the current FX day.",
+     "kind": "private"
+    },
+    {
+     "name": "default_dedupe_key",
+     "sig": "(sig) -> str",
+     "doc": "pair + bias + period — one stored row per view per bar.",
+     "kind": "public"
+    },
+    {
+     "name": "persist_signals",
+     "sig": "(source, signals, session=…, dedupe_key=…, namespace=…) -> int",
+     "doc": "Persist a page's signals to ``trade_setups``. Returns the number saved.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.signals",
+    "src.core.volume_profile",
+    "src.db.cache",
+    "src.db.market_cache",
+    "src.services.alert_service",
+    "src.services.session_service"
+   ]
+  }
+ },
+ "precomputed": {
+  "file": {
+   "path": "src/services/precomputed.py",
+   "loc": 222,
+   "doc": "Precomputed score board — the worker's output the UI reads instead of",
+   "classes": [],
+   "functions": [
+    {
+     "name": "serialize_house_view",
+     "sig": "(view) -> Dict",
+     "doc": "A :class:`src.core.bias.HouseView` → JSON-safe dict (round-trips via",
+     "kind": "public"
+    },
+    {
+     "name": "deserialize_house_view",
+     "sig": "(data)",
+     "doc": "Reconstruct a full :class:`HouseView` (with ``.timeframe()`` / ``.asof``)",
+     "kind": "public"
+    },
+    {
+     "name": "build_board",
+     "sig": "(pairs) -> Dict",
+     "doc": "Wrap per-pair entries in the board envelope with a UTC computed-at stamp.",
+     "kind": "public"
+    },
+    {
+     "name": "board_age_seconds",
+     "sig": "(board) -> Optional[float]",
+     "doc": "Seconds since the board was computed, or ``None`` if unknown/unparseable.",
+     "kind": "public"
+    },
+    {
+     "name": "board_is_fresh",
+     "sig": "(board, max_age_s=…) -> bool",
+     "doc": "True when the board exists and was computed within ``max_age_s``.",
+     "kind": "public"
+    },
+    {
+     "name": "house_view_from_board",
+     "sig": "(pair, board)",
+     "doc": "The precomputed :class:`HouseView` for ``pair``, or ``None`` when the",
+     "kind": "public"
+    },
+    {
+     "name": "setup_from_board",
+     "sig": "(pair, board) -> Optional[Dict]",
+     "doc": "The precomputed best-direction Setup Ranker summary for ``pair``.",
+     "kind": "public"
+    },
+    {
+     "name": "board_pairs",
+     "sig": "(board) -> List[str]",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_db_cfg",
+     "sig": "()",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_db_read",
+     "sig": "() -> Optional[Dict]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_db_write",
+     "sig": "(board) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_json_read",
+     "sig": "() -> Optional[Dict]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_json_write",
+     "sig": "(board) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "store_board",
+     "sig": "(board) -> None",
+     "doc": "Persist the board durably (Postgres) and to the local JSON fallback.",
+     "kind": "public"
+    },
+    {
+     "name": "read_board",
+     "sig": "() -> Optional[Dict]",
+     "doc": "The latest board: prefers the DB value, falls back to the JSON file.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.bias",
+    "src.db",
+    "src.db.market_cache"
+   ]
+  }
+ },
+ "scorecard": {
+  "file": {
+   "path": "src/services/source_scorecard.py",
+   "loc": 275,
+   "doc": "Source scorecard — which signal sources actually predict winners?",
+   "classes": [
+    {
+     "name": "RowResult",
+     "bases": [],
+     "doc": "",
+     "methods": []
+    }
+   ],
+   "functions": [
+    {
+     "name": "_pip_size_for",
+     "sig": "(row) -> Optional[float]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_detail",
+     "sig": "(row) -> Dict[str, Any]",
+     "doc": "``checks_detail`` as a dict — JSONB arrives deserialized, fixtures as text.",
+     "kind": "private"
+    },
+    {
+     "name": "row_horizon",
+     "sig": "(row, default=…) -> int",
+     "doc": "The page's own intended horizon in trading days, else ``default``.",
+     "kind": "public"
+    },
+    {
+     "name": "quality_passed",
+     "sig": "(row) -> Optional[bool]",
+     "doc": "The tradeability gate recorded at signal time, or ``None`` if unrecorded.",
+     "kind": "public"
+    },
+    {
+     "name": "_as_float",
+     "sig": "(value) -> Optional[float]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_bars_after",
+     "sig": "(bars, logged_at) -> Optional[pd.DataFrame]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "evaluate_row",
+     "sig": "(row, bars, horizon=…) -> RowResult",
+     "doc": "Resolve one ``trade_setups`` row into a :class:`RowResult`.",
+     "kind": "public"
+    },
+    {
+     "name": "build_scorecard",
+     "sig": "(rows, bars_by_ticker, horizon=…) -> pd.DataFrame",
+     "doc": "Aggregate per-source performance. Returns a frame indexed by source with:",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.instruments.registry",
+    "src.services.signal_expiry"
+   ]
+  }
+ },
+ "exposure": {
+  "file": {
+   "path": "src/services/exposure.py",
+   "loc": 229,
+   "doc": "Currency-leg exposure guard — catch the stack `CORR_GROUPS` can't see.",
+   "classes": [
+    {
+     "name": "Position",
+     "bases": [],
+     "doc": "One held (or proposed) position, reduced to what exposure cares about.",
+     "methods": [
+      "side(self) -> int",
+      "describe(self) -> str"
+     ]
+    },
+    {
+     "name": "Leg",
+     "bases": [],
+     "doc": "",
+     "methods": []
+    },
+    {
+     "name": "StackWarning",
+     "bases": [],
+     "doc": "The candidate would add to a currency leg you already hold.",
+     "methods": [
+      "count(self) -> int",
+      "side_word(self) -> str",
+      "summary(self) -> str",
+      "as_dict(self) -> dict"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "direction_side",
+     "sig": "(direction) -> int",
+     "doc": "Map any of the app's direction vocabularies onto +1 / -1 / 0.",
+     "kind": "public"
+    },
+    {
+     "name": "split_pair",
+     "sig": "(pair) -> Optional[Tuple[str, str]]",
+     "doc": "``\"EUR/AUD\"`` -> ``(\"EUR\", \"AUD\")``; ``None`` for anything unparseable",
+     "kind": "public"
+    },
+    {
+     "name": "pair_legs",
+     "sig": "(pair, direction, weight=…) -> List[Leg]",
+     "doc": "The two currency legs of a position.",
+     "kind": "public"
+    },
+    {
+     "name": "_as_positions",
+     "sig": "(positions) -> List[Position]",
+     "doc": "Accept `Position` objects or plain mappings (DB rows, MT4 dicts).",
+     "kind": "private"
+    },
+    {
+     "name": "net_currency_exposure",
+     "sig": "(positions) -> dict",
+     "doc": "Signed weight per currency across ``positions``.",
+     "kind": "public"
+    },
+    {
+     "name": "check_stack",
+     "sig": "(pair, direction, open_positions, weight=…, max_per_currency=…) -> List[StackWarning]",
+     "doc": "Would taking ``pair``/``direction`` stack a currency you already hold?",
+     "kind": "public"
+    },
+    {
+     "name": "worst_stack",
+     "sig": "(warnings) -> Optional[StackWarning]",
+     "doc": "The single warning a compact UI should show. ``None`` when clean.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.bias"
+   ]
+  }
+ },
+ "quant": {
+  "file": {
+   "path": "src/core/quant_models.py",
+   "loc": 475,
+   "doc": "quant_models.py",
+   "classes": [
+    {
+     "name": "OUFit",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "to_dict(self) -> dict"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "fit_ou",
+     "sig": "(series, dt=…) -> OUFit",
+     "doc": "Fit an Ornstein-Uhlenbeck process to a (presumed stationary) series --",
+     "kind": "public"
+    },
+    {
+     "name": "ou_signal",
+     "sig": "(fit, entry_z=…, exit_z=…, max_half_life=…) -> dict",
+     "doc": "Turn an OU fit into a discrete signal for the confluence engine.",
+     "kind": "public"
+    },
+    {
+     "name": "fit_garch",
+     "sig": "(returns, horizon=…, ann_factor=…) -> dict",
+     "doc": "Fit GARCH(1,1) on percentage returns and forecast volatility.",
+     "kind": "public"
+    },
+    {
+     "name": "garch_position_size",
+     "sig": "(account_risk_pct, forecast_daily_vol_pct, stop_vol_multiple=…) -> dict",
+     "doc": "Vol-targeted sizing: place the stop at k * forecast daily vol and size",
+     "kind": "public"
+    },
+    {
+     "name": "gbm_null_test",
+     "sig": "(prices, observed_metric, metric_fn, n_sims=…, seed=…) -> dict",
+     "doc": "Test whether a signal's performance beats pure luck under GBM.",
+     "kind": "public"
+    },
+    {
+     "name": "uip_carry_analysis",
+     "sig": "(spot, rate_domestic, rate_foreign, window=…) -> pd.DataFrame",
+     "doc": "Uncovered Interest Parity says expected depreciation of the domestic",
+     "kind": "public"
+    },
+    {
+     "name": "kalman_dynamic_beta",
+     "sig": "(y, x, delta=…, obs_var=…) -> pd.DataFrame",
+     "doc": "Time-varying regression  y_t = alpha_t + beta_t * x_t + v_t",
+     "kind": "public"
+    },
+    {
+     "name": "engle_granger",
+     "sig": "(y, x) -> dict",
+     "doc": "Two-step Engle-Granger:",
+     "kind": "public"
+    },
+    {
+     "name": "full_pair_analysis",
+     "sig": "(y, x, returns_for_garch=…, entry_z=…) -> dict",
+     "doc": "The whole pipeline for a candidate pair (e.g. gold vs real yields,",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  }
+ },
+ "forecast": {
+  "file": {
+   "path": "src/services/forecast_service.py",
+   "loc": 343,
+   "doc": "Probability forecasting engine — Monte Carlo on daily closes.",
+   "classes": [
+    {
+     "name": "ForecastResult",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "vol_ratio(self) -> float",
+      "edge(self, rr, side) -> float"
+     ]
+    },
+    {
+     "name": "StatForecast",
+     "bases": [],
+     "doc": "",
+     "methods": []
+    },
+    {
+     "name": "AccuracyResult",
+     "bases": [],
+     "doc": "",
+     "methods": []
+    }
+   ],
+   "functions": [
+    {
+     "name": "_ewma_vol",
+     "sig": "(returns, lam=…) -> float",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_parametric_paths",
+     "sig": "(rng, last, mu, sig, horizon, n) -> np.ndarray",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_bootstrap_paths",
+     "sig": "(rng, last, returns, horizon, n) -> np.ndarray",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_first_touch",
+     "sig": "(paths, level, above) -> np.ndarray",
+     "doc": "Index of first close beyond `level` per path; horizon+1 if never.",
+     "kind": "private"
+    },
+    {
+     "name": "run_forecast",
+     "sig": "(closes, atr, horizon, sl_mult=…, rr=…) -> ForecastResult",
+     "doc": "Full Monte Carlo forecast. Cached; deterministic per input.",
+     "kind": "public"
+    },
+    {
+     "name": "run_statistical_forecast",
+     "sig": "(series, periods, model_type, ci=…) -> StatForecast",
+     "doc": "Fit a classical time-series model and project `periods` business days,",
+     "kind": "public"
+    },
+    {
+     "name": "_norm_ppf",
+     "sig": "(p) -> float",
+     "doc": "Inverse standard-normal CDF (Acklam's rational approximation) — avoids a",
+     "kind": "private"
+    },
+    {
+     "name": "_quick_cone_bounds",
+     "sig": "(log_r, last, horizon, rng, lo=…, hi=…, n=…) -> Tuple[float, float]",
+     "doc": "Light Student-t Monte Carlo terminal band for calibration (cheaper than",
+     "kind": "private"
+    },
+    {
+     "name": "backtest_forecast_accuracy",
+     "sig": "(closes, horizon, model_type, n_windows=…, seed=…) -> Optional[AccuracyResult]",
+     "doc": "Rolling-origin evaluation: step back through history, forecast `horizon`",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  }
+ },
+ "regime": {
+  "file": {
+   "path": "src/services/regime_service.py",
+   "loc": 428,
+   "doc": "Streamlit-facing wrapper over the statistical jump model",
+   "classes": [
+    {
+     "name": "RegimeRead",
+     "bases": [],
+     "doc": "One instrument's current regime, as the offline fit sees it.",
+     "methods": [
+      "is_risk_off(self) -> bool",
+      "to_payload(self) -> dict"
+     ]
+    },
+    {
+     "name": "PenaltyTuning",
+     "bases": [],
+     "doc": "Result of a walk-forward sweep over candidate jump penalties.",
+     "methods": [
+      "to_payload(self) -> dict"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "regime_inputs",
+     "sig": "(daily, halflives=…) -> tuple[pd.DataFrame, pd.Series]",
+     "doc": "Turn a daily OHLC frame into ``(features, returns)``.",
+     "kind": "public"
+    },
+    {
+     "name": "_current_spell",
+     "sig": "(states) -> int",
+     "doc": "How many trailing bars the final state has held.",
+     "kind": "private"
+    },
+    {
+     "name": "read_from_fit",
+     "sig": "(instrument, fit) -> RegimeRead",
+     "doc": "Summarise a fitted model as a `RegimeRead` (pure).",
+     "kind": "public"
+    },
+    {
+     "name": "annualised_sharpe",
+     "sig": "(returns, ann_factor=…) -> float",
+     "doc": "Annualised Sharpe of a return stream. 0.0 for an empty or flat stream",
+     "kind": "public"
+    },
+    {
+     "name": "regime_strategy_returns",
+     "sig": "(returns, states, risk_on_state=…, n_states=…, risk_off_exposure=…, cost_bps=…) -> pd.Series",
+     "doc": "Returns of \"hold the asset in the good regime, de-risk in the bad one\".",
+     "kind": "public"
+    },
+    {
+     "name": "tune_jump_penalty",
+     "sig": "(features, returns, candidates=…, min_train=…, refit_every=…, n_folds=…, cost_bps=…, risk_off_exposure=…, ann_factor=…, ",
+     "doc": "Walk-forward selection of ``jump_penalty`` — the paper's procedure, and the",
+     "kind": "public"
+    },
+    {
+     "name": "_fit_cached",
+     "sig": "(instrument, ticker, jump_penalty, n_states) -> Optional[JumpModelFit]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "get_regime",
+     "sig": "(instrument, jump_penalty=…, n_states=…) -> Optional[RegimeRead]",
+     "doc": "The current regime for a registry instrument, or ``None`` when the",
+     "kind": "public"
+    },
+    {
+     "name": "get_regime_history",
+     "sig": "(instrument, jump_penalty=…, n_states=…) -> pd.Series",
+     "doc": "The full fitted label path, for **charting only**.",
+     "kind": "public"
+    },
+    {
+     "name": "log_regime",
+     "sig": "(read) -> bool",
+     "doc": "Append the read to ``tool_usage_log`` under ``jump_regime``.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core.jump_model",
+    "src.instruments.registry",
+    "src.services.alert_service",
+    "src.services.market_data",
+    "src.services.tool_log"
+   ]
+  }
+ },
+ "threat": {
+  "file": {
+   "path": "src/core/threat_core.py",
+   "loc": 369,
+   "doc": "threat_core.py — pure logic for the Threat Board.",
+   "classes": [
+    {
+     "name": "Position",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "base(self) -> str",
+      "quote(self) -> str"
+     ]
+    },
+    {
+     "name": "ThreatReport",
+     "bases": [],
+     "doc": "",
+     "methods": []
+    }
+   ],
+   "functions": [
+    {
+     "name": "pip_size",
+     "sig": "(pair) -> float",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "pip_value_usd",
+     "sig": "(pos, usdjpy) -> float",
+     "doc": "USD value of one pip for this position. Handles JPY- and USD-quoted pairs;",
+     "kind": "public"
+    },
+    {
+     "name": "stop_risk_usd",
+     "sig": "(pos, usdjpy) -> float",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "currency_exposure",
+     "sig": "(positions) -> dict[str, float]",
+     "doc": "Net lots per currency. Long AUDJPY = +AUD lots, -JPY lots.",
+     "kind": "public"
+    },
+    {
+     "name": "correlated_stop_risk",
+     "sig": "(positions, usdjpy) -> tuple[float, str]",
+     "doc": "Worst-case correlated cluster: for each currency, sum stop risks of all",
+     "kind": "public"
+    },
+    {
+     "name": "usdjpy_snapshot",
+     "sig": "() -> tuple[float, float]",
+     "doc": "(last_price, 5-day rate of change %). Raises on data failure.",
+     "kind": "public"
+    },
+    {
+     "name": "jpy_cot_net_percentile",
+     "sig": "() -> float | None",
+     "doc": "Percentile (0-100) of latest non-commercial net JPY futures position",
+     "kind": "public"
+    },
+    {
+     "name": "upcoming_red_events",
+     "sig": "(currencies, days=…)",
+     "doc": "Expects news_fetcher.get_upcoming_events() -> list of dicts with at least",
+     "kind": "public"
+    },
+    {
+     "name": "scan_intervention_headlines",
+     "sig": "() -> list[str]",
+     "doc": "Expects news_fetcher.get_recent_headlines() -> list[str]. Returns hits.",
+     "kind": "public"
+    },
+    {
+     "name": "current_regime",
+     "sig": "() -> str | None",
+     "doc": "Expects regime.current_regime() -> 'risk_on' | 'risk_off' | 'neutral'.",
+     "kind": "public"
+    },
+    {
+     "name": "score_concentration",
+     "sig": "(worst_usd, equity) -> float",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "score_intervention",
+     "sig": "(last, roc5, jpy_net_lots, zone=…, headline_hits=…) -> float",
+     "doc": "Only threatens accounts net SHORT yen (long USDJPY/AUDJPY etc.).",
+     "kind": "public"
+    },
+    {
+     "name": "score_squeeze",
+     "sig": "(cot_pct, jpy_net_lots) -> float",
+     "doc": "Crowded with the herd = risk. Specs deeply short yen (low percentile)",
+     "kind": "public"
+    },
+    {
+     "name": "score_calendar",
+     "sig": "(events) -> float",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "score_regime",
+     "sig": "(regime, exposure) -> float",
+     "doc": "Risk-off while long risk currencies (AUD, NZD, CAD) or short JPY/CHF",
+     "kind": "public"
+    },
+    {
+     "name": "band",
+     "sig": "(score) -> str",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "build_report",
+     "sig": "(positions, equity, zone=…) -> ThreatReport",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "ensure_tables",
+     "sig": "(conn) -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "load_positions",
+     "sig": "(conn) -> list[Position]",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "journal",
+     "sig": "(conn, rep) -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "last_state",
+     "sig": "(conn) -> str | None",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  }
+ },
+ "cot": {
+  "file": {
+   "path": "src/services/cot_fetcher.py",
+   "loc": 239,
+   "doc": "cot_fetcher.py",
+   "classes": [],
+   "functions": [
+    {
+     "name": "_first_matching_column",
+     "sig": "(df, candidates) -> str",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_cache_path",
+     "sig": "(report_type, year) -> str",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_fetch_year",
+     "sig": "(report_type, year, force_refresh=…) -> pd.DataFrame",
+     "doc": "Fetch one year of a COT report, using local CSV cache when available.",
+     "kind": "private"
+    },
+    {
+     "name": "fetch_report",
+     "sig": "(report_type, years_back=…, force_refresh=…) -> pd.DataFrame",
+     "doc": "Fetch and concatenate multiple years of a given COT report type.",
+     "kind": "public"
+    },
+    {
+     "name": "get_instrument_series",
+     "sig": "(name, years_back=…, force_refresh=…) -> pd.DataFrame",
+     "doc": "Return a tidy weekly positioning DataFrame for one instrument.",
+     "kind": "public"
+    },
+    {
+     "name": "compute_extremeness",
+     "sig": "(df, lookback_weeks=…) -> dict",
+     "doc": "Percentile rank + z-score of the latest net positioning vs its own",
+     "kind": "public"
+    },
+    {
+     "name": "get_all_snapshot",
+     "sig": "(years_back=…) -> pd.DataFrame",
+     "doc": "Latest-week snapshot across every configured instrument, for a",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  }
+ },
+ "news": {
+  "file": {
+   "path": "src/services/news_fetcher.py",
+   "loc": 245,
+   "doc": "news_fetcher.py",
+   "classes": [
+    {
+     "name": "NewsFetcher",
+     "bases": [],
+     "doc": "",
+     "methods": [
+      "_get_json(self, url) -> list | None",
+      "parse_events(raw) -> list[dict]",
+      "upsert(self, events) -> tuple[int, int]",
+      "_mark_fetched(self, n_events) -> None",
+      "freshness(self) -> tuple[float | None, bool]",
+      "fetch(self) -> bool",
+      "upcoming(self, hours=…) -> list",
+      "briefing_line(self) -> str"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "_utcnow",
+     "sig": "() -> datetime",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "main",
+     "sig": "() -> None",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.services.evening_sentry"
+   ]
+  }
+ },
+ "alerts": {
+  "file": {
+   "path": "src/services/alert_service.py",
+   "loc": 300,
+   "doc": "Shared email-alert plumbing for the scanner pages.",
+   "classes": [
+    {
+     "name": "NotifyCache",
+     "bases": [],
+     "doc": "File-backed set of already-alerted keys, namespaced per page.",
+     "methods": [
+      "_db_cfg(self)",
+      "_db_read(self) -> Optional[set]",
+      "_db_write(self, keys) -> None",
+      "_db_reset(self) -> None",
+      "_local_read(self) -> set",
+      "load(self) -> set",
+      "_save(self, keys) -> None",
+      "save(self, keys) -> None",
+      "add(self, keys) -> set",
+      "filter_new(self, keys) -> List[str]",
+      "reset(self) -> None"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "email_configured",
+     "sig": "() -> bool",
+     "doc": "True when enough Gmail config is present to actually send.",
+     "kind": "public"
+    },
+    {
+     "name": "email_recipient",
+     "sig": "() -> str",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_log_email",
+     "sig": "(source, subject, recipient, ok, error) -> None",
+     "doc": "Audit one email send to Postgres ``tool_usage_log`` (tool ``email_alert``).",
+     "kind": "private"
+    },
+    {
+     "name": "send_email",
+     "sig": "(subject, html_body, plain_body=…, source=…) -> Tuple[bool, str]",
+     "doc": "Send one multipart (plain + HTML) email. Returns (ok, status_message) so",
+     "kind": "public"
+    },
+    {
+     "name": "_lock_for",
+     "sig": "(path) -> threading.Lock",
+     "doc": "",
+     "kind": "private"
+    }
+   ],
+   "imports": [
+    "src.core",
+    "src.db",
+    "src.db.market_cache",
+    "src.services.tool_log"
+   ]
+  }
+ },
+ "mt4-import": {
+  "file": {
+   "path": "src/services/mt4_import.py",
+   "loc": 329,
+   "doc": "Parse an MT4 'Save as Report' / 'Detailed Report' HTML statement into rows",
+   "classes": [],
+   "functions": [
+    {
+     "name": "session_for_hour",
+     "sig": "(hour) -> str",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_to_float",
+     "sig": "(val) -> Optional[float]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_to_dt",
+     "sig": "(val) -> Optional[datetime]",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "_decode",
+     "sig": "(content) -> str",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "parse_mt4_balance",
+     "sig": "(content) -> Optional[float]",
+     "doc": "Pull the account 'Balance:' figure from the statement summary (falls back",
+     "kind": "public"
+    },
+    {
+     "name": "parse_mt4_html",
+     "sig": "(content) -> List[dict]",
+     "doc": "Return one dict per *closed* trade with the raw broker fields.",
+     "kind": "public"
+    },
+    {
+     "name": "parse_mt4_open_positions",
+     "sig": "(content) -> List[dict]",
+     "doc": "Return one dict per **open** position in the statement.",
+     "kind": "public"
+    },
+    {
+     "name": "to_open_position_rows",
+     "sig": "(positions, symbol_map) -> Tuple[List[dict], Dict[str, int]]",
+     "doc": "Map parsed open positions onto registry instruments for the exposure",
+     "kind": "public"
+    },
+    {
+     "name": "to_journal_rows",
+     "sig": "(trades, symbol_map, broker_utc_offset=…) -> Tuple[List[dict], Dict[str, int]]",
+     "doc": "Convert parsed trades to journal rows. Returns (rows, skipped) where",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.instruments.registry",
+    "src.services.broker_symbols",
+    "src.services.open_positions"
+   ]
+  }
+ },
+ "mt5-link": {
+  "file": {
+   "path": "src/services/mt5_link.py",
+   "loc": 351,
+   "doc": "Live MetaTrader 5 terminal link — read the real book, not a saved file.",
+   "classes": [
+    {
+     "name": "AccountSnapshot",
+     "bases": [],
+     "doc": "The broker's own account figures — authoritative, unlike a typed-in",
+     "methods": [
+      "to_dict(self) -> Dict[str, Any]"
+     ]
+    }
+   ],
+   "functions": [
+    {
+     "name": "_import_mt5",
+     "sig": "()",
+     "doc": "The lazy import. Returns the module or ``None`` — never raises, so a",
+     "kind": "private"
+    },
+    {
+     "name": "available",
+     "sig": "() -> bool",
+     "doc": "True when the package can be imported at all (Windows + installed).",
+     "kind": "public"
+    },
+    {
+     "name": "_fmt_error",
+     "sig": "(mt5) -> str",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "probe",
+     "sig": "(mt5=…) -> Tuple[bool, str]",
+     "doc": "``(connected, message)`` — a one-shot connectivity check for the UI.",
+     "kind": "public"
+    },
+    {
+     "name": "_snapshot_from",
+     "sig": "(acct) -> AccountSnapshot",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "positions_to_rows",
+     "sig": "(positions, symbol_map) -> Tuple[List[dict], Dict[str, int]]",
+     "doc": "Map raw MT5 position objects onto stored rows (pure given the objects).",
+     "kind": "public"
+    },
+    {
+     "name": "read_terminal",
+     "sig": "(mt5=…) -> Dict[str, Any]",
+     "doc": "Read open positions + account from the running terminal.",
+     "kind": "public"
+    },
+    {
+     "name": "sync",
+     "sig": "(mt5=…, set_balance=…) -> Dict[str, Any]",
+     "doc": "Read the terminal and persist it: positions → the exposure store,",
+     "kind": "public"
+    },
+    {
+     "name": "margin_warning",
+     "sig": "(account, danger=…) -> Optional[str]",
+     "doc": "A plain-language margin-level warning, or ``None`` when healthy.",
+     "kind": "public"
+    },
+    {
+     "name": "closed_deals",
+     "sig": "(days=…, lookback_days=…, mt5=…) -> Dict[str, Any]",
+     "doc": "Closed deals whose *exit* falls in the last ``days``, as plain dicts.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.instruments.registry",
+    "src.services",
+    "src.services.broker_symbols",
+    "src.services.open_positions"
+   ]
+  }
+ },
+ "mt5-trade-import": {
+  "file": {
+   "path": "src/services/mt5_trade_import.py",
+   "loc": 245,
+   "doc": "Import closed MT5 deals into ``trade_setups`` as graded, closed rows.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "parse_close_level",
+     "sig": "(comment) -> Tuple[Optional[str], Optional[float]]",
+     "doc": "``(\"sl\", 18.76307)`` from a broker close comment, else ``(None, None)``.",
+     "kind": "public"
+    },
+    {
+     "name": "_weighted",
+     "sig": "(pairs) -> Optional[float]",
+     "doc": "Volume-weighted average price; plain mean if volumes are all zero.",
+     "kind": "private"
+    },
+    {
+     "name": "pair_deals",
+     "sig": "(deals, days=…, now=…) -> List[Dict[str, Any]]",
+     "doc": "Reassemble deals into round trips closed within the last ``days``.",
+     "kind": "public"
+    },
+    {
+     "name": "trips_to_journal_rows",
+     "sig": "(trips, symbol_map) -> Tuple[List[Dict[str, Any]], Dict[str, int]]",
+     "doc": "Map round trips to ``trade_setups`` rows. Returns ``(rows, skipped)``.",
+     "kind": "public"
+    },
+    {
+     "name": "import_closed_trades",
+     "sig": "(days=…, cfg=…, mt5=…) -> Dict[str, Any]",
+     "doc": "Read closed MT5 deals and store the new ones. Never raises.",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.db.cache",
+    "src.db.market_cache",
+    "src.instruments.registry",
+    "src.services",
+    "src.services.broker_symbols",
+    "src.services.mt4_import"
+   ]
+  }
+ },
+ "mt5-import-cron": {
+  "file": {
+   "path": "deploy/mt5_trade_import.py",
+   "loc": 49,
+   "doc": "Scheduled entry point: import closed MT5 trades into ``trade_setups``.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "main",
+     "sig": "() -> int",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.services.mt5_trade_import"
+   ]
+  }
+ },
+ "observability": {
+  "file": {
+   "path": "src/core/observability.py",
+   "loc": 468,
+   "doc": "Central observability: structured logging + event recording.",
+   "classes": [],
+   "functions": [
+    {
+     "name": "init_logging",
+     "sig": "() -> None",
+     "doc": "Configure handlers once. Safe (and cheap) to call on every page.",
+     "kind": "public"
+    },
+    {
+     "name": "get_logger",
+     "sig": "(name=…) -> logging.Logger",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "_install_excepthooks",
+     "sig": "() -> None",
+     "doc": "Record uncaught exceptions on the main thread and worker threads.",
+     "kind": "private"
+    },
+    {
+     "name": "session_id",
+     "sig": "() -> str",
+     "doc": "Stable per-browser-session id, or a sentinel outside a session.",
+     "kind": "public"
+    },
+    {
+     "name": "_detect_page",
+     "sig": "() -> str",
+     "doc": "Best-effort name of the page being rendered, from the call stack.",
+     "kind": "private"
+    },
+    {
+     "name": "_session_context",
+     "sig": "() -> Dict[str, Any]",
+     "doc": "Pull a few commonly-useful selections off session_state, if present.",
+     "kind": "private"
+    },
+    {
+     "name": "log_event",
+     "sig": "(event_type, level=…, message=…, page=…, **fields) -> None",
+     "doc": "Record one structured event to JSONL, Postgres and the text log.",
+     "kind": "public"
+    },
+    {
+     "name": "log_page_view",
+     "sig": "(page=…, **extra) -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "log_exception",
+     "sig": "(exc, where=…, page=…, **fields) -> None",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "track_fetch",
+     "sig": "(source, **fields)",
+     "doc": "Time a data fetch and record latency / success / error.",
+     "kind": "public"
+    },
+    {
+     "name": "_safe",
+     "sig": "(obj) -> Any",
+     "doc": "Make a value JSON-serialisable without throwing.",
+     "kind": "private"
+    },
+    {
+     "name": "_ensure_pg",
+     "sig": "()",
+     "doc": "Return a live connection or None. Disables itself after a failure.",
+     "kind": "private"
+    },
+    {
+     "name": "reset_pg",
+     "sig": "() -> None",
+     "doc": "Re-enable the Postgres sink (e.g. after the user fixes credentials).",
+     "kind": "public"
+    },
+    {
+     "name": "_pg_insert",
+     "sig": "(ts, sid, page, event_type, level, message, data) -> None",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "read_events",
+     "sig": "(limit=…) -> List[Dict[str, Any]]",
+     "doc": "Return the last ``limit`` events from the JSONL log (newest last).",
+     "kind": "public"
+    },
+    {
+     "name": "read_app_log",
+     "sig": "(limit=…) -> str",
+     "doc": "Return the last ``limit`` lines of the text log.",
+     "kind": "public"
+    },
+    {
+     "name": "read_pg_events",
+     "sig": "(limit=…) -> List[Dict[str, Any]]",
+     "doc": "Query the Postgres app_events table, newest first. [] if unavailable.",
+     "kind": "public"
+    },
+    {
+     "name": "log_paths",
+     "sig": "() -> Dict[str, Path]",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": [
+    "src.core"
+   ]
+  }
+ },
+ "pg": {
+  "ops": {
+   "how": "docker compose up db",
+   "service": "db",
+   "note": "Published on 5433, not 5432 - a native Windows Postgres owns 5432.",
+   "env": [
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
+    "DB_USER",
+    "DB_PASSWORD"
+   ],
+   "compose": {
+    "command": "",
+    "image": "postgres:18-alpine",
+    "ports": [
+     "5433:5432"
+    ],
+    "depends_on": [],
+    "env_keys": [
+     "POSTGRES_USER",
+     "POSTGRES_PASSWORD",
+     "POSTGRES_DB"
+    ]
+   }
+  }
+ },
+ "notify-cache": {
+  "ops": {
+   "how": "No setup - JSON files created on first alert",
+   "note": "Gitignored; each scanner passes its own namespace."
+  }
+ },
+ "mt5-terminal": {
+  "ops": {
+   "how": "Install MetaTrader 5 and log in; Windows only",
+   "note": "Needs the interactive desktop session - Task Scheduler cannot attach.",
+   "env": [
+    "MT5_TERMINAL_PATH"
+   ]
+  }
+ },
+ "yahoo": {
+  "ops": {
+   "how": "pip install yfinance",
+   "env": []
+  }
+ },
+ "fred": {
+  "ops": {
+   "how": "Free API key from fred.stlouisfed.org",
+   "env": [
+    "FRED_API_KEY"
+   ]
+  }
+ },
+ "fmp": {
+  "ops": {
+   "how": "API key from financialmodelingprep.com",
+   "env": [
+    "FMP_API_KEY"
+   ]
+  }
+ },
+ "finnhub": {
+  "ops": {
+   "how": "API key from finnhub.io",
+   "env": [
+    "FINNHUB_API_KEY"
+   ]
+  }
+ },
+ "cftc": {
+  "ops": {
+   "how": "pip install cot_reports",
+   "env": []
+  }
+ },
+ "ff": {
+  "ops": {
+   "how": "Public weekly JSON feed, no key",
+   "env": []
+  }
+ },
+ "anthropic-api": {
+  "ops": {
+   "how": "pip install anthropic; key from console.anthropic.com",
+   "note": "Optional - every AI surface self-disables without it.",
+   "env": [
+    "ANTHROPIC_API_KEY"
+   ]
+  }
+ },
+ "gmail": {
+  "ops": {
+   "how": "Gmail account + app password",
+   "env": [
+    "GMAIL_SENDER",
+    "GMAIL_APP_PASSWORD",
+    "GMAIL_RECIPIENT"
+   ]
+  }
+ },
+ "telegram": {
+  "ops": {
+   "how": "BotFather bot + chat id",
+   "env": [
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID"
+   ]
+  }
+ },
+ "healthchecks": {
+  "ops": {
+   "how": "Create a check at healthchecks.io",
+   "env": [
+    "HEALTHCHECK_URL"
+   ]
+  }
+ }
+}

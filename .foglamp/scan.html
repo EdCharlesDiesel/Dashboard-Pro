@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard-Pro — codebase scan</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --panel:#ffffff; --line:#dfe3ea; --ink:#141821; --dim:#5c6675;
+    --edge:#b4bcc9; --edge-hi:#141821;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
+    --entry:#2563eb; --cron:#7c3aed; --agent:#d97706; --model:#db2777;
+    --tool:#0d9488; --service:#475569; --store:#4f46e5; --external:#64748b;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1017; --panel:#151a23; --line:#252c39; --ink:#e8ecf3; --dim:#8b95a7;
+      --edge:#3a4353; --edge-hi:#e8ecf3;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.4);
+      --entry:#60a5fa; --cron:#a78bfa; --agent:#fbbf24; --model:#f472b6;
+      --tool:#2dd4bf; --service:#94a3b8; --store:#818cf8; --external:#94a3b8;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);color:var(--ink);overflow:hidden;
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{display:flex;flex-direction:column;height:100%}
+
+  header{
+    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+    padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel);z-index:3;
+  }
+  header h1{font-size:15px;margin:0;font-weight:650;letter-spacing:-.01em}
+  header .tag{color:var(--dim);font-size:12.5px}
+  header .stats{margin-left:auto;display:flex;gap:16px;font-size:12px;color:var(--dim)}
+  header .stats b{color:var(--ink);font-weight:650;font-variant-numeric:tabular-nums}
+
+  #bar{
+    display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    padding:8px 18px;border-bottom:1px solid var(--line);background:var(--panel);z-index:3;
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
+    border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;
+    background:transparent;color:var(--dim);transition:.12s;
+  }
+  .chip:hover{border-color:var(--edge)}
+  .chip .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+  .chip.on{color:var(--ink);border-color:currentColor}
+  .chip.on .dot{box-shadow:0 0 0 3px color-mix(in srgb,currentColor 18%,transparent)}
+  .chip.off{opacity:.38}
+  #search{
+    margin-left:auto;border:1px solid var(--line);background:var(--bg);color:var(--ink);
+    border-radius:7px;padding:5px 10px;font:inherit;font-size:12.5px;width:190px;outline:none;
+  }
+  #search:focus{border-color:var(--entry)}
+  .btn{
+    border:1px solid var(--line);background:var(--bg);color:var(--dim);border-radius:7px;
+    padding:5px 11px;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;
+  }
+  .btn:hover{color:var(--ink);border-color:var(--edge)}
+  .btn.on{color:var(--ink);border-color:var(--entry);background:color-mix(in srgb,var(--entry) 10%,transparent)}
+
+  #stage{position:relative;flex:1;min-height:0;overflow:hidden;cursor:grab}
+  #stage.drag{cursor:grabbing}
+  svg{display:block;width:100%;height:100%;touch-action:none}
+
+  .enode{cursor:pointer}
+  .ebox{fill:var(--panel);stroke:var(--line);stroke-width:1.25;rx:9}
+  .eaccent{rx:2}
+  .estepc{fill:var(--bg);stroke:var(--line);stroke-width:1}
+  .estep{font-size:11px;font-weight:700;fill:var(--dim);text-anchor:middle;font-variant-numeric:tabular-nums}
+  .elabel{font-size:12.5px;font-weight:600;fill:var(--ink);letter-spacing:-.005em}
+  .esub{font-size:10.5px;fill:var(--dim)}
+  .ekind{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+  .egroup{font-size:9px;fill:var(--dim);font-weight:600}
+  .edge{fill:none;stroke:var(--edge);stroke-width:1.3;opacity:.55}
+  .edge.dash{stroke-dasharray:5 4}
+  .edge.dot{stroke-dasharray:1.5 4;stroke-linecap:round}
+  .elab{font-size:10px;fill:var(--dim);paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
+  .faded{opacity:.09}
+  .edge.hot{stroke:var(--edge-hi);opacity:1;stroke-width:2}
+  .elab.hot{fill:var(--ink);font-weight:600}
+  .enode.hot .ebox{stroke:var(--edge-hi);stroke-width:2}
+  .enode.sel .ebox{stroke:var(--entry);stroke-width:2.5}
+  .enode.sel .estepc{stroke:var(--entry)}
+  .enode.sel .estep{fill:var(--entry)}
+  .hit{fill:transparent}
+  .phaseband{fill:none;stroke:var(--line);stroke-dasharray:3 5;rx:14}
+  .phasetag{font-size:10px;font-weight:700;fill:var(--dim);letter-spacing:.05em;text-transform:uppercase}
+
+  aside{
+    position:absolute;top:12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;box-shadow:var(--shadow);z-index:2;display:none;
+  }
+  aside.show{display:block}
+  #side{right:12px;width:312px;max-height:calc(100% - 24px);overflow:auto;padding:15px 16px}
+  #side .k{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:7px}
+  #side h2{margin:0 0 3px;font-size:15.5px;letter-spacing:-.01em}
+  #side .sub{color:var(--dim);font-size:12px;margin-bottom:11px}
+  #side p{margin:0 0 12px;font-size:13px;line-height:1.55}
+  #side .meta{border-top:1px solid var(--line);padding-top:10px;font-size:11.5px;color:var(--dim)}
+  #side code{
+    font:11.5px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1.5px 5px;
+    display:inline-block;margin-top:3px;word-break:break-all;
+  }
+  #side .sec{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  #side .sec>.h{color:var(--ink);font-weight:650;margin-bottom:5px;font-size:12px}
+  #side .row{font-size:11.5px;color:var(--dim);padding:2.5px 0}
+  #side .row b{color:var(--ink);font-weight:600}
+  .vb{
+    display:inline-block;min-width:52px;font-size:9px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--dim);
+  }
+  .num{
+    display:inline-block;min-width:19px;text-align:center;font-size:10px;font-weight:700;
+    border:1px solid var(--line);border-radius:5px;padding:0 3px;margin-right:5px;
+    color:var(--dim);font-variant-numeric:tabular-nums;
+  }
+  .stepbadge{
+    display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--entry);
+    border:1px solid var(--entry);border-radius:6px;padding:1px 7px;margin-bottom:8px;
+  }
+  #close{position:absolute;top:11px;right:12px;border:0;background:none;color:var(--dim);cursor:pointer;font-size:17px;line-height:1;padding:2px 5px}
+  #close:hover{color:var(--ink)}
+
+  #build{left:12px;width:296px;max-height:calc(100% - 24px);overflow:auto;padding:14px 15px}
+  #build h3{margin:0 0 3px;font-size:13.5px;letter-spacing:-.01em}
+  #build .lede{font-size:11.5px;color:var(--dim);margin-bottom:12px;line-height:1.5}
+  #build .ph{margin-bottom:13px}
+  #build .pht{
+    font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink);padding-bottom:5px;margin-bottom:4px;border-bottom:1px solid var(--line);
+  }
+  #build .pht span{color:var(--dim);font-weight:600;text-transform:none;letter-spacing:0;font-size:10.5px}
+  #build .it{
+    display:flex;gap:7px;align-items:baseline;padding:2.5px 4px;border-radius:5px;
+    cursor:pointer;font-size:11.5px;
+  }
+  #build .it:hover{background:var(--bg)}
+  #build .it.on{background:color-mix(in srgb,var(--entry) 12%,transparent)}
+  #build .it .n{
+    flex:none;min-width:18px;text-align:right;color:var(--dim);font-weight:700;
+    font-variant-numeric:tabular-nums;font-size:10px;
+  }
+  #build .it .t{color:var(--ink);font-weight:550}
+  #build .it .p{color:var(--dim);font-size:10px;display:block;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+
+  #hint{
+    position:absolute;left:50%;transform:translateX(-50%);bottom:12px;font-size:11px;color:var(--dim);
+    background:color-mix(in srgb,var(--panel) 90%,transparent);border:1px solid var(--line);
+    border-radius:7px;padding:5px 10px;pointer-events:none;
+  }
+
+  /* ---- code sections (side panel + blueprint) ---- */
+  .code{font:11.5px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
+  .code .cls{margin:7px 0 3px}
+  .code .kw{color:var(--model);font-weight:600}
+  .code .cn{color:var(--ink);font-weight:650}
+  .code .base{color:var(--dim)}
+  .code .m{color:var(--dim);padding-left:15px;display:block}
+  .code .m b{color:var(--ink);font-weight:550}
+  .code .fn{display:block;color:var(--dim)}
+  .code .fn b{color:var(--ink);font-weight:550}
+  .fp{
+    font:11px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:5px;
+    padding:2px 6px;display:inline-block;margin-bottom:7px;
+  }
+  .fp span{color:var(--dim)}
+  .imps{margin-top:7px}
+  .imp{
+    display:inline-block;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;
+    color:var(--dim);border:1px solid var(--line);border-radius:4px;
+    padding:0 4px;margin:2px 3px 0 0;
+  }
+  .prov{
+    border-left:2px solid var(--cron);background:color-mix(in srgb,var(--cron) 7%,transparent);
+    border-radius:0 7px 7px 0;padding:8px 11px;margin:9px 0;font-size:12px;
+  }
+  .prov .ph2{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--cron);margin-bottom:4px}
+  .prov code{
+    font:11px ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--bg);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px;display:inline-block;
+  }
+  .prov .nt{color:var(--dim);font-size:11.5px;margin-top:5px;font-style:italic}
+  .env{display:inline-block;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;
+       color:var(--agent);border:1px solid var(--agent);border-radius:4px;padding:0 4px;margin:3px 3px 0 0}
+
+  /* ---- blueprint overlay ---- */
+  #bp{
+    position:fixed;inset:0;background:var(--bg);z-index:9;display:none;overflow:auto;
+  }
+  #bp.show{display:block}
+  #bphead{
+    position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);
+    padding:12px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;z-index:2;
+  }
+  #bphead h2{margin:0;font-size:15px;letter-spacing:-.01em}
+  #bphead .sc{color:var(--dim);font-size:12px}
+  #bpwrap{max-width:1000px;margin:0 auto;padding:22px 22px 90px}
+  #bpwrap .phh{margin:30px 0 4px;padding-top:14px;border-top:2px solid var(--line)}
+  #bpwrap .phh:first-child{margin-top:0;border-top:0;padding-top:0}
+  #bpwrap .phh h3{margin:0;font-size:17px;letter-spacing:-.015em}
+  #bpwrap .phh .pn{color:var(--dim);font-size:12.5px;margin-bottom:14px}
+  .step{
+    border:1px solid var(--line);background:var(--panel);border-radius:10px;
+    padding:14px 16px;margin-bottom:11px;
+  }
+  .step .sh{display:flex;align-items:center;gap:10px;margin-bottom:5px;flex-wrap:wrap}
+  .step .sn{
+    flex:none;width:27px;height:27px;border-radius:50%;border:1.5px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;
+    color:var(--dim);font-variant-numeric:tabular-nums;
+  }
+  .step h4{margin:0;font-size:14.5px;letter-spacing:-.01em}
+  .step .kk{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+  .step .gg{font-size:9.5px;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:0 5px}
+  .step .sd{color:var(--dim);font-size:12.5px;margin:0 0 9px;line-height:1.55}
+  .step .needs{
+    margin-top:10px;border-top:1px solid var(--line);padding-top:8px;
+    font-size:11.5px;color:var(--dim);
+  }
+  .step .needs b{color:var(--ink);font-weight:600}
+  .step .needs .num{cursor:default}
+  @media (max-width:640px){
+    #bpwrap{padding:16px 12px 80px}
+    header .stats{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="pname"></h1>
+    <span class="tag" id="ptag"></span>
+    <div class="stats" id="pstats"></div>
+  </header>
+  <div id="bar">
+    <button class="btn" id="fit">Fit</button>
+    <button class="btn" id="tbuild">Build order</button>
+    <button class="btn" id="tbp">Blueprint</button>
+    <span id="chips" style="display:contents"></span>
+    <input id="search" type="search" placeholder="Search nodes…" autocomplete="off">
+  </div>
+  <div id="stage">
+    <svg id="svg"><g id="cam"><g id="playr"></g><g id="elayer"></g><g id="nlayer"></g></g></svg>
+    <aside id="build"></aside>
+    <aside id="side"><button id="close">×</button><div id="sbody"></div></aside>
+    <div id="hint">Drag to pan · scroll to zoom · click a node · numbers are rebuild order</div>
+  </div>
+</div>
+<div id="bp">
+  <div id="bphead">
+    <h2>Build blueprint</h2>
+    <span class="sc" id="bpsc"></span>
+    <button class="btn" id="bpclose" style="margin-left:auto">Close</button>
+  </div>
+  <div id="bpwrap"></div>
+</div>
+<script id="data" type="application/json">{"version":1,"project":{"name":"Dashboard-Pro","slug":"dashboard-pro","tagline":"Forex & metals trading desk - signals, risk, live MT5","date":"2026-08-12"},"stats":{"agents":4,"models":2,"tools":16,"integrations":12},"topModels":[{"id":"opus","label":"Claude Opus 4.8","domain":"claude.ai"},{"id":"haiku","label":"Claude Haiku 4.5","domain":"claude.ai"}],"topTools":[{"id":"t-candles","label":"get_candles","domain":"metatrader5.com"},{"id":"t-quote","label":"get_quote","domain":"metatrader5.com"},{"id":"t-positions","label":"get_positions","domain":"metatrader5.com"},{"id":"t-account","label":"account_info","domain":"metatrader5.com"},{"id":"t-history","label":"get_history","domain":"metatrader5.com"},{"id":"t-margin","label":"calc_margin","domain":"metatrader5.com"},{"id":"t-open","label":"open_position","domain":"metatrader5.com"},{"id":"t-close","label":"close_position","domain":"metatrader5.com"},{"id":"t-modify","label":"modify_position","domain":"metatrader5.com"},{"id":"t-pending","label":"place_pending_order","domain":"metatrader5.com"}],"topIntegrations":[{"id":"i-mt5","label":"MetaTrader 5","domain":"metatrader5.com"},{"id":"i-yahoo","label":"Yahoo Finance","domain":"finance.yahoo.com"},{"id":"i-fred","label":"FRED","domain":"fred.stlouisfed.org"},{"id":"i-anthropic","label":"Anthropic","domain":"anthropic.com"},{"id":"i-cftc","label":"CFTC","domain":"cftc.gov"},{"id":"i-ff","label":"Forex Factory","domain":"forexfactory.com"},{"id":"i-gmail","label":"Gmail SMTP","domain":"gmail.com"},{"id":"i-telegram","label":"Telegram","domain":"telegram.org"},{"id":"i-fmp","label":"Financial Modeling Prep","domain":"financialmodelingprep.com"},{"id":"i-finnhub","label":"Finnhub","domain":"finnhub.io"}],"graph":{"nodes":[{"id":"cockpit","label":"Daily Trading cockpit","kind":"entry","sub":"app.py -> DailyTradingPage","sourceRef":"app.py","detail":"Bloomberg-style terminal entry point; reads the worker's precomputed board instead of scoring live."},{"id":"pages","label":"57 signal & tool pages","kind":"entry","sub":"pages/*.py","sourceRef":"pages/","detail":"One Streamlit page per method (trend, confluence, COT, seasonality, fib, smart money...); each persists its own signals."},{"id":"journal","label":"Trade Journal page","kind":"entry","sub":"pages/trade-journal.py","sourceRef":"pages/trade-journal.py","detail":"Closes the loop: imports broker statements and grades every signal source on realised outcomes."},{"id":"mcp-server","label":"MT5 MCP server","kind":"entry","sub":"python -m src.services.mt5_mcp","sourceRef":"src/services/mt5_mcp.py","group":"AI surfaces","detail":"Standalone stdio process exposing the live terminal to an AI client. Never imported by a page - it holds the MT5 handle open."},{"id":"scanner","label":"Background scanner","kind":"cron","sub":"every 300s, compose service","sourceRef":"src/services/background_scanner.py","group":"Signal engine","detail":"The signal engine: ingest bars, score the whole universe, store the board, alert on fresh Grade-A setups - whether or not anyone is watching."},{"id":"sweeper","label":"Signal sweeper","kind":"cron","sub":"27 pages under AppTest, ~7min","sourceRef":"src/services/signal_sweep.py","group":"Signal engine","detail":"A scheduler, not a second implementation: runs each real page headlessly so its own persist_signals call fires."},{"id":"bb-worker","label":"Data backbone worker","kind":"cron","sub":"APScheduler, daily refresh","sourceRef":"src/data_backbone/worker.py","detail":"Warms the store on startup then upserts every watched ticker and FRED series once a day."},{"id":"sentry","label":"Evening sentry","kind":"cron","sub":"17:00-20:00 SAST window","sourceRef":"src/services/evening_sentry.py","detail":"Runs the evening shift: scores the watchlist, journals to Postgres, pings Telegram only on state change. No auto-execution."},{"id":"mt5-sync","label":"MT5 sync loop","kind":"cron","sub":"Startup item, desktop session","sourceRef":"deploy/mt5_sync.py","group":"Broker desk","detail":"Session-resident loop pushing live balance and open positions into the DB. Task Scheduler cannot do this - mt5.initialize needs the interactive desktop."},{"id":"mt5-watchdog","label":"MT5 sync watchdog","kind":"cron","sub":"restarts a wedged sync loop","sourceRef":"deploy/mt5_watchdog.py","group":"Broker desk","detail":"Never imports MetaTrader5 itself, so it cannot wedge the way its patient does."},{"id":"claude-code","label":"Claude Code (MCP)","kind":"agent","sub":"16 MT5 tools behind 4 gates","domain":"claude.ai","detail":"External agent driving the real terminal on explicit instruction; trade tools sit behind four independent guardrails."},{"id":"ranker-polish","label":"Setup rationale polish","kind":"agent","sub":"Grade-A only, fails soft","sourceRef":"src/pages_lib/setup_ranker.py:162","group":"AI surfaces","detail":"Rewrites the deterministic rationale facts into an analyst paragraph, preserving every number verbatim."},{"id":"forecast-narrator","label":"Forecast narrator","kind":"agent","sub":"template unless key present","sourceRef":"pages/forecast_tab.py:162","group":"AI surfaces","detail":"Polishes the Monte Carlo forecast narrative; falls back to the deterministic template on any failure."},{"id":"report-summariser","label":"Desk report briefing","kind":"agent","sub":"archived Reports page","sourceRef":"src/core/ai_reports.py:60","group":"AI surfaces","detail":"Turns a structured report dict into a trader-facing briefing. Self-disables with no API key or SDK."},{"id":"opus","label":"Claude Opus 4.8","kind":"model","sub":"claude-opus-4-8","domain":"claude.ai"},{"id":"haiku","label":"Claude Haiku 4.5","kind":"model","sub":"claude-haiku-4-5","domain":"claude.ai"},{"id":"mt5-read-tools","label":"MT5 read tools","kind":"tool","sub":"quotes, candles, book, history","domain":"metatrader5.com","group":"AI surfaces","detail":"10 read-only tools: status, account, symbols, quotes, candles, positions, pending orders, history, margin."},{"id":"mt5-trade-tools","label":"MT5 trade tools","kind":"tool","sub":"open/close/modify, confirm gate","domain":"metatrader5.com","group":"AI surfaces","detail":"6 tools that move real money; each requires confirm=true plus env flags before the order is sent."},{"id":"market-data","label":"Market data spine","kind":"service","sub":"one canonical window per TF","sourceRef":"src/services/market_data.py","detail":"Fixes interval, resample rule and TTL in one place so two pages can never disagree about the same instrument."},{"id":"data-provider","label":"Market data provider","kind":"service","sub":"yfinance, FRED, FMP, Finnhub","sourceRef":"src/core/data_provider.py","detail":"Retrying fetchers for prices and macro series behind the older provider interface."},{"id":"bias","label":"House view engine","kind":"service","sub":"weekly/daily/4H consensus","sourceRef":"src/core/bias.py","group":"Signal engine","detail":"The pure multi-timeframe consensus every page shows; flags when a page's own read opposes it."},{"id":"ranker","label":"Setup Ranker scorer","kind":"service","sub":"master checklist, graded A-D","sourceRef":"src/pages_lib/setup_ranker.py","group":"Signal engine","detail":"Scores each pair against the master checklist and derives entry, stop and take-profit levels."},{"id":"signal-store","label":"Signal store","kind":"service","sub":"persist_signals -> trade_setups","sourceRef":"src/services/signal_store.py","group":"Signal engine","detail":"One call every page uses to save a directional read; owns dedupe and never raises."},{"id":"precomputed","label":"Precomputed board","kind":"service","sub":"one JSONB row for the UI","sourceRef":"src/services/precomputed.py","group":"Signal engine","detail":"Moves the slow work off the request path - pages read one already-computed snapshot instead of recomputing 24 pairs."},{"id":"scorecard","label":"Source scorecard","kind":"service","sub":"win rate, avg R, expectancy","sourceRef":"src/services/source_scorecard.py","detail":"Resolves every stored signal against what price actually did, then ranks each page as a source."},{"id":"exposure","label":"Currency leg exposure","kind":"service","sub":"catches stacked one-way bets","sourceRef":"src/services/exposure.py","group":"Broker desk","detail":"Decomposes positions into currency legs, so three different pairs that are really one 3x bet on AUD get caught."},{"id":"quant","label":"Six quant models","kind":"service","sub":"OU, GARCH, MC, UIP, Kalman","sourceRef":"src/core/quant_models.py","detail":"Mean reversion, volatility forecast, null-model significance, carry deviation, dynamic beta and regime fits."},{"id":"forecast","label":"Monte Carlo forecaster","kind":"service","sub":"EWMA vol + block bootstrap","sourceRef":"src/services/forecast_service.py","detail":"Blends parametric Student-t paths with a stationary block bootstrap of real returns into probability cones."},{"id":"regime","label":"Regime jump model","kind":"service","sub":"downside-risk feature set","sourceRef":"src/services/regime_service.py","detail":"Fits the statistical jump model per instrument and caches one canonical regime read."},{"id":"threat","label":"Threat Board scorer","kind":"service","sub":"0-100 across five threats","sourceRef":"src/core/threat_core.py","detail":"Position-aware risk score: concentration, intervention, squeeze, calendar and stop structure."},{"id":"cot","label":"COT positioning","kind":"service","sub":"CFTC TFF + legacy z-scores","sourceRef":"src/services/cot_fetcher.py","detail":"Fetches Commitment of Traders reports, caches them as CSV, derives net positioning and percentile extremes."},{"id":"news","label":"Econ calendar feed","kind":"service","sub":"impact, currency, forecast","sourceRef":"src/services/news_fetcher.py","detail":"Retrying fetch of the weekly calendar; a hung request returns STALE rather than blocking a scan."},{"id":"alerts","label":"Email alert service","kind":"service","sub":"NotifyCache dedupe ledger","sourceRef":"src/services/alert_service.py","detail":"Shared plumbing so each scanner describes what a signal is, not how to mail it or remember it."},{"id":"mt4-import","label":"MT4 statement import","kind":"service","sub":"HTML report -> journal rows","sourceRef":"src/services/mt4_import.py","group":"Broker desk","detail":"Parses broker statements by keying off buy/sell cells and timestamps, tolerating per-broker column drift."},{"id":"mt5-link","label":"MT5 terminal link","kind":"service","sub":"read-only by design","sourceRef":"src/services/mt5_link.py","group":"Broker desk","detail":"Reads the real book and account now, not a saved export. Deliberately exposes no order-placing call."},{"id":"mt5-trade-import","label":"MT5 closed-trade import","kind":"service","sub":"deals -> graded journal rows","sourceRef":"src/services/mt5_trade_import.py","group":"Broker desk","detail":"Reassembles MT5 deals into round trips by position id, so partial closes and scale-ins land as one row. The only writer of real outcomes the Source Scorecard can grade against."},{"id":"mt5-import-cron","label":"MT5 trade import job","kind":"cron","sub":"weekly, desktop session","sourceRef":"deploy/mt5_trade_import.py","group":"Broker desk","detail":"Windows-host job: MetaTrader5 needs the running terminal, so it cannot live in compose. Reads a 10-day window weekly so a skipped run leaves no hole; dedupes on position id."},{"id":"observability","label":"Observability","kind":"service","sub":"app.log + events.jsonl","sourceRef":"src/core/observability.py","detail":"One place wiring structured logging and event recording for page views, fetches and exceptions."},{"id":"pg","label":"Postgres","kind":"store","sub":"DashboardproDBv1, 13 tables","domain":"postgresql.org","detail":"Everything is in Postgres: market_bars, trade_setups, app_state, threat_journal, tool_usage_log, app_events."},{"id":"notify-cache","label":"Notify cache files","kind":"store","sub":"*_notify_cache.json on disk","detail":"Per-namespace JSON ledgers so alert dedupe survives Streamlit reruns and process restarts."},{"id":"mt5-terminal","label":"MetaTrader 5 terminal","kind":"external","sub":"Windows-only, same machine","domain":"metatrader5.com"},{"id":"yahoo","label":"Yahoo Finance","kind":"external","sub":"yfinance OHLC snapshots","domain":"finance.yahoo.com"},{"id":"fred","label":"FRED","kind":"external","sub":"macro series","domain":"fred.stlouisfed.org"},{"id":"fmp","label":"Financial Modeling Prep","kind":"external","domain":"financialmodelingprep.com"},{"id":"finnhub","label":"Finnhub","kind":"external","domain":"finnhub.io"},{"id":"cftc","label":"CFTC","kind":"external","sub":"Commitment of Traders","domain":"cftc.gov"},{"id":"ff","label":"Forex Factory calendar","kind":"external","sub":"weekly JSON, no API key","domain":"forexfactory.com"},{"id":"anthropic-api","label":"Anthropic API","kind":"external","sub":"optional, self-disabling","domain":"anthropic.com"},{"id":"gmail","label":"Gmail SMTP","kind":"external","sub":"app password","domain":"gmail.com"},{"id":"telegram","label":"Telegram","kind":"external","sub":"sentry state-change pings","domain":"telegram.org"},{"id":"healthchecks","label":"healthchecks.io","kind":"external","sub":"dead-sentry alarm","domain":"healthchecks.io"}],"edges":[{"from":"cockpit","to":"precomputed","kind":"reads","label":"already-scored board"},{"from":"cockpit","to":"market-data","kind":"reads"},{"from":"cockpit","to":"threat","kind":"calls"},{"from":"pages","to":"market-data","kind":"reads"},{"from":"pages","to":"data-provider","kind":"reads"},{"from":"pages","to":"bias","kind":"calls"},{"from":"pages","to":"ranker","kind":"calls"},{"from":"pages","to":"signal-store","kind":"writes"},{"from":"pages","to":"quant","kind":"calls"},{"from":"pages","to":"forecast","kind":"calls"},{"from":"pages","to":"regime","kind":"calls"},{"from":"pages","to":"cot","kind":"calls"},{"from":"pages","to":"observability","kind":"calls"},{"from":"pages","to":"forecast-narrator","kind":"triggers"},{"from":"journal","to":"scorecard","kind":"calls"},{"from":"journal","to":"mt4-import","kind":"calls"},{"from":"journal","to":"mt5-link","kind":"reads","label":"sync open positions"},{"from":"journal","to":"pg","kind":"reads"},{"from":"mcp-server","to":"claude-code","kind":"triggers","label":"stdio tool server"},{"from":"claude-code","to":"mt5-read-tools","kind":"calls"},{"from":"claude-code","to":"mt5-trade-tools","kind":"calls","label":"needs confirm=true"},{"from":"mt5-read-tools","to":"mt5-terminal","kind":"reads"},{"from":"mt5-trade-tools","to":"mt5-terminal","kind":"writes","label":"places real orders"},{"from":"mt5-trade-tools","to":"mt5-link","kind":"calls","label":"margin warning"},{"from":"ranker","to":"ranker-polish","kind":"triggers","label":"Grade-A rationale"},{"from":"ranker-polish","to":"opus","kind":"calls"},{"from":"forecast-narrator","to":"haiku","kind":"calls"},{"from":"forecast-narrator","to":"forecast","kind":"reads"},{"from":"report-summariser","to":"opus","kind":"calls"},{"from":"opus","to":"anthropic-api","kind":"calls"},{"from":"haiku","to":"anthropic-api","kind":"calls"},{"from":"scanner","to":"market-data","kind":"calls","label":"rate-limited 24/5 poll"},{"from":"scanner","to":"bias","kind":"calls"},{"from":"scanner","to":"ranker","kind":"calls"},{"from":"scanner","to":"precomputed","kind":"writes","label":"one JSONB board row"},{"from":"scanner","to":"signal-store","kind":"writes"},{"from":"scanner","to":"alerts","kind":"triggers","label":"Grade-A only"},{"from":"sweeper","to":"pages","kind":"triggers","label":"27 pages under AppTest"},{"from":"sweeper","to":"mt5-link","kind":"calls","label":"sync broker state first"},{"from":"bb-worker","to":"yahoo","kind":"reads"},{"from":"bb-worker","to":"fred","kind":"reads"},{"from":"bb-worker","to":"pg","kind":"writes","label":"daily upsert per series"},{"from":"sentry","to":"market-data","kind":"reads"},{"from":"sentry","to":"threat","kind":"calls"},{"from":"sentry","to":"news","kind":"calls","label":"tags NEWS WINDOW"},{"from":"sentry","to":"pg","kind":"writes","label":"journals every scan"},{"from":"sentry","to":"telegram","kind":"writes","label":"only on state change"},{"from":"sentry","to":"healthchecks","kind":"writes","label":"heartbeat per scan"},{"from":"mt5-sync","to":"mt5-link","kind":"calls"},{"from":"mt5-sync","to":"pg","kind":"writes","label":"balance + open positions"},{"from":"mt5-watchdog","to":"mt5-sync","kind":"triggers","label":"restarts if wedged"},{"from":"market-data","to":"pg","kind":"writes","label":"read-through market_bars"},{"from":"market-data","to":"yahoo","kind":"reads","label":"only on stale/miss"},{"from":"data-provider","to":"yahoo","kind":"reads"},{"from":"data-provider","to":"fred","kind":"reads"},{"from":"data-provider","to":"fmp","kind":"reads"},{"from":"data-provider","to":"finnhub","kind":"reads"},{"from":"bias","to":"market-data","kind":"reads"},{"from":"ranker","to":"market-data","kind":"reads"},{"from":"ranker","to":"bias","kind":"calls"},{"from":"ranker","to":"exposure","kind":"calls","label":"blocks stacked risk"},{"from":"signal-store","to":"pg","kind":"writes","label":"trade_setups rows"},{"from":"precomputed","to":"pg","kind":"writes"},{"from":"scorecard","to":"pg","kind":"reads","label":"resolves each signal's R"},{"from":"scorecard","to":"market-data","kind":"reads","label":"replays TP/SL"},{"from":"exposure","to":"mt5-link","kind":"reads","label":"live book + equity"},{"from":"mt5-link","to":"mt5-terminal","kind":"reads"},{"from":"mt4-import","to":"pg","kind":"writes"},{"from":"mt5-import-cron","to":"mt5-trade-import","kind":"calls"},{"from":"mt5-trade-import","to":"mt5-link","kind":"calls"},{"from":"mt5-trade-import","to":"pg","kind":"writes"},{"from":"quant","to":"market-data","kind":"reads"},{"from":"forecast","to":"market-data","kind":"reads"},{"from":"regime","to":"market-data","kind":"reads"},{"from":"threat","to":"cot","kind":"calls","label":"spec squeeze percentile"},{"from":"threat","to":"news","kind":"calls"},{"from":"threat","to":"pg","kind":"writes","label":"threat_journal"},{"from":"cot","to":"cftc","kind":"reads"},{"from":"news","to":"ff","kind":"reads"},{"from":"alerts","to":"gmail","kind":"writes","label":"HTML alert email"},{"from":"alerts","to":"notify-cache","kind":"writes","label":"never send twice"},{"from":"observability","to":"pg","kind":"writes","label":"app_events"}]}}</script>
+<script id="codedata" type="application/json">{"cockpit":{"file":{"path":"app.py","loc":9,"doc":"Daily Trading System — Bloomberg-terminal entry point.","classes":[],"functions":[],"imports":["src.pages_lib.daily_trading"]},"ops":{"service":"app","compose":{"command":"","image":"dashboard-pro:${APP_VERSION:-dev}","ports":["8501:8501"],"depends_on":["db"],"env_keys":["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD","FRED_API_KEY","FMP_API_KEY","FINNHUB_API_KEY","ANTHROPIC_API_KEY","GMAIL_SENDER","GMAIL_APP_PASSWORD","GMAIL_RECIPIENT"]}}},"pages":{"dir":{"path":"pages/","count":56,"loc":22042,"sample":[{"path":"pages/15m-fib-entry.py","loc":9,"doc":"15M Fibonacci Entry — Bloomberg-terminal entry point.","classes":[],"functions":[],"imports":["src.pages_lib.fib_entry"]},{"path":"pages/4H-confluence-zone.py","loc":883,"doc":"","classes":[],"functions":[{"name":"fetch_4h_data","sig":"(ticker, days=…) -> pd.DataFrame","doc":"","kind":"public"},{"name":"calc_ema","sig":"(series, period) -> pd.Series","doc":"","kind":"public"},{"name":"calc_fibonacci_levels","sig":"(high, low) -> dict[str, float]","doc":"","kind":"public"},{"name":"calc_pivot_points","sig":"(df) -> dict[str, float]","doc":"","kind":"public"},{"name":"find_confluence_zones","sig":"(price, fib_levels, pivots, ema_values, tolerance_pct=…) -> list[dict]","doc":"","kind":"public"},{"name":"safe_rgba","sig":"(hex_color, opacity) -> str","doc":"","kind":"public"},{"name":"get_pdh_pdl","sig":"(ticker)","doc":"Return previous day High/Low from daily data.","kind":"public"}],"imports":["src.core.config","src.db.market_cache","src.pages_lib.navigation","src.services.alert_service","src.services.bias_service","src.services.market_data","src.services.tool_log","src.ui","src.ui.components","src.ui.theme"]},{"path":"pages/abr_toolkit_tab.py","loc":678,"doc":"abr_toolkit_tab.py","classes":[{"name":"StructEvent","bases":[],"doc":"","methods":[]},{"name":"OrderBlock","bases":[],"doc":"","methods":[]},{"name":"ABRResult","bases":[],"doc":"","methods":[]}],"functions":[{"name":"_point_value","sig":"(name, inst) -> float","doc":"","kind":"private"},{"name":"_atr","sig":"(df, n=…) -> pd.Series","doc":"","kind":"private"},{"name":"_ema_bias","sig":"(close, fast, slow) -> int","doc":"","kind":"private"},{"name":"_find_pivots","sig":"(df, L) -> tuple[np.ndarray, np.ndarray]","doc":"Boolean arrays: bar i is a swing high/low vs L bars each side (strict).","kind":"private"},{"name":"run_engine","sig":"(df, swing_len=…, ob_search=…, ob_max_age=…, max_ob=…, tl_lookback=…, sl_buf_atr=…, tp_r=…, risk_usd=…, point_value=…, h","doc":"df: OHLC indexed by datetime, oldest first.","kind":"public"},{"name":"_fetch_ohlc_mt5","sig":"(symbol, tf) -> pd.DataFrame","doc":"Candles straight from a running Deriv/MT5 terminal — matches your","kind":"private"},{"name":"_fetch_ohlc_yfinance","sig":"(ticker, tf) -> pd.DataFrame","doc":"H1/D1 native; H4/H6 resampled from 1h. Returns OHLC, oldest first.","kind":"private"},{"name":"fetch_ohlc","sig":"(symbol, yf_ticker, tf) -> pd.DataFrame","doc":"Tries the local MT5 terminal first (exact broker candles, all four","kind":"public"},{"name":"journal_signal","sig":"(repo, symbol, tf, r) -> None","doc":"`repo`: a TradeRepository (see src/db/cache.py's pooled_repository).","kind":"public"},{"name":"build_chart","sig":"(df, r, symbol) -> go.Figure","doc":"","kind":"public"},{"name":"_render_abr_tv","sig":"(df, r, symbol) -> None","doc":"TradingView (lightweight-charts) view of the ABR chart.","kind":"private"},{"name":"_bias_str","sig":"(b) -> str","doc":"","kind":"private"},{"name":"render_instrument","sig":"(repo, name, cfg, params) -> None","doc":"","kind":"public"},{"name":"render","sig":"(repo=…) -> None","doc":"","kind":"public"}],"imports":["src.db.cache","src.db.connection","src.instruments.registry","src.pages_lib.navigation","src.ui","src.ui.theme"]},{"path":"pages/amd-scanner.py","loc":1088,"doc":"AMD Market-Phase Scanner — Streamlit page","classes":[],"functions":[{"name":"send_gmail","sig":"(sender, app_password, recipient, subject, body) -> tuple[bool, str]","doc":"Send an email via Gmail SMTP using an App Password.","kind":"public"},{"name":"atr","sig":"(df, period=…) -> pd.Series","doc":"","kind":"public"},{"name":"normalize_columns","sig":"(df) -> pd.DataFrame","doc":"","kind":"public"},{"name":"detect_phases","sig":"(df, range_window=…, atr_period=…, consolidation_pctile=…, sweep_atr_mult=…, expansion_atr_mult=…) -> pd.DataFrame","doc":"","kind":"public"},{"name":"summarize_phases","sig":"(labeled) -> pd.DataFrame","doc":"","kind":"public"},{"name":"current_assessment","sig":"(labeled, tail=…) -> dict","doc":"","kind":"public"},{"name":"load_yfinance","sig":"(symbol, period, interval) -> pd.DataFrame","doc":"","kind":"public"},{"name":"_this_week","sig":"(labeled) -> pd.DataFrame","doc":"Bars from Monday of the current trading week, anchored on the last bar","kind":"private"},{"name":"_period_boundaries","sig":"(idx, interval) -> list","doc":"X-positions where a major calendar period begins, used to draw separator","kind":"private"},{"name":"_volume_profile","sig":"(labeled, y_series, bins=…) -> tuple[np.ndarray, np.ndarray, np.ndarray]","doc":"Volume-by-price: distribute each bar's volume across the price bins its","kind":"private"},{"name":"_profile_colors","sig":"(up_share) -> list","doc":"","kind":"private"},{"name":"make_chart","sig":"(labeled, symbol, interval=…) -> go.Figure","doc":"","kind":"public"},{"name":"_frvp_rows","sig":"(fig, profile, max_width) -> None","doc":"Add one buy/sell rectangle pair per price bin.","kind":"private"},{"name":"make_frvp_chart","sig":"(view, profile, symbol, breaks) -> go.Figure","doc":"Candles for `view` with the fixed-range profile overlaid at its anchor.","kind":"public"}],"imports":["src.core","src.core.config","src.db.market_cache","src.instruments","src.pages_lib.navigation","src.services.alert_service","src.services.bias_service","src.services.signal_store","src.services.tool_log","src.ui","src.ui.charts","src.ui.theme"]},{"path":"pages/biased-pivots.py","loc":7,"doc":"Biased Pivots — Bloomberg-terminal entry point.","classes":[],"functions":[],"imports":["src.pages_lib.biased_pivots_page"]},{"path":"pages/bonds_gold_dxy_app.py","loc":360,"doc":"Bonds → Gold → DXY : Interactive learning module","classes":[],"functions":[{"name":"style_axes","sig":"(fig, **kwargs) -> None","doc":"","kind":"public"},{"name":"load_data","sig":"(period=…) -> pd.DataFrame","doc":"","kind":"public"}],"imports":["src.pages_lib.navigation","src.ui.theme"]}]}},"journal":{"file":{"path":"pages/trade-journal.py","loc":1543,"doc":"","classes":[],"functions":[{"name":"get_db_connection","sig":"(cfg)","doc":"","kind":"public"},{"name":"load_journal_trades","sig":"(cfg, limit=…, executed_only=…)","doc":"Rows from ``trade_setups``, newest first.","kind":"public"},{"name":"_run_invalidation_check","sig":"(df_all, cfg) -> None","doc":"Price-based signal invalidation: flag open rows whose stop level has","kind":"private"},{"name":"_existing_tickets","sig":"(cfg) -> set","doc":"","kind":"private"},{"name":"_capture_open_positions","sig":"(content) -> int","doc":"Snapshot the statement's **open** positions into the durable store that","kind":"private"},{"name":"_ingest_statement","sig":"(cfg, content, offset) -> dict","doc":"Non-interactive ingest used by the auto-importer: parse, auto-map, import","kind":"private"},{"name":"_do_auto_import","sig":"(cfg, path, offset, force) -> None","doc":"Read a watched MT4 file and import it if it changed (or `force`).","kind":"private"},{"name":"_render_mt5_link","sig":"() -> None","doc":"Read the running MT5 terminal directly — no file export step.","kind":"private"},{"name":"_tc_disarm","sig":"() -> None","doc":"","kind":"private"},{"name":"_tc_arm","sig":"(action, params, signature) -> None","doc":"","kind":"private"},{"name":"_tc_still_armed","sig":"(action, signature) -> bool","doc":"False (and auto-disarms) if nothing is armed, a different action is","kind":"private"},{"name":"_tc_gate_banner","sig":"() -> bool","doc":"Renders the enable/disable status. Returns True when trading is live-enabled.","kind":"private"},{"name":"_tc_open_positions","sig":"() -> list","doc":"Fresh read-only snapshot for the Close/Modify ticket pickers — never","kind":"private"},{"name":"_render_trade_open","sig":"() -> None","doc":"","kind":"private"},{"name":"_render_trade_close","sig":"() -> None","doc":"","kind":"private"},{"name":"_render_trade_modify","sig":"() -> None","doc":"","kind":"private"},{"name":"_render_trade_control","sig":"() -> None","doc":"","kind":"private"},{"name":"_render_manual_import","sig":"(cfg, offset) -> None","doc":"","kind":"private"},{"name":"_render_auto_import","sig":"(cfg, offset) -> None","doc":"","kind":"private"},{"name":"render_mt4_import","sig":"(cfg)","doc":"Upload (or auto-import from a watched file) + parse + map + persist an MT4","kind":"public"}],"imports":["src.db.cache","src.db.connection","src.db.market_cache","src.db.trade_repository","src.instruments.registry","src.pages_lib.navigation","src.services","src.services.market_data","src.services.source_scorecard","src.ui.theme"]}},"mcp-server":{"file":{"path":"src/services/mt5_mcp.py","loc":721,"doc":"MCP server exposing the live MetaTrader 5 terminal to an AI client.","classes":[{"name":"MT5Error","bases":["RuntimeError"],"doc":"Raised with the terminal's own error code and message attached.","methods":[]}],"functions":[{"name":"_flag","sig":"(name) -> bool","doc":"","kind":"private"},{"name":"iso","sig":"(epoch) -> str","doc":"MT5 epoch seconds → ISO 8601 UTC. Terminal times are broker server time.","kind":"public"},{"name":"stamp","sig":"(row) -> Dict[str, Any]","doc":"Add `*_iso` alongside each epoch-second time field MT5 returns.","kind":"public"},{"name":"round_volume","sig":"(volume, step, vol_min, vol_max) -> float","doc":"Snap a lot size to the symbol's volume step and clamp to its limits.","kind":"public"},{"name":"pick_filling","sig":"(filling_mode) -> int","doc":"Choose a filling policy the symbol actually supports.","kind":"public"},{"name":"instrument_for","sig":"(symbol) -> Optional[str]","doc":"Broker symbol → registry display name ('EURUSDm' → 'EUR/USD'), or None.","kind":"public"},{"name":"_fail","sig":"(what) -> MT5Error","doc":"","kind":"private"},{"name":"_connect","sig":"() -> None","doc":"Attach to (or launch) the terminal. Idempotent; holds the handle open.","kind":"private"},{"name":"_asdict","sig":"(obj) -> Dict[str, Any]","doc":"","kind":"private"},{"name":"_symbol","sig":"(name) -> Any","doc":"Resolve a symbol, pulling it into Market Watch if the terminal hides it.","kind":"private"},{"name":"_confirmed","sig":"(confirm) -> None","doc":"","kind":"private"},{"name":"_check_tradable","sig":"(symbol, volume) -> None","doc":"Every guardrail except `confirm`, applied before anything reaches the broker.","kind":"private"},{"name":"_send","sig":"(request) -> Dict[str, Any]","doc":"`order_check` as a dry run, then `order_send`. Never sends a doomed request.","kind":"private"},{"name":"_position","sig":"(ticket) -> Any","doc":"","kind":"private"},{"name":"mt5_status","sig":"() -> Dict[str, Any]","doc":"Connection health: terminal build, broker link, and this server's guardrails.","kind":"public"},{"name":"account_info","sig":"() -> Dict[str, Any]","doc":"Balance, equity, margin, leverage — the broker's own figures.","kind":"public"},{"name":"list_symbols","sig":"(search=…, limit=…) -> Dict[str, Any]","doc":"Search tradable broker symbols by case-insensitive substring.","kind":"public"},{"name":"symbol_info","sig":"(symbol) -> Dict[str, Any]","doc":"Full contract spec plus the current tick.","kind":"public"},{"name":"get_quote","sig":"(symbols) -> Dict[str, Any]","doc":"Current bid/ask/spread for one or more symbols.","kind":"public"},{"name":"get_candles","sig":"(symbol, timeframe=…, count=…, start_pos=…) -> Dict[str, Any]","doc":"OHLCV candles by bar position. `start_pos=0` is the still-forming bar.","kind":"public"},{"name":"get_candles_range","sig":"(symbol, timeframe, date_from, date_to) -> Dict[str, Any]","doc":"OHLCV candles between two UTC timestamps (ISO 8601, '2026-07-01T00:00:00').","kind":"public"},{"name":"get_positions","sig":"(symbol=…) -> Dict[str, Any]","doc":"Open positions with floating P/L, each tagged with its registry `pair`.","kind":"public"},{"name":"get_pending_orders","sig":"(symbol=…) -> Dict[str, Any]","doc":"Working (not yet filled) pending orders.","kind":"public"},{"name":"get_history","sig":"(days=…, symbol=…) -> Dict[str, Any]","doc":"Closed deals from the last N days, with realised P/L, commission and swap.","kind":"public"},{"name":"calc_margin","sig":"(symbol, direction, volume) -> Dict[str, Any]","doc":"Margin required for a hypothetical order. A sizing aid — sends nothing.","kind":"public"},{"name":"open_position","sig":"(symbol, direction, volume, confirm=…, stop_loss=…, take_profit=…, deviation_points=…, comment=…) -> Dict[str, Any]","doc":"Open a position at market. REAL MONEY.","kind":"public"},{"name":"close_position","sig":"(ticket, confirm=…, volume=…) -> Dict[str, Any]","doc":"Close an open position by ticket. REAL MONEY.","kind":"public"},{"name":"modify_position","sig":"(ticket, confirm=…, stop_loss=…, take_profit=…) -> Dict[str, Any]","doc":"Change the stop-loss / take-profit of an open position. REAL MONEY.","kind":"public"},{"name":"place_pending_order","sig":"(symbol, order_type, volume, price, confirm=…, stop_loss=…, take_profit=…, comment=…) -> Dict[str, Any]","doc":"Place a pending limit/stop order. REAL MONEY once it triggers.","kind":"public"},{"name":"cancel_pending_order","sig":"(ticket, confirm=…) -> Dict[str, Any]","doc":"Cancel a working pending order by ticket.","kind":"public"}],"imports":["src.instruments.registry","src.services.broker_symbols","src.services.mt5_link"]},"ops":{"how":"python -m src.services.mt5_mcp","note":"Registered with the MCP client at user scope; Windows only."}},"scanner":{"file":{"path":"src/services/background_scanner.py","loc":309,"doc":"Unattended ingest + score daemon — the app's data streams in day & night.","classes":[],"functions":[{"name":"ensure_started","sig":"(interval=…) -> bool","doc":"Start the background daemon once per server process.","kind":"public"},{"name":"_loop","sig":"(interval) -> None","doc":"","kind":"private"},{"name":"_pair_frames","sig":"(ticker)","doc":"Fetch the three canonical timeframes for a ticker through the spine.","kind":"private"},{"name":"_find_confluences","sig":"(grade_a, board_pairs) -> List","doc":"Grade-A ranker reads that ALSO carry a same-side house view and a live","kind":"private"},{"name":"_setup_summary","sig":"(r) -> dict","doc":"Compact, JSON-safe best-setup read for the board (what pages display).","kind":"private"},{"name":"scan_once","sig":"() -> dict","doc":"One full cycle: ingest → score → store board → persist/email Grade A.","kind":"public"},{"name":"run_forever","sig":"(interval=…) -> None","doc":"Foreground ingest→score loop for a **dedicated worker process/container**","kind":"public"}],"imports":["src.core.bias","src.core.observability","src.instruments","src.pages_lib.fib_entry","src.pages_lib.setup_ranker","src.services","src.services.market_data","src.services.precomputed"]},"ops":{"service":"scanner","compose":{"command":"[\"python\", \"-m\", \"src.services.background_scanner\"]","image":"dashboard-pro:${APP_VERSION:-dev}","ports":[],"depends_on":["db"],"env_keys":["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD","FRED_API_KEY","GMAIL_SENDER","GMAIL_APP_PASSWORD","GMAIL_RECIPIENT"]}}},"sweeper":{"file":{"path":"src/services/signal_sweep.py","loc":347,"doc":"Run every signal page headlessly so its own code persists its signals.","classes":[],"functions":[{"name":"_rr_use_free_proxy","sig":"(at) -> None","doc":"Switch Risk Reversals off its synthetic-demo default.","kind":"private"},{"name":"_counts_by_source","sig":"() -> Dict[str, int]","doc":"Rows per source currently in ``trade_setups``, or {} when the DB is down.","kind":"private"},{"name":"_suppress_email","sig":"() -> None","doc":"Stub `send_email` to a refusal, which leaves the dedupe ledger untouched.","kind":"private"},{"name":"run_page","sig":"(source, path, timeout=…) -> Dict[str, object]","doc":"Run one page under AppTest. Returns a result dict; never raises.","kind":"public"},{"name":"sync_broker_state","sig":"() -> Dict[str, object]","doc":"Refresh the stored balance and open-position book from the live terminal.","kind":"public"},{"name":"sweep_once","sig":"(only=…, timeout=…, sync=…) -> List[Dict[str, object]]","doc":"Run every registered signal page once and report what each persisted.","kind":"public"},{"name":"run_forever","sig":"(interval=…, timeout=…, sync=…) -> None","doc":"Sweep on a loop forever, for a dedicated worker container.","kind":"public"},{"name":"main","sig":"(argv=…) -> int","doc":"","kind":"public"}],"imports":["src.core.observability","src.db.cache","src.db.market_cache","src.services"]},"ops":{"service":"sweeper","compose":{"command":"[\"python\", \"-m\", \"src.services.signal_sweep\", \"--loop\", \"300\"]","image":"dashboard-pro:${APP_VERSION:-dev}","ports":[],"depends_on":["db"],"env_keys":["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD","FRED_API_KEY","SIGNAL_SWEEP_NO_EMAIL"]}}},"bb-worker":{"file":{"path":"src/data_backbone/worker.py","loc":72,"doc":"worker.py — background service.","classes":[],"functions":[{"name":"refresh_ticker","sig":"(ticker) -> None","doc":"","kind":"public"},{"name":"refresh_fred","sig":"(series_id) -> None","doc":"","kind":"public"},{"name":"refresh_all","sig":"() -> None","doc":"","kind":"public"},{"name":"main","sig":"() -> None","doc":"","kind":"public"}],"imports":[]},"ops":{"service":"worker","compose":{"command":"[\"python\", \"-m\", \"src.data_backbone.worker\"]","image":"dashboard-pro:${APP_VERSION:-dev}","ports":[],"depends_on":["db"],"env_keys":["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD","FRED_API_KEY"]}}},"sentry":{"file":{"path":"src/services/evening_sentry.py","loc":422,"doc":"evening_sentry.py  (v2)","classes":[{"name":"SignalResult","bases":[],"doc":"","methods":[]},{"name":"SignalProvider","bases":["Protocol"],"doc":"","methods":["evaluate(self, symbol) -> SignalResult"]},{"name":"DemoBreakoutProvider","bases":[],"doc":"20-day breakout with staleness validation. Replace evaluate()","methods":["evaluate(self, symbol) -> SignalResult"]},{"name":"Store","bases":[],"doc":"","methods":["_utcnow() -> datetime","last_state(self, symbol) -> str | None","record(self, r, alerted, news_tagged=…) -> None","record_run(self, job, symbols_ok, errors) -> None","runs_today(self, job=…) -> int","today_rows(self) -> list","news_near(self, currencies, when, window_min=…) -> list"]},{"name":"Telegram","bases":[],"doc":"","methods":["send(self, text) -> None"]},{"name":"Heartbeat","bases":[],"doc":"","methods":["ping(self, ok=…) -> None"]},{"name":"EveningSentry","bases":[],"doc":"","methods":["_news_tag(self, symbol) -> bool","scan(self) -> list[SignalResult]","briefing(self) -> None","digest(self) -> None","run(self) -> None"]}],"functions":[{"name":"main","sig":"() -> None","doc":"","kind":"public"}],"imports":[]}},"mt5-sync":{"file":{"path":"deploy/mt5_sync.py","loc":224,"doc":"Push the live MT5 terminal's balance and open positions into the database.","classes":[],"functions":[{"name":"acquire_lock","sig":"(path=…)","doc":"Hold an exclusive OS lock, or return ``None`` if another loop has it.","kind":"public"},{"name":"release_lock","sig":"()","doc":"Drop the lock. The OS would do this at exit anyway; this makes it prompt.","kind":"public"},{"name":"emit","sig":"(line) -> None","doc":"Print, and in loop mode also append to the log.","kind":"public"},{"name":"sync_once","sig":"() -> int","doc":"One sync. Returns 0 on success, 1 if the terminal could not be read.","kind":"public"},{"name":"main","sig":"(argv=…) -> int","doc":"","kind":"public"}],"imports":["src.services"]},"ops":{"how":"deploy/mt5_sync_startup.cmd in the Startup folder","note":"Must stay a shortcut, not a copy."}},"mt5-watchdog":{"file":{"path":"deploy/mt5_watchdog.py","loc":349,"doc":"Keep the MT5 sync loop alive, in the logged-on desktop session.","classes":[],"functions":[{"name":"emit","sig":"(line) -> None","doc":"Print, and in loop mode also append to this module's own log.","kind":"public"},{"name":"_stamp","sig":"() -> str","doc":"","kind":"private"},{"name":"load_sync","sig":"()","doc":"Import ``deploy/mt5_sync.py`` by path - ``deploy/`` is not a package.","kind":"public"},{"name":"heartbeat_age","sig":"(now=…)","doc":"Seconds since the sync log last grew, or ``None`` if it does not exist.","kind":"public"},{"name":"last_ok_age","sig":"(now=…)","doc":"Seconds since the last *successful* sync line, or ``None`` if none found.","kind":"public"},{"name":"holder_pid","sig":"()","doc":"PID recorded in the sync lock file, or ``None``.","kind":"public"},{"name":"kill","sig":"(pid) -> bool","doc":"Stop a wedged loop. ``/T`` because the venv's `pythonw.exe` is a stub that","kind":"public"},{"name":"lock_is_free","sig":"(sync, timeout=…) -> bool","doc":"Whether the sync lock can be taken, polling up to ``timeout``.","kind":"public"},{"name":"start_loop","sig":"() -> bool","doc":"Launch a detached sync loop from the repo root.","kind":"public"},{"name":"restart","sig":"(sync, reason) -> bool","doc":"Kill whatever holds the lock, confirm it let go, and start a fresh loop.","kind":"public"},{"name":"check","sig":"(sync, state) -> bool","doc":"One health check. Returns True if a restart was performed.","kind":"public"},{"name":"main","sig":"(argv=…) -> int","doc":"","kind":"public"}],"imports":[]},"ops":{"how":"deploy/mt5_watchdog_startup.cmd in the Startup folder"}},"ranker-polish":{"file":{"path":"src/pages_lib/setup_ranker.py","loc":1598,"doc":"Setup Ranker page — Bloomberg-terminal version.","classes":[{"name":"_SetupRankerDataFeed","bases":[],"doc":"Encapsulates the 3 timeframe pulls so the page logic is testable.","methods":["daily(ticker, days=…) -> pd.DataFrame","four_hour(ticker) -> pd.DataFrame","weekly(ticker) -> pd.DataFrame","currency_strength_diff(pair) -> Optional[float]","score(cls, pair, info, direction) -> dict"]},{"name":"SetupRankerPage","bases":["BloombergPage"],"doc":"Bloomberg-styled multi-pair scoring scanner.","methods":["configure(self) -> PageContext","sidebar(self, ctx) -> None","body(self, ctx) -> None","_scan(pairs, directions) -> list","_track_score_history(cls, all_results) -> list","_render_stale_panel(stale) -> None","_net_exposure(results, account_bal, risk_pct, rr_ratio) -> dict","_render_exposure_strip(cls, results, account_bal, risk_pct, rr_ratio) -> None","_held_positions() -> list","_stack_warnings(pair, direction, held) -> list","_render_held_book(cls, held) -> None","_exposure_badge(cls, pair, direction, held)","_cockpit_context(pairs) -> dict","_cockpit_badge(r, cockpit) -> tuple"]}],"functions":[{"name":"alert_price_bucket","sig":"(price, band=…) -> int","doc":"Coarse, instrument-agnostic price bucket for alert dedupe. Log-space","kind":"public"},{"name":"fmt_price","sig":"(p) -> str","doc":"","kind":"public"},{"name":"trade_levels","sig":"(entry, sl_pips, pip_size, direction, rr) -> dict","doc":"","kind":"public"},{"name":"money_breakdown","sig":"(sl_pips, pip_value, account_balance, risk_pct, rr) -> dict","doc":"Lot size, target $ risk, actual $ risk (after lot rounding), and $ won","kind":"public"},{"name":"risk_deviates","sig":"(mb, tolerance=…) -> bool","doc":"True when lot-rounding pushed actual $ risk >tolerance away from the","kind":"public"},{"name":"trade_rationale_template","sig":"(r, lv, rr_ratio) -> str","doc":"Deterministic 'why this trade' facts built from the scored criteria —","kind":"public"},{"name":"polished_rationale","sig":"(template) -> Optional[str]","doc":"Optional Claude API polish of the rationale facts (fail soft to the","kind":"public"}],"imports":["pages.daily_cockpit_tab","src.core.bias","src.core.secrets","src.core.signals","src.debug","src.instruments","src.pages_lib.base","src.pages_lib.currency_strength","src.services","src.services.bias_service","src.services.exposure","src.services.market_data","src.services.mt5_link","src.services.open_positions","src.services.parallel_fetch","src.services.signal_store","src.ui.components","src.ui.theme"]}},"forecast-narrator":{"file":{"path":"pages/forecast_tab.py","loc":376,"doc":"forecast_tab.py","classes":[],"functions":[{"name":"garch_cone","sig":"(close, horizon) -> dict","doc":"Random-walk center with GARCH(1,1)-t vol cone. Returns band arrays.","kind":"public"},{"name":"compute_drivers","sig":"(df, abr_row) -> list[dict]","doc":"Transparent, price-based drivers (+ ABR structure bias if journaled).","kind":"public"},{"name":"score_drivers","sig":"(drivers) -> tuple[int, str]","doc":"","kind":"public"},{"name":"template_narrative","sig":"(sym, cone, drivers, score, label, horizon_days, chg_1m) -> str","doc":"","kind":"public"},{"name":"polished_narrative","sig":"(template) -> str | None","doc":"Optional Claude API polish. Returns None on any failure (fail soft).","kind":"public"},{"name":"journal_forecast","sig":"(repo, sym, horizon, cone, drivers, score, label) -> None","doc":"`repo`: a TradeRepository (see src/db/cache.py's pooled_repository).","kind":"public"},{"name":"evaluate_forecasts","sig":"(repo, sym, close) -> pd.DataFrame","doc":"Fill realized prices for matured forecasts; return scored history.","kind":"public"},{"name":"fetch_daily","sig":"(ticker) -> pd.DataFrame","doc":"","kind":"public"},{"name":"build_chart","sig":"(df, cone, horizon, sym) -> go.Figure","doc":"","kind":"public"},{"name":"_latest_abr_signal","sig":"(repo, sym) -> dict | None","doc":"","kind":"private"},{"name":"render_instrument","sig":"(repo, sym, ticker, horizon_lbl) -> None","doc":"","kind":"public"},{"name":"render","sig":"(repo=…) -> None","doc":"","kind":"public"}],"imports":["src.core.secrets","src.db.cache","src.db.connection","src.instruments.registry","src.pages_lib.navigation","src.services.bias_service","src.services.market_data","src.services.signal_store","src.ui.charts","src.ui.theme"]}},"report-summariser":{"file":{"path":"src/core/ai_reports.py","loc":93,"doc":"Optional Claude-powered narrative summaries for the Reports page.","classes":[],"functions":[{"name":"is_available","sig":"() -> bool","doc":"True when an AI summary can actually be produced.","kind":"public"},{"name":"unavailable_reason","sig":"() -> str","doc":"Human-readable reason the AI summary is disabled (for the UI).","kind":"public"},{"name":"summarize_report","sig":"(title, data, model=…) -> str","doc":"Return a narrative summary of ``data`` (a report dict), or raise.","kind":"public"}],"imports":["src.core"]}},"market-data":{"file":{"path":"src/services/market_data.py","loc":123,"doc":"Canonical market-data spine — the one OHLC feed every page reads from.","classes":[],"functions":[{"name":"_ohlcv","sig":"(df) -> pd.DataFrame","doc":"Trim to the OHLCV columns and drop incomplete bars.","kind":"private"},{"name":"_resample","sig":"(df, rule) -> pd.DataFrame","doc":"","kind":"private"},{"name":"daily_ohlc","sig":"(ticker, period=…) -> pd.DataFrame","doc":"Canonical daily bars (default 300d, ttl 300).","kind":"public"},{"name":"weekly_ohlc","sig":"(ticker, period=…) -> pd.DataFrame","doc":"Canonical weekly bars: daily bars resampled to W (default 2y, ttl 300).","kind":"public"},{"name":"h4_ohlc","sig":"(ticker, days=…) -> pd.DataFrame","doc":"Canonical 4-hour bars: hourly bars resampled to 4h (default 90d, ttl 300).","kind":"public"},{"name":"hourly_ohlc","sig":"(ticker, days=…) -> pd.DataFrame","doc":"Canonical hourly bars (default 30d, ttl 300).","kind":"public"},{"name":"data_asof","sig":"(*frames) -> Optional[pd.Timestamp]","doc":"Latest bar timestamp across the given frames — the page's \"data as of\".","kind":"public"},{"name":"asof_caption","sig":"(*frames) -> str","doc":"Human caption for the shared strip, e.g. ``data as of 2026-07-17 08:00 UTC``.","kind":"public"}],"imports":["src.db.market_cache"]}},"data-provider":{"file":{"path":"src/core/data_provider.py","loc":258,"doc":"","classes":[{"name":"MarketDataProvider","bases":[],"doc":"","methods":["get_data(self, symbol, interval, period)"]},{"name":"QuantConnectProvider","bases":["MarketDataProvider"],"doc":"","methods":["get_data(self, symbol, interval, period)"]},{"name":"FallbackProvider","bases":["MarketDataProvider"],"doc":"","methods":["get_data(self, symbol, interval, period)"]}],"functions":[{"name":"get_provider","sig":"()","doc":"","kind":"public"},{"name":"_get_provider_lazy","sig":"() -> MarketDataProvider","doc":"","kind":"private"},{"name":"fetch_data","sig":"(symbol, interval, period) -> pd.DataFrame","doc":"","kind":"public"},{"name":"_latest_value","sig":"(series) -> Optional[float]","doc":"","kind":"private"},{"name":"_yoy_pct","sig":"(series) -> Optional[float]","doc":"","kind":"private"},{"name":"get_macro_data","sig":"(api_key) -> Tuple[Dict[str, Dict[str, float]], bool]","doc":"","kind":"public"},{"name":"_get_macro_data_impl","sig":"(fred, fetch) -> Tuple[Dict[str, Dict[str, float]], bool]","doc":"","kind":"private"},{"name":"fetch_fred_series","sig":"(series_id, fred_key, limit=…)","doc":"","kind":"public"}],"imports":["src.core","src.core.config","src.db.market_cache"]}},"bias":{"file":{"path":"src/core/bias.py","loc":209,"doc":"Canonical directional bias — the single definition of BULLISH / BEARISH /","classes":[{"name":"TimeframeBias","bases":[],"doc":"One timeframe's canonical read: three votes, unanimous or NEUTRAL.","methods":[]},{"name":"HouseView","bases":[],"doc":"The composite directional read for one instrument.","methods":["timeframe(self, name) -> Optional[TimeframeBias]","asof(self) -> Optional[pd.Timestamp]"]}],"functions":[{"name":"timeframe_bias","sig":"(df, timeframe, fast=…, slow=…) -> Optional[TimeframeBias]","doc":"The canonical read for one OHLC frame, or ``None`` when there isn't","kind":"public"},{"name":"house_view","sig":"(pair, weekly=…, daily=…, h4=…) -> HouseView","doc":"Combine the canonical timeframe reads into one weighted house view.","kind":"public"},{"name":"timeframe_agreement","sig":"(view, trade_direction) -> Tuple[Dict, ...]","doc":"Per-timeframe verdict on a proposed trade direction.","kind":"public"},{"name":"dissenting_timeframes","sig":"(view, trade_direction) -> Tuple[str, ...]","doc":"Names of the timeframes actively pointing the other way — the short","kind":"public"},{"name":"normalize_direction","sig":"(text) -> str","doc":"Map a page's own vocabulary (Long/Short, BUY/SELL, Bullish/Bearish,","kind":"public"},{"name":"is_conflict","sig":"(house_direction, page_direction) -> bool","doc":"True only when both reads are directional and on opposite sides —","kind":"public"}],"imports":["src.core.config","src.indicators.technical"]}},"ranker":{"file":{"path":"src/pages_lib/setup_ranker.py","loc":1598,"doc":"Setup Ranker page — Bloomberg-terminal version.","classes":[{"name":"_SetupRankerDataFeed","bases":[],"doc":"Encapsulates the 3 timeframe pulls so the page logic is testable.","methods":["daily(ticker, days=…) -> pd.DataFrame","four_hour(ticker) -> pd.DataFrame","weekly(ticker) -> pd.DataFrame","currency_strength_diff(pair) -> Optional[float]","score(cls, pair, info, direction) -> dict"]},{"name":"SetupRankerPage","bases":["BloombergPage"],"doc":"Bloomberg-styled multi-pair scoring scanner.","methods":["configure(self) -> PageContext","sidebar(self, ctx) -> None","body(self, ctx) -> None","_scan(pairs, directions) -> list","_track_score_history(cls, all_results) -> list","_render_stale_panel(stale) -> None","_net_exposure(results, account_bal, risk_pct, rr_ratio) -> dict","_render_exposure_strip(cls, results, account_bal, risk_pct, rr_ratio) -> None","_held_positions() -> list","_stack_warnings(pair, direction, held) -> list","_render_held_book(cls, held) -> None","_exposure_badge(cls, pair, direction, held)","_cockpit_context(pairs) -> dict","_cockpit_badge(r, cockpit) -> tuple"]}],"functions":[{"name":"alert_price_bucket","sig":"(price, band=…) -> int","doc":"Coarse, instrument-agnostic price bucket for alert dedupe. Log-space","kind":"public"},{"name":"fmt_price","sig":"(p) -> str","doc":"","kind":"public"},{"name":"trade_levels","sig":"(entry, sl_pips, pip_size, direction, rr) -> dict","doc":"","kind":"public"},{"name":"money_breakdown","sig":"(sl_pips, pip_value, account_balance, risk_pct, rr) -> dict","doc":"Lot size, target $ risk, actual $ risk (after lot rounding), and $ won","kind":"public"},{"name":"risk_deviates","sig":"(mb, tolerance=…) -> bool","doc":"True when lot-rounding pushed actual $ risk >tolerance away from the","kind":"public"},{"name":"trade_rationale_template","sig":"(r, lv, rr_ratio) -> str","doc":"Deterministic 'why this trade' facts built from the scored criteria —","kind":"public"},{"name":"polished_rationale","sig":"(template) -> Optional[str]","doc":"Optional Claude API polish of the rationale facts (fail soft to the","kind":"public"}],"imports":["pages.daily_cockpit_tab","src.core.bias","src.core.secrets","src.core.signals","src.debug","src.instruments","src.pages_lib.base","src.pages_lib.currency_strength","src.services","src.services.bias_service","src.services.exposure","src.services.market_data","src.services.mt5_link","src.services.open_positions","src.services.parallel_fetch","src.services.signal_store","src.ui.components","src.ui.theme"]}},"signal-store":{"file":{"path":"src/services/signal_store.py","loc":159,"doc":"Shared trade-signal persistence — save any page's signals to ``trade_setups``.","classes":[],"functions":[{"name":"_fx_session_day","sig":"(moment) -> str","doc":"The FX trading day ``moment`` belongs to, as ``YYYY-MM-DD``.","kind":"private"},{"name":"_period_key","sig":"(sig) -> str","doc":"The bar the read came from, as ``YYYY-MM-DD``; else the current FX day.","kind":"private"},{"name":"default_dedupe_key","sig":"(sig) -> str","doc":"pair + bias + period — one stored row per view per bar.","kind":"public"},{"name":"persist_signals","sig":"(source, signals, session=…, dedupe_key=…, namespace=…) -> int","doc":"Persist a page's signals to ``trade_setups``. Returns the number saved.","kind":"public"}],"imports":["src.core.signals","src.core.volume_profile","src.db.cache","src.db.market_cache","src.services.alert_service","src.services.session_service"]}},"precomputed":{"file":{"path":"src/services/precomputed.py","loc":222,"doc":"Precomputed score board — the worker's output the UI reads instead of","classes":[],"functions":[{"name":"serialize_house_view","sig":"(view) -> Dict","doc":"A :class:`src.core.bias.HouseView` → JSON-safe dict (round-trips via","kind":"public"},{"name":"deserialize_house_view","sig":"(data)","doc":"Reconstruct a full :class:`HouseView` (with ``.timeframe()`` / ``.asof``)","kind":"public"},{"name":"build_board","sig":"(pairs) -> Dict","doc":"Wrap per-pair entries in the board envelope with a UTC computed-at stamp.","kind":"public"},{"name":"board_age_seconds","sig":"(board) -> Optional[float]","doc":"Seconds since the board was computed, or ``None`` if unknown/unparseable.","kind":"public"},{"name":"board_is_fresh","sig":"(board, max_age_s=…) -> bool","doc":"True when the board exists and was computed within ``max_age_s``.","kind":"public"},{"name":"house_view_from_board","sig":"(pair, board)","doc":"The precomputed :class:`HouseView` for ``pair``, or ``None`` when the","kind":"public"},{"name":"setup_from_board","sig":"(pair, board) -> Optional[Dict]","doc":"The precomputed best-direction Setup Ranker summary for ``pair``.","kind":"public"},{"name":"board_pairs","sig":"(board) -> List[str]","doc":"","kind":"public"},{"name":"_db_cfg","sig":"()","doc":"","kind":"private"},{"name":"_db_read","sig":"() -> Optional[Dict]","doc":"","kind":"private"},{"name":"_db_write","sig":"(board) -> None","doc":"","kind":"private"},{"name":"_json_read","sig":"() -> Optional[Dict]","doc":"","kind":"private"},{"name":"_json_write","sig":"(board) -> None","doc":"","kind":"private"},{"name":"store_board","sig":"(board) -> None","doc":"Persist the board durably (Postgres) and to the local JSON fallback.","kind":"public"},{"name":"read_board","sig":"() -> Optional[Dict]","doc":"The latest board: prefers the DB value, falls back to the JSON file.","kind":"public"}],"imports":["src.core.bias","src.db","src.db.market_cache"]}},"scorecard":{"file":{"path":"src/services/source_scorecard.py","loc":275,"doc":"Source scorecard — which signal sources actually predict winners?","classes":[{"name":"RowResult","bases":[],"doc":"","methods":[]}],"functions":[{"name":"_pip_size_for","sig":"(row) -> Optional[float]","doc":"","kind":"private"},{"name":"_detail","sig":"(row) -> Dict[str, Any]","doc":"``checks_detail`` as a dict — JSONB arrives deserialized, fixtures as text.","kind":"private"},{"name":"row_horizon","sig":"(row, default=…) -> int","doc":"The page's own intended horizon in trading days, else ``default``.","kind":"public"},{"name":"quality_passed","sig":"(row) -> Optional[bool]","doc":"The tradeability gate recorded at signal time, or ``None`` if unrecorded.","kind":"public"},{"name":"_as_float","sig":"(value) -> Optional[float]","doc":"","kind":"private"},{"name":"_bars_after","sig":"(bars, logged_at) -> Optional[pd.DataFrame]","doc":"","kind":"private"},{"name":"evaluate_row","sig":"(row, bars, horizon=…) -> RowResult","doc":"Resolve one ``trade_setups`` row into a :class:`RowResult`.","kind":"public"},{"name":"build_scorecard","sig":"(rows, bars_by_ticker, horizon=…) -> pd.DataFrame","doc":"Aggregate per-source performance. Returns a frame indexed by source with:","kind":"public"}],"imports":["src.instruments.registry","src.services.signal_expiry"]}},"exposure":{"file":{"path":"src/services/exposure.py","loc":229,"doc":"Currency-leg exposure guard — catch the stack `CORR_GROUPS` can't see.","classes":[{"name":"Position","bases":[],"doc":"One held (or proposed) position, reduced to what exposure cares about.","methods":["side(self) -> int","describe(self) -> str"]},{"name":"Leg","bases":[],"doc":"","methods":[]},{"name":"StackWarning","bases":[],"doc":"The candidate would add to a currency leg you already hold.","methods":["count(self) -> int","side_word(self) -> str","summary(self) -> str","as_dict(self) -> dict"]}],"functions":[{"name":"direction_side","sig":"(direction) -> int","doc":"Map any of the app's direction vocabularies onto +1 / -1 / 0.","kind":"public"},{"name":"split_pair","sig":"(pair) -> Optional[Tuple[str, str]]","doc":"``\"EUR/AUD\"`` -> ``(\"EUR\", \"AUD\")``; ``None`` for anything unparseable","kind":"public"},{"name":"pair_legs","sig":"(pair, direction, weight=…) -> List[Leg]","doc":"The two currency legs of a position.","kind":"public"},{"name":"_as_positions","sig":"(positions) -> List[Position]","doc":"Accept `Position` objects or plain mappings (DB rows, MT4 dicts).","kind":"private"},{"name":"net_currency_exposure","sig":"(positions) -> dict","doc":"Signed weight per currency across ``positions``.","kind":"public"},{"name":"check_stack","sig":"(pair, direction, open_positions, weight=…, max_per_currency=…) -> List[StackWarning]","doc":"Would taking ``pair``/``direction`` stack a currency you already hold?","kind":"public"},{"name":"worst_stack","sig":"(warnings) -> Optional[StackWarning]","doc":"The single warning a compact UI should show. ``None`` when clean.","kind":"public"}],"imports":["src.core.bias"]}},"quant":{"file":{"path":"src/core/quant_models.py","loc":475,"doc":"quant_models.py","classes":[{"name":"OUFit","bases":[],"doc":"","methods":["to_dict(self) -> dict"]}],"functions":[{"name":"fit_ou","sig":"(series, dt=…) -> OUFit","doc":"Fit an Ornstein-Uhlenbeck process to a (presumed stationary) series --","kind":"public"},{"name":"ou_signal","sig":"(fit, entry_z=…, exit_z=…, max_half_life=…) -> dict","doc":"Turn an OU fit into a discrete signal for the confluence engine.","kind":"public"},{"name":"fit_garch","sig":"(returns, horizon=…, ann_factor=…) -> dict","doc":"Fit GARCH(1,1) on percentage returns and forecast volatility.","kind":"public"},{"name":"garch_position_size","sig":"(account_risk_pct, forecast_daily_vol_pct, stop_vol_multiple=…) -> dict","doc":"Vol-targeted sizing: place the stop at k * forecast daily vol and size","kind":"public"},{"name":"gbm_null_test","sig":"(prices, observed_metric, metric_fn, n_sims=…, seed=…) -> dict","doc":"Test whether a signal's performance beats pure luck under GBM.","kind":"public"},{"name":"uip_carry_analysis","sig":"(spot, rate_domestic, rate_foreign, window=…) -> pd.DataFrame","doc":"Uncovered Interest Parity says expected depreciation of the domestic","kind":"public"},{"name":"kalman_dynamic_beta","sig":"(y, x, delta=…, obs_var=…) -> pd.DataFrame","doc":"Time-varying regression  y_t = alpha_t + beta_t * x_t + v_t","kind":"public"},{"name":"engle_granger","sig":"(y, x) -> dict","doc":"Two-step Engle-Granger:","kind":"public"},{"name":"full_pair_analysis","sig":"(y, x, returns_for_garch=…, entry_z=…) -> dict","doc":"The whole pipeline for a candidate pair (e.g. gold vs real yields,","kind":"public"}],"imports":[]}},"forecast":{"file":{"path":"src/services/forecast_service.py","loc":343,"doc":"Probability forecasting engine — Monte Carlo on daily closes.","classes":[{"name":"ForecastResult","bases":[],"doc":"","methods":["vol_ratio(self) -> float","edge(self, rr, side) -> float"]},{"name":"StatForecast","bases":[],"doc":"","methods":[]},{"name":"AccuracyResult","bases":[],"doc":"","methods":[]}],"functions":[{"name":"_ewma_vol","sig":"(returns, lam=…) -> float","doc":"","kind":"private"},{"name":"_parametric_paths","sig":"(rng, last, mu, sig, horizon, n) -> np.ndarray","doc":"","kind":"private"},{"name":"_bootstrap_paths","sig":"(rng, last, returns, horizon, n) -> np.ndarray","doc":"","kind":"private"},{"name":"_first_touch","sig":"(paths, level, above) -> np.ndarray","doc":"Index of first close beyond `level` per path; horizon+1 if never.","kind":"private"},{"name":"run_forecast","sig":"(closes, atr, horizon, sl_mult=…, rr=…) -> ForecastResult","doc":"Full Monte Carlo forecast. Cached; deterministic per input.","kind":"public"},{"name":"run_statistical_forecast","sig":"(series, periods, model_type, ci=…) -> StatForecast","doc":"Fit a classical time-series model and project `periods` business days,","kind":"public"},{"name":"_norm_ppf","sig":"(p) -> float","doc":"Inverse standard-normal CDF (Acklam's rational approximation) — avoids a","kind":"private"},{"name":"_quick_cone_bounds","sig":"(log_r, last, horizon, rng, lo=…, hi=…, n=…) -> Tuple[float, float]","doc":"Light Student-t Monte Carlo terminal band for calibration (cheaper than","kind":"private"},{"name":"backtest_forecast_accuracy","sig":"(closes, horizon, model_type, n_windows=…, seed=…) -> Optional[AccuracyResult]","doc":"Rolling-origin evaluation: step back through history, forecast `horizon`","kind":"public"}],"imports":[]}},"regime":{"file":{"path":"src/services/regime_service.py","loc":428,"doc":"Streamlit-facing wrapper over the statistical jump model","classes":[{"name":"RegimeRead","bases":[],"doc":"One instrument's current regime, as the offline fit sees it.","methods":["is_risk_off(self) -> bool","to_payload(self) -> dict"]},{"name":"PenaltyTuning","bases":[],"doc":"Result of a walk-forward sweep over candidate jump penalties.","methods":["to_payload(self) -> dict"]}],"functions":[{"name":"regime_inputs","sig":"(daily, halflives=…) -> tuple[pd.DataFrame, pd.Series]","doc":"Turn a daily OHLC frame into ``(features, returns)``.","kind":"public"},{"name":"_current_spell","sig":"(states) -> int","doc":"How many trailing bars the final state has held.","kind":"private"},{"name":"read_from_fit","sig":"(instrument, fit) -> RegimeRead","doc":"Summarise a fitted model as a `RegimeRead` (pure).","kind":"public"},{"name":"annualised_sharpe","sig":"(returns, ann_factor=…) -> float","doc":"Annualised Sharpe of a return stream. 0.0 for an empty or flat stream","kind":"public"},{"name":"regime_strategy_returns","sig":"(returns, states, risk_on_state=…, n_states=…, risk_off_exposure=…, cost_bps=…) -> pd.Series","doc":"Returns of \"hold the asset in the good regime, de-risk in the bad one\".","kind":"public"},{"name":"tune_jump_penalty","sig":"(features, returns, candidates=…, min_train=…, refit_every=…, n_folds=…, cost_bps=…, risk_off_exposure=…, ann_factor=…, ","doc":"Walk-forward selection of ``jump_penalty`` — the paper's procedure, and the","kind":"public"},{"name":"_fit_cached","sig":"(instrument, ticker, jump_penalty, n_states) -> Optional[JumpModelFit]","doc":"","kind":"private"},{"name":"get_regime","sig":"(instrument, jump_penalty=…, n_states=…) -> Optional[RegimeRead]","doc":"The current regime for a registry instrument, or ``None`` when the","kind":"public"},{"name":"get_regime_history","sig":"(instrument, jump_penalty=…, n_states=…) -> pd.Series","doc":"The full fitted label path, for **charting only**.","kind":"public"},{"name":"log_regime","sig":"(read) -> bool","doc":"Append the read to ``tool_usage_log`` under ``jump_regime``.","kind":"public"}],"imports":["src.core.jump_model","src.instruments.registry","src.services.alert_service","src.services.market_data","src.services.tool_log"]}},"threat":{"file":{"path":"src/core/threat_core.py","loc":369,"doc":"threat_core.py — pure logic for the Threat Board.","classes":[{"name":"Position","bases":[],"doc":"","methods":["base(self) -> str","quote(self) -> str"]},{"name":"ThreatReport","bases":[],"doc":"","methods":[]}],"functions":[{"name":"pip_size","sig":"(pair) -> float","doc":"","kind":"public"},{"name":"pip_value_usd","sig":"(pos, usdjpy) -> float","doc":"USD value of one pip for this position. Handles JPY- and USD-quoted pairs;","kind":"public"},{"name":"stop_risk_usd","sig":"(pos, usdjpy) -> float","doc":"","kind":"public"},{"name":"currency_exposure","sig":"(positions) -> dict[str, float]","doc":"Net lots per currency. Long AUDJPY = +AUD lots, -JPY lots.","kind":"public"},{"name":"correlated_stop_risk","sig":"(positions, usdjpy) -> tuple[float, str]","doc":"Worst-case correlated cluster: for each currency, sum stop risks of all","kind":"public"},{"name":"usdjpy_snapshot","sig":"() -> tuple[float, float]","doc":"(last_price, 5-day rate of change %). Raises on data failure.","kind":"public"},{"name":"jpy_cot_net_percentile","sig":"() -> float | None","doc":"Percentile (0-100) of latest non-commercial net JPY futures position","kind":"public"},{"name":"upcoming_red_events","sig":"(currencies, days=…)","doc":"Expects news_fetcher.get_upcoming_events() -> list of dicts with at least","kind":"public"},{"name":"scan_intervention_headlines","sig":"() -> list[str]","doc":"Expects news_fetcher.get_recent_headlines() -> list[str]. Returns hits.","kind":"public"},{"name":"current_regime","sig":"() -> str | None","doc":"Expects regime.current_regime() -> 'risk_on' | 'risk_off' | 'neutral'.","kind":"public"},{"name":"score_concentration","sig":"(worst_usd, equity) -> float","doc":"","kind":"public"},{"name":"score_intervention","sig":"(last, roc5, jpy_net_lots, zone=…, headline_hits=…) -> float","doc":"Only threatens accounts net SHORT yen (long USDJPY/AUDJPY etc.).","kind":"public"},{"name":"score_squeeze","sig":"(cot_pct, jpy_net_lots) -> float","doc":"Crowded with the herd = risk. Specs deeply short yen (low percentile)","kind":"public"},{"name":"score_calendar","sig":"(events) -> float","doc":"","kind":"public"},{"name":"score_regime","sig":"(regime, exposure) -> float","doc":"Risk-off while long risk currencies (AUD, NZD, CAD) or short JPY/CHF","kind":"public"},{"name":"band","sig":"(score) -> str","doc":"","kind":"public"},{"name":"build_report","sig":"(positions, equity, zone=…) -> ThreatReport","doc":"","kind":"public"},{"name":"ensure_tables","sig":"(conn) -> None","doc":"","kind":"public"},{"name":"load_positions","sig":"(conn) -> list[Position]","doc":"","kind":"public"},{"name":"journal","sig":"(conn, rep) -> None","doc":"","kind":"public"},{"name":"last_state","sig":"(conn) -> str | None","doc":"","kind":"public"}],"imports":[]}},"cot":{"file":{"path":"src/services/cot_fetcher.py","loc":239,"doc":"cot_fetcher.py","classes":[],"functions":[{"name":"_first_matching_column","sig":"(df, candidates) -> str","doc":"","kind":"private"},{"name":"_cache_path","sig":"(report_type, year) -> str","doc":"","kind":"private"},{"name":"_fetch_year","sig":"(report_type, year, force_refresh=…) -> pd.DataFrame","doc":"Fetch one year of a COT report, using local CSV cache when available.","kind":"private"},{"name":"fetch_report","sig":"(report_type, years_back=…, force_refresh=…) -> pd.DataFrame","doc":"Fetch and concatenate multiple years of a given COT report type.","kind":"public"},{"name":"get_instrument_series","sig":"(name, years_back=…, force_refresh=…) -> pd.DataFrame","doc":"Return a tidy weekly positioning DataFrame for one instrument.","kind":"public"},{"name":"compute_extremeness","sig":"(df, lookback_weeks=…) -> dict","doc":"Percentile rank + z-score of the latest net positioning vs its own","kind":"public"},{"name":"get_all_snapshot","sig":"(years_back=…) -> pd.DataFrame","doc":"Latest-week snapshot across every configured instrument, for a","kind":"public"}],"imports":[]}},"news":{"file":{"path":"src/services/news_fetcher.py","loc":245,"doc":"news_fetcher.py","classes":[{"name":"NewsFetcher","bases":[],"doc":"","methods":["_get_json(self, url) -> list | None","parse_events(raw) -> list[dict]","upsert(self, events) -> tuple[int, int]","_mark_fetched(self, n_events) -> None","freshness(self) -> tuple[float | None, bool]","fetch(self) -> bool","upcoming(self, hours=…) -> list","briefing_line(self) -> str"]}],"functions":[{"name":"_utcnow","sig":"() -> datetime","doc":"","kind":"private"},{"name":"main","sig":"() -> None","doc":"","kind":"public"}],"imports":["src.services.evening_sentry"]}},"alerts":{"file":{"path":"src/services/alert_service.py","loc":300,"doc":"Shared email-alert plumbing for the scanner pages.","classes":[{"name":"NotifyCache","bases":[],"doc":"File-backed set of already-alerted keys, namespaced per page.","methods":["_db_cfg(self)","_db_read(self) -> Optional[set]","_db_write(self, keys) -> None","_db_reset(self) -> None","_local_read(self) -> set","load(self) -> set","_save(self, keys) -> None","save(self, keys) -> None","add(self, keys) -> set","filter_new(self, keys) -> List[str]","reset(self) -> None"]}],"functions":[{"name":"email_configured","sig":"() -> bool","doc":"True when enough Gmail config is present to actually send.","kind":"public"},{"name":"email_recipient","sig":"() -> str","doc":"","kind":"public"},{"name":"_log_email","sig":"(source, subject, recipient, ok, error) -> None","doc":"Audit one email send to Postgres ``tool_usage_log`` (tool ``email_alert``).","kind":"private"},{"name":"send_email","sig":"(subject, html_body, plain_body=…, source=…) -> Tuple[bool, str]","doc":"Send one multipart (plain + HTML) email. Returns (ok, status_message) so","kind":"public"},{"name":"_lock_for","sig":"(path) -> threading.Lock","doc":"","kind":"private"}],"imports":["src.core","src.db","src.db.market_cache","src.services.tool_log"]}},"mt4-import":{"file":{"path":"src/services/mt4_import.py","loc":329,"doc":"Parse an MT4 'Save as Report' / 'Detailed Report' HTML statement into rows","classes":[],"functions":[{"name":"session_for_hour","sig":"(hour) -> str","doc":"","kind":"public"},{"name":"_to_float","sig":"(val) -> Optional[float]","doc":"","kind":"private"},{"name":"_to_dt","sig":"(val) -> Optional[datetime]","doc":"","kind":"private"},{"name":"_decode","sig":"(content) -> str","doc":"","kind":"private"},{"name":"parse_mt4_balance","sig":"(content) -> Optional[float]","doc":"Pull the account 'Balance:' figure from the statement summary (falls back","kind":"public"},{"name":"parse_mt4_html","sig":"(content) -> List[dict]","doc":"Return one dict per *closed* trade with the raw broker fields.","kind":"public"},{"name":"parse_mt4_open_positions","sig":"(content) -> List[dict]","doc":"Return one dict per **open** position in the statement.","kind":"public"},{"name":"to_open_position_rows","sig":"(positions, symbol_map) -> Tuple[List[dict], Dict[str, int]]","doc":"Map parsed open positions onto registry instruments for the exposure","kind":"public"},{"name":"to_journal_rows","sig":"(trades, symbol_map, broker_utc_offset=…) -> Tuple[List[dict], Dict[str, int]]","doc":"Convert parsed trades to journal rows. Returns (rows, skipped) where","kind":"public"}],"imports":["src.instruments.registry","src.services.broker_symbols","src.services.open_positions"]}},"mt5-link":{"file":{"path":"src/services/mt5_link.py","loc":351,"doc":"Live MetaTrader 5 terminal link — read the real book, not a saved file.","classes":[{"name":"AccountSnapshot","bases":[],"doc":"The broker's own account figures — authoritative, unlike a typed-in","methods":["to_dict(self) -> Dict[str, Any]"]}],"functions":[{"name":"_import_mt5","sig":"()","doc":"The lazy import. Returns the module or ``None`` — never raises, so a","kind":"private"},{"name":"available","sig":"() -> bool","doc":"True when the package can be imported at all (Windows + installed).","kind":"public"},{"name":"_fmt_error","sig":"(mt5) -> str","doc":"","kind":"private"},{"name":"probe","sig":"(mt5=…) -> Tuple[bool, str]","doc":"``(connected, message)`` — a one-shot connectivity check for the UI.","kind":"public"},{"name":"_snapshot_from","sig":"(acct) -> AccountSnapshot","doc":"","kind":"private"},{"name":"positions_to_rows","sig":"(positions, symbol_map) -> Tuple[List[dict], Dict[str, int]]","doc":"Map raw MT5 position objects onto stored rows (pure given the objects).","kind":"public"},{"name":"read_terminal","sig":"(mt5=…) -> Dict[str, Any]","doc":"Read open positions + account from the running terminal.","kind":"public"},{"name":"sync","sig":"(mt5=…, set_balance=…) -> Dict[str, Any]","doc":"Read the terminal and persist it: positions → the exposure store,","kind":"public"},{"name":"margin_warning","sig":"(account, danger=…) -> Optional[str]","doc":"A plain-language margin-level warning, or ``None`` when healthy.","kind":"public"},{"name":"closed_deals","sig":"(days=…, lookback_days=…, mt5=…) -> Dict[str, Any]","doc":"Closed deals whose *exit* falls in the last ``days``, as plain dicts.","kind":"public"}],"imports":["src.instruments.registry","src.services","src.services.broker_symbols","src.services.open_positions"]}},"mt5-trade-import":{"file":{"path":"src/services/mt5_trade_import.py","loc":245,"doc":"Import closed MT5 deals into ``trade_setups`` as graded, closed rows.","classes":[],"functions":[{"name":"parse_close_level","sig":"(comment) -> Tuple[Optional[str], Optional[float]]","doc":"``(\"sl\", 18.76307)`` from a broker close comment, else ``(None, None)``.","kind":"public"},{"name":"_weighted","sig":"(pairs) -> Optional[float]","doc":"Volume-weighted average price; plain mean if volumes are all zero.","kind":"private"},{"name":"pair_deals","sig":"(deals, days=…, now=…) -> List[Dict[str, Any]]","doc":"Reassemble deals into round trips closed within the last ``days``.","kind":"public"},{"name":"trips_to_journal_rows","sig":"(trips, symbol_map) -> Tuple[List[Dict[str, Any]], Dict[str, int]]","doc":"Map round trips to ``trade_setups`` rows. Returns ``(rows, skipped)``.","kind":"public"},{"name":"import_closed_trades","sig":"(days=…, cfg=…, mt5=…) -> Dict[str, Any]","doc":"Read closed MT5 deals and store the new ones. Never raises.","kind":"public"}],"imports":["src.db.cache","src.db.market_cache","src.instruments.registry","src.services","src.services.broker_symbols","src.services.mt4_import"]}},"mt5-import-cron":{"file":{"path":"deploy/mt5_trade_import.py","loc":49,"doc":"Scheduled entry point: import closed MT5 trades into ``trade_setups``.","classes":[],"functions":[{"name":"main","sig":"() -> int","doc":"","kind":"public"}],"imports":["src.services.mt5_trade_import"]}},"observability":{"file":{"path":"src/core/observability.py","loc":468,"doc":"Central observability: structured logging + event recording.","classes":[],"functions":[{"name":"init_logging","sig":"() -> None","doc":"Configure handlers once. Safe (and cheap) to call on every page.","kind":"public"},{"name":"get_logger","sig":"(name=…) -> logging.Logger","doc":"","kind":"public"},{"name":"_install_excepthooks","sig":"() -> None","doc":"Record uncaught exceptions on the main thread and worker threads.","kind":"private"},{"name":"session_id","sig":"() -> str","doc":"Stable per-browser-session id, or a sentinel outside a session.","kind":"public"},{"name":"_detect_page","sig":"() -> str","doc":"Best-effort name of the page being rendered, from the call stack.","kind":"private"},{"name":"_session_context","sig":"() -> Dict[str, Any]","doc":"Pull a few commonly-useful selections off session_state, if present.","kind":"private"},{"name":"log_event","sig":"(event_type, level=…, message=…, page=…, **fields) -> None","doc":"Record one structured event to JSONL, Postgres and the text log.","kind":"public"},{"name":"log_page_view","sig":"(page=…, **extra) -> None","doc":"","kind":"public"},{"name":"log_exception","sig":"(exc, where=…, page=…, **fields) -> None","doc":"","kind":"public"},{"name":"track_fetch","sig":"(source, **fields)","doc":"Time a data fetch and record latency / success / error.","kind":"public"},{"name":"_safe","sig":"(obj) -> Any","doc":"Make a value JSON-serialisable without throwing.","kind":"private"},{"name":"_ensure_pg","sig":"()","doc":"Return a live connection or None. Disables itself after a failure.","kind":"private"},{"name":"reset_pg","sig":"() -> None","doc":"Re-enable the Postgres sink (e.g. after the user fixes credentials).","kind":"public"},{"name":"_pg_insert","sig":"(ts, sid, page, event_type, level, message, data) -> None","doc":"","kind":"private"},{"name":"read_events","sig":"(limit=…) -> List[Dict[str, Any]]","doc":"Return the last ``limit`` events from the JSONL log (newest last).","kind":"public"},{"name":"read_app_log","sig":"(limit=…) -> str","doc":"Return the last ``limit`` lines of the text log.","kind":"public"},{"name":"read_pg_events","sig":"(limit=…) -> List[Dict[str, Any]]","doc":"Query the Postgres app_events table, newest first. [] if unavailable.","kind":"public"},{"name":"log_paths","sig":"() -> Dict[str, Path]","doc":"","kind":"public"}],"imports":["src.core"]}},"pg":{"ops":{"how":"docker compose up db","service":"db","note":"Published on 5433, not 5432 - a native Windows Postgres owns 5432.","env":["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD"],"compose":{"command":"","image":"postgres:18-alpine","ports":["5433:5432"],"depends_on":[],"env_keys":["POSTGRES_USER","POSTGRES_PASSWORD","POSTGRES_DB"]}}},"notify-cache":{"ops":{"how":"No setup - JSON files created on first alert","note":"Gitignored; each scanner passes its own namespace."}},"mt5-terminal":{"ops":{"how":"Install MetaTrader 5 and log in; Windows only","note":"Needs the interactive desktop session - Task Scheduler cannot attach.","env":["MT5_TERMINAL_PATH"]}},"yahoo":{"ops":{"how":"pip install yfinance","env":[]}},"fred":{"ops":{"how":"Free API key from fred.stlouisfed.org","env":["FRED_API_KEY"]}},"fmp":{"ops":{"how":"API key from financialmodelingprep.com","env":["FMP_API_KEY"]}},"finnhub":{"ops":{"how":"API key from finnhub.io","env":["FINNHUB_API_KEY"]}},"cftc":{"ops":{"how":"pip install cot_reports","env":[]}},"ff":{"ops":{"how":"Public weekly JSON feed, no key","env":[]}},"anthropic-api":{"ops":{"how":"pip install anthropic; key from console.anthropic.com","note":"Optional - every AI surface self-disables without it.","env":["ANTHROPIC_API_KEY"]}},"gmail":{"ops":{"how":"Gmail account + app password","env":["GMAIL_SENDER","GMAIL_APP_PASSWORD","GMAIL_RECIPIENT"]}},"telegram":{"ops":{"how":"BotFather bot + chat id","env":["TELEGRAM_BOT_TOKEN","TELEGRAM_CHAT_ID"]}},"healthchecks":{"ops":{"how":"Create a check at healthchecks.io","env":["HEALTHCHECK_URL"]}}}</script>
+<script>
+(function(){
+"use strict";
+var DATA = JSON.parse(document.getElementById("data").textContent);
+var CODE = JSON.parse(document.getElementById("codedata").textContent);
+var NODES = DATA.graph.nodes, EDGES = DATA.graph.edges;
+var KINDS = ["entry","cron","agent","model","tool","service","store","external"];
+var NW = 226, NH = 56, GAPX = 310, GAPY = 74;
+
+/* Phase names for the rebuild order. Index = phase number. If the graph ever
+   grows a deeper dependency chain, extra phases fall back to a generic name —
+   the numbering itself is always derived, never hand-maintained. */
+var PHASES = [
+  ["Foundations",  "Provision these first — nothing runs without them."],
+  ["The spine",    "Canonical data, persistence and logging."],
+  ["Engines",      "Scoring, risk and quant logic built on the spine."],
+  ["The desk",     "The surfaces a human actually opens."],
+  ["Automation",   "Unattended processes that drive the desk."],
+  ["Coverage",     "Backfills the history everything else is judged on."]
+];
+function phaseName(i){ return PHASES[i] ? PHASES[i][0] : "Phase " + i; }
+function phaseNote(i){ return PHASES[i] ? PHASES[i][1] : ""; }
+
+var byId = {};
+NODES.forEach(function(n){ byId[n.id] = n; });
+
+document.getElementById("pname").textContent = DATA.project.name;
+document.getElementById("ptag").textContent = DATA.project.tagline || "";
+var st = DATA.stats || {};
+document.getElementById("pstats").innerHTML =
+  [["agents",st.agents],["models",st.models],["tools",st.tools],["integrations",st.integrations],
+   ["nodes",NODES.length],["edges",EDGES.length]]
+  .map(function(p){ return "<span><b>"+p[1]+"</b> "+p[0]+"</span>"; }).join("");
+
+/* ---- adjacency ---- */
+var out = {}, inn = {};
+NODES.forEach(function(n){ out[n.id]=[]; inn[n.id]=[]; });
+EDGES.forEach(function(e){
+  if(byId[e.from] && byId[e.to]){ out[e.from].push(e.to); inn[e.to].push(e.from); }
+});
+
+/* ---- REBUILD ORDER (derived) --------------------------------------------
+   An edge A -> B means A depends on B, so B must exist first. A node's phase
+   is therefore the longest path from it down to a leaf: leaves are phase 0
+   (provision them first), and everything else sits one above its deepest
+   dependency. Sequential step numbers run 1..N across phases, ordered inside
+   a phase by how connected a node is. Recomputed on every load, so adding a
+   node to scan.json renumbers the whole map automatically.                */
+var phase = {};
+NODES.forEach(function(n){ phase[n.id] = 0; });
+for(var i=0;i<NODES.length;i++){
+  var moved = false;
+  EDGES.forEach(function(e){
+    if(byId[e.from] && byId[e.to] && phase[e.from] < phase[e.to] + 1 && phase[e.to] + 1 < NODES.length){
+      phase[e.from] = phase[e.to] + 1; moved = true;
+    }
+  });
+  if(!moved) break;
+}
+var maxPhase = 0;
+NODES.forEach(function(n){ if(phase[n.id] > maxPhase) maxPhase = phase[n.id]; });
+
+var buckets = [];
+for(var b=0;b<=maxPhase;b++) buckets.push([]);
+NODES.forEach(function(n){ buckets[phase[n.id]].push(n); });
+buckets.forEach(function(B){
+  B.sort(function(x,y){
+    var dx = inn[x.id].length + out[x.id].length, dy = inn[y.id].length + out[y.id].length;
+    if(dx !== dy) return dy - dx;
+    if(x.kind !== y.kind) return KINDS.indexOf(x.kind) - KINDS.indexOf(y.kind);
+    return x.label < y.label ? -1 : 1;
+  });
+});
+var step = {}, seq = 0, ordered = [];
+buckets.forEach(function(B){ B.forEach(function(n){ step[n.id] = ++seq; ordered.push(n); }); });
+
+/* ---- layered layout (flow direction, left to right) ---- */
+var layer = {};
+NODES.forEach(function(n){ layer[n.id] = 0; });
+for(var pss=0; pss<NODES.length; pss++){
+  var mv = false;
+  EDGES.forEach(function(e){
+    if(byId[e.from] && byId[e.to] && layer[e.to] < layer[e.from] + 1 && layer[e.from] + 1 < NODES.length){
+      layer[e.to] = layer[e.from] + 1; mv = true;
+    }
+  });
+  if(!mv) break;
+}
+var maxL = 0;
+NODES.forEach(function(n){ if(layer[n.id] > maxL) maxL = layer[n.id]; });
+var lanes = [];
+for(var li=0; li<=maxL; li++) lanes.push([]);
+NODES.forEach(function(n){ lanes[layer[n.id]].push(n.id); });
+lanes.forEach(function(L){
+  L.sort(function(a,b){
+    var A=byId[a], B=byId[b];
+    var ga=A.group||"~", gb=B.group||"~";
+    if(ga!==gb) return ga<gb?-1:1;
+    if(A.kind!==B.kind) return KINDS.indexOf(A.kind)-KINDS.indexOf(B.kind);
+    return A.label<B.label?-1:1;
+  });
+});
+var pos = {};
+function reindex(){ lanes.forEach(function(L){ L.forEach(function(id,i){ pos[id]=i; }); }); }
+reindex();
+function bary(id, side){
+  var nb = side==="in" ? inn[id] : out[id];
+  if(!nb.length) return pos[id];
+  var s=0,c=0;
+  nb.forEach(function(m){ if(pos[m]!==undefined){ s+=pos[m]; c++; } });
+  return c ? s/c : pos[id];
+}
+for(var sw=0; sw<10; sw++){
+  var dir = sw%2===0 ? "in" : "out";
+  var order = dir==="in" ? lanes : lanes.slice().reverse();
+  order.forEach(function(L){
+    var w = {};
+    L.forEach(function(id){ w[id] = bary(id, dir); });
+    L.sort(function(a,b){
+      if(w[a]!==w[b]) return w[a]-w[b];
+      var ga=byId[a].group||"~", gb=byId[b].group||"~";
+      return ga<gb?-1:(ga>gb?1:0);
+    });
+    reindex();
+  });
+}
+var tallest = 0;
+lanes.forEach(function(L){ if(L.length>tallest) tallest = L.length; });
+var XY = {};
+lanes.forEach(function(L, ix){
+  var off = (tallest - L.length) * GAPY / 2;
+  L.forEach(function(id, i){ XY[id] = { x: ix*GAPX, y: off + i*GAPY }; });
+});
+
+/* ---- render ---- */
+var NS = "http://www.w3.org/2000/svg";
+function el(t, a){
+  var e = document.createElementNS(NS, t);
+  for(var k in a) if(a[k]!==undefined && a[k]!==null) e.setAttribute(k, a[k]);
+  return e;
+}
+var svg = document.getElementById("svg"), cam = document.getElementById("cam");
+var elayer = document.getElementById("elayer"), nlayer = document.getElementById("nlayer");
+
+var defs = el("defs");
+[["base","var(--edge)"],["hi","var(--edge-hi)"]].forEach(function(p){
+  var m = el("marker",{id:"ar-"+p[0],viewBox:"0 0 10 10",refX:9,refY:5,markerWidth:6,markerHeight:6,orient:"auto-start-reverse"});
+  m.appendChild(el("path",{d:"M0 0 L10 5 L0 10 z", fill:p[1]}));
+  defs.appendChild(m);
+});
+svg.insertBefore(defs, cam);
+
+var edgeEls = [];
+EDGES.forEach(function(e){
+  var a = XY[e.from], b = XY[e.to];
+  if(!a || !b) return;
+  var x1=a.x+NW, y1=a.y+NH/2, x2=b.x, y2=b.y+NH/2;
+  var back = x2 < x1, d;
+  if(back){
+    var lift = 46 + Math.min(120, Math.abs(y2-y1)*0.3);
+    d = "M"+x1+" "+y1+" C "+(x1+lift)+" "+(y1-lift)+", "+(x2-lift)+" "+(y2-lift)+", "+x2+" "+y2;
+  } else {
+    var mx = (x1+x2)/2;
+    d = "M"+x1+" "+y1+" C "+mx+" "+y1+", "+mx+" "+y2+", "+x2+" "+y2;
+  }
+  var cls = "edge" + (e.kind==="reads" ? " dash" : e.kind==="triggers" ? " dot" : "");
+  var p = el("path",{d:d, class:cls, "marker-end":"url(#ar-base)"});
+  elayer.appendChild(p);
+  var lab = null;
+  if(e.label){
+    var t = el("text",{class:"elab","text-anchor":"middle"});
+    t.textContent = e.label;
+    t.setAttribute("x", (x1+x2)/2);
+    t.setAttribute("y", back ? Math.min(y1,y2)-30 : (y1+y2)/2-5);
+    elayer.appendChild(t);
+    lab = t;
+  }
+  edgeEls.push({e:e, p:p, lab:lab});
+});
+edgeEls.forEach(function(o){
+  if(!o.lab || !o.p.getTotalLength) return;
+  try{
+    var m = o.p.getPointAtLength(o.p.getTotalLength()/2);
+    o.lab.setAttribute("x", m.x); o.lab.setAttribute("y", m.y - 4);
+  }catch(err){}
+});
+
+var nodeEls = {};
+NODES.forEach(function(n){
+  var p = XY[n.id]; if(!p) return;
+  var g = el("g",{class:"enode","data-id":n.id, transform:"translate("+p.x+","+p.y+")"});
+  g.appendChild(el("rect",{class:"ebox", width:NW, height:NH, rx:9}));
+  g.appendChild(el("rect",{class:"eaccent", x:0, y:9, width:3, height:NH-18, fill:"var(--"+n.kind+")"}));
+  g.appendChild(el("circle",{class:"estepc", cx:28, cy:NH/2, r:13}));
+  var sn = el("text",{class:"estep", x:28, y:NH/2+4});
+  sn.textContent = step[n.id];
+  g.appendChild(sn);
+  var kt = el("text",{class:"ekind", x:50, y:18, fill:"var(--"+n.kind+")"});
+  kt.textContent = n.kind;
+  g.appendChild(kt);
+  if(n.group){
+    var gt = el("text",{class:"egroup", x:NW-11, y:18, "text-anchor":"end"});
+    gt.textContent = n.group;
+    g.appendChild(gt);
+  }
+  var lt = el("text",{class:"elabel", x:50, y:34});
+  lt.textContent = n.label;
+  g.appendChild(lt);
+  if(n.sub){
+    var sx = el("text",{class:"esub", x:50, y:47});
+    sx.textContent = n.sub.length > 32 ? n.sub.slice(0,31)+"…" : n.sub;
+    g.appendChild(sx);
+  }
+  g.appendChild(el("rect",{class:"hit", width:NW, height:NH}));
+  nlayer.appendChild(g);
+  nodeEls[n.id] = g;
+});
+
+/* ---- highlight ---- */
+var selected = null;
+function clearHi(){
+  Object.keys(nodeEls).forEach(function(id){ nodeEls[id].classList.remove("hot","faded"); });
+  edgeEls.forEach(function(o){
+    o.p.classList.remove("hot","faded");
+    o.p.setAttribute("marker-end","url(#ar-base)");
+    if(o.lab) o.lab.classList.remove("hot","faded");
+  });
+}
+function focusNode(id){
+  clearHi();
+  var keep = {}; keep[id]=1;
+  edgeEls.forEach(function(o){ if(o.e.from===id||o.e.to===id){ keep[o.e.from]=1; keep[o.e.to]=1; } });
+  Object.keys(nodeEls).forEach(function(k){
+    if(keep[k]) nodeEls[k].classList.add("hot"); else nodeEls[k].classList.add("faded");
+  });
+  nodeEls[id].classList.remove("hot");
+  edgeEls.forEach(function(o){
+    var on = (o.e.from===id || o.e.to===id);
+    o.p.classList.add(on?"hot":"faded");
+    if(on) o.p.setAttribute("marker-end","url(#ar-hi)");
+    if(o.lab) o.lab.classList.add(on?"hot":"faded");
+  });
+}
+function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+
+/* ---- code + provisioning renderers (data from introspect.py) ---- */
+function fileHTML(f, full){
+  if(!f) return "";
+  var h = '<div class="fp">'+esc(f.path)+' <span>· '+f.loc+' loc</span></div>';
+  h += '<div class="code">';
+  f.classes.forEach(function(c){
+    h += '<div class="cls"><span class="kw">class</span> <span class="cn">'+esc(c.name)+'</span>'+
+         (c.bases.length?'<span class="base">('+esc(c.bases.join(", "))+')</span>':'')+'</div>';
+    (full ? c.methods : c.methods.slice(0,6)).forEach(function(m){
+      var i = m.indexOf("(");
+      h += '<span class="m">.<b>'+esc(m.slice(0,i))+'</b>'+esc(m.slice(i))+'</span>';
+    });
+    if(!full && c.methods.length>6) h += '<span class="m">… '+(c.methods.length-6)+' more</span>';
+  });
+  var fns = f.functions.filter(function(x){ return x.kind==="public"; });
+  (full ? fns : fns.slice(0,8)).forEach(function(fn){
+    h += '<span class="fn"><span class="kw">def</span> <b>'+esc(fn.name)+'</b>'+esc(fn.sig)+'</span>';
+  });
+  if(!full && fns.length>8) h += '<span class="fn">… '+(fns.length-8)+' more</span>';
+  h += '</div>';
+  if(full && f.imports && f.imports.length){
+    h += '<div class="imps">'+f.imports.map(function(m){ return '<span class="imp">'+esc(m)+'</span>'; }).join("")+'</div>';
+  }
+  return h;
+}
+function dirHTML(d, full){
+  if(!d) return "";
+  var h = '<div class="fp">'+esc(d.path)+' <span>· '+d.count+' modules · '+d.loc.toLocaleString()+' loc</span></div>';
+  if(full){
+    h += '<div class="code" style="color:var(--dim)">representative modules:</div>';
+    d.sample.forEach(function(s){ h += fileHTML(s, false); });
+  }
+  return h;
+}
+function provHTML(ops){
+  if(!ops) return "";
+  var h = '<div class="prov"><div class="ph2">Provision</div>';
+  if(ops.how) h += '<div><code>'+esc(ops.how)+'</code></div>';
+  var c = ops.compose;
+  if(c){
+    if(c.command) h += '<div style="margin-top:5px"><code>'+esc(c.command)+'</code></div>';
+    var bits = [];
+    if(ops.service) bits.push("compose service <b>"+esc(ops.service)+"</b>");
+    if(c.image) bits.push("image "+esc(c.image));
+    if(c.ports && c.ports.length) bits.push("port "+esc(c.ports.join(", ")));
+    if(c.depends_on && c.depends_on.length) bits.push("after "+esc(c.depends_on.join(", ")));
+    if(bits.length) h += '<div style="margin-top:5px;color:var(--dim);font-size:11.5px">'+bits.join(" · ")+'</div>';
+  }
+  var env = (ops.env||[]).concat((c&&c.env_keys)||[]).filter(function(v,i,a){ return a.indexOf(v)===i; });
+  if(env.length){
+    h += '<div style="margin-top:6px">'+env.map(function(k){ return '<span class="env">'+esc(k)+'</span>'; }).join("")+'</div>';
+  }
+  if(ops.note) h += '<div class="nt">'+esc(ops.note)+'</div>';
+  return h + '</div>';
+}
+function codeFor(id, full){
+  var c = CODE[id];
+  if(!c) return "";
+  return provHTML(c.ops) + fileHTML(c.file, full) + dirHTML(c.dir, full);
+}
+
+var side = document.getElementById("side"), sbody = document.getElementById("sbody");
+function open(id, recenter){
+  var n = byId[id];
+  selected = id;
+  focusNode(id);
+  Object.keys(nodeEls).forEach(function(k){ nodeEls[k].classList.remove("sel"); });
+  nodeEls[id].classList.add("sel");
+  markBuild(id);
+  if(recenter) center(id);
+
+  var needs = out[id].map(function(m){ return byId[m]; }).sort(function(a,b){ return step[a.id]-step[b.id]; });
+  var unlocks = inn[id].map(function(m){ return byId[m]; }).sort(function(a,b){ return step[a.id]-step[b.id]; });
+  function list(arr){
+    return arr.map(function(m){
+      var e = EDGES.filter(function(x){
+        return (x.from===id&&x.to===m.id)||(x.from===m.id&&x.to===id);
+      })[0] || {};
+      return '<div class="row"><span class="num">'+step[m.id]+'</span>'+
+             '<span class="vb">'+(e.kind||"links")+'</span> <b>'+esc(m.label)+'</b>'+
+             (e.label?' <span style="opacity:.85">— '+esc(e.label)+'</span>':'')+'</div>';
+    }).join('');
+  }
+  sbody.innerHTML =
+    '<div class="stepbadge">Step '+step[id]+' of '+NODES.length+'</div>'+
+    '<div class="k" style="color:var(--'+n.kind+')">'+n.kind+
+      ' · phase '+phase[id]+' — '+esc(phaseName(phase[id]))+'</div>'+
+    '<h2></h2>'+
+    (n.sub?'<div class="sub"></div>':'')+
+    (n.detail?'<p></p>':'')+
+    (n.sourceRef?'<div class="meta">Source<br><code></code></div>':'')+
+    (CODE[id]?'<div class="sec"><div class="h">Code</div>'+codeFor(id,false)+'</div>':'')+
+    (needs.length?'<div class="sec"><div class="h">Build these first ('+needs.length+')</div>'+list(needs)+'</div>':
+                  '<div class="sec"><div class="h">Build these first</div><div class="row">Nothing — this is a starting point.</div></div>')+
+    (unlocks.length?'<div class="sec"><div class="h">Unlocks ('+unlocks.length+')</div>'+list(unlocks)+'</div>':'');
+  sbody.querySelector("h2").textContent = n.label;
+  if(n.sub) sbody.querySelector(".sub").textContent = n.sub;
+  if(n.detail) sbody.querySelector("p").textContent = n.detail;
+  if(n.sourceRef) sbody.querySelector("code").textContent = n.sourceRef;
+  side.classList.add("show");
+}
+function closeSide(){
+  selected = null; side.classList.remove("show"); clearHi();
+  Object.keys(nodeEls).forEach(function(k){ nodeEls[k].classList.remove("sel"); });
+  markBuild(null);
+  applyFilter();
+}
+document.getElementById("close").onclick = closeSide;
+document.addEventListener("keydown", function(ev){
+  if(ev.key !== "Escape") return;
+  var over = document.getElementById("bp");
+  if(over && over.classList.contains("show")){ bpOpen(false); return; }
+  closeSide();
+});
+
+Object.keys(nodeEls).forEach(function(id){
+  var g = nodeEls[id];
+  g.addEventListener("click", function(ev){ ev.stopPropagation(); open(id, false); });
+  g.addEventListener("mouseenter", function(){ if(!selected) focusNode(id); });
+  g.addEventListener("mouseleave", function(){ if(!selected){ clearHi(); applyFilter(); } });
+});
+
+/* ---- build-order panel ---- */
+var build = document.getElementById("build");
+var html = '<h3>Rebuild order</h3><div class="lede">Derived from the graph: each step depends only on lower numbers. Click any step to find it on the map.</div>';
+buckets.forEach(function(B, i){
+  html += '<div class="ph"><div class="pht">Phase '+i+' — '+esc(phaseName(i))+
+          '<br><span>'+esc(phaseNote(i))+'</span></div>';
+  B.forEach(function(n){
+    html += '<div class="it" data-id="'+n.id+'"><span class="n">'+step[n.id]+'</span>'+
+            '<span><span class="t">'+esc(n.label)+'</span>'+
+            (n.sourceRef?'<span class="p">'+esc(n.sourceRef)+'</span>':'')+'</span></div>';
+  });
+  html += '</div>';
+});
+build.innerHTML = html;
+build.addEventListener("click", function(ev){
+  var it = ev.target.closest(".it");
+  if(it) open(it.getAttribute("data-id"), true);
+});
+function markBuild(id){
+  Array.prototype.forEach.call(build.querySelectorAll(".it"), function(it){
+    it.classList.toggle("on", it.getAttribute("data-id")===id);
+  });
+  if(id){
+    var cur = build.querySelector('.it[data-id="'+id+'"]');
+    if(cur && build.classList.contains("show")) cur.scrollIntoView({block:"nearest"});
+  }
+}
+var tbuild = document.getElementById("tbuild");
+tbuild.onclick = function(){
+  var on = build.classList.toggle("show");
+  tbuild.classList.toggle("on", on);
+};
+
+/* ---- blueprint: the same numbering, rendered as a build manual ---- */
+var bp = document.getElementById("bp"), bpwrap = document.getElementById("bpwrap");
+var bhtml = "";
+buckets.forEach(function(B, i){
+  bhtml += '<div class="phh"><h3>Phase '+i+' — '+esc(phaseName(i))+'</h3>'+
+           '<div class="pn">'+esc(phaseNote(i))+' · steps '+step[B[0].id]+'–'+step[B[B.length-1].id]+'</div></div>';
+  B.forEach(function(n){
+    var needs = out[n.id].map(function(m){ return byId[m]; })
+                         .sort(function(a,b){ return step[a.id]-step[b.id]; });
+    bhtml += '<article class="step" id="bp-'+n.id+'">'+
+      '<div class="sh"><span class="sn">'+step[n.id]+'</span>'+
+      '<h4>'+esc(n.label)+'</h4>'+
+      '<span class="kk" style="color:var(--'+n.kind+')">'+n.kind+'</span>'+
+      (n.group?'<span class="gg">'+esc(n.group)+'</span>':'')+'</div>'+
+      (n.detail?'<p class="sd">'+esc(n.detail)+'</p>':(n.sub?'<p class="sd">'+esc(n.sub)+'</p>':''))+
+      codeFor(n.id, true)+
+      '<div class="needs">'+
+        (needs.length
+          ? '<b>Needs first:</b> '+needs.map(function(m){
+              return '<span class="num">'+step[m.id]+'</span>'+esc(m.label);
+            }).join(" ")
+          : '<b>Needs first:</b> nothing — this is a starting point.')+
+      '</div></article>';
+  });
+});
+bpwrap.innerHTML = bhtml;
+var withCode = NODES.filter(function(n){ return CODE[n.id] && (CODE[n.id].file || CODE[n.id].dir); }).length;
+document.getElementById("bpsc").textContent =
+  NODES.length + " steps · " + (maxPhase+1) + " phases · " + withCode + " with source";
+var tbp = document.getElementById("tbp");
+function bpOpen(on){
+  bp.classList.toggle("show", on);
+  tbp.classList.toggle("on", on);
+  document.body.style.overflow = on ? "hidden" : "";
+}
+tbp.onclick = function(){ bpOpen(!bp.classList.contains("show")); };
+document.getElementById("bpclose").onclick = function(){ bpOpen(false); };
+
+/* ---- filters + search ---- */
+var offKinds = {};
+var chips = document.getElementById("chips");
+KINDS.forEach(function(k){
+  var c = document.createElement("button");
+  c.className = "chip on"; c.style.color = "var(--"+k+")";
+  c.innerHTML = '<span class="dot"></span>'+k+' <span style="opacity:.6">'+NODES.filter(function(n){return n.kind===k;}).length+'</span>';
+  c.onclick = function(){
+    offKinds[k] = !offKinds[k];
+    c.classList.toggle("on", !offKinds[k]);
+    c.classList.toggle("off", !!offKinds[k]);
+    applyFilter();
+  };
+  chips.appendChild(c);
+});
+var q = "";
+document.getElementById("search").addEventListener("input", function(ev){
+  q = ev.target.value.trim().toLowerCase(); applyFilter();
+});
+function visible(n){
+  if(offKinds[n.kind]) return false;
+  if(!q) return true;
+  return (n.label+" "+(n.sub||"")+" "+(n.detail||"")+" "+(n.sourceRef||"")+" "+(n.group||"")+" "+step[n.id])
+         .toLowerCase().indexOf(q) >= 0;
+}
+function applyFilter(){
+  if(selected) return;
+  var vis = {};
+  NODES.forEach(function(n){ vis[n.id] = visible(n); });
+  Object.keys(nodeEls).forEach(function(id){ nodeEls[id].classList.toggle("faded", !vis[id]); });
+  edgeEls.forEach(function(o){
+    var on = vis[o.e.from] && vis[o.e.to];
+    o.p.classList.toggle("faded", !on);
+    if(o.lab) o.lab.classList.toggle("faded", !on);
+  });
+}
+
+/* ---- pan + zoom ---- */
+var view = {x:0, y:0, k:1};
+var stage = document.getElementById("stage");
+function apply(){ cam.setAttribute("transform","translate("+view.x+","+view.y+") scale("+view.k+")"); }
+function center(id){
+  var p = XY[id]; if(!p) return;
+  var r = stage.getBoundingClientRect();
+  view.x = r.width/2 - (p.x+NW/2)*view.k;
+  view.y = r.height/2 - (p.y+NH/2)*view.k;
+  apply();
+}
+function fit(){
+  var xs=[], ys=[];
+  NODES.forEach(function(n){ var p=XY[n.id]; if(p){ xs.push(p.x, p.x+NW); ys.push(p.y-40, p.y+NH); } });
+  if(!xs.length) return;
+  var minX=Math.min.apply(null,xs), maxX=Math.max.apply(null,xs);
+  var minY=Math.min.apply(null,ys), maxY=Math.max.apply(null,ys);
+  var r = stage.getBoundingClientRect(), pad = 44;
+  var k = Math.min((r.width-pad*2)/(maxX-minX), (r.height-pad*2)/(maxY-minY));
+  view.k = Math.max(0.08, Math.min(k, 1.4));
+  view.x = (r.width - (maxX-minX)*view.k)/2 - minX*view.k;
+  view.y = (r.height - (maxY-minY)*view.k)/2 - minY*view.k;
+  apply();
+}
+document.getElementById("fit").onclick = fit;
+var dragging=false, sx=0, sy=0, ox=0, oy=0, moved=false;
+stage.addEventListener("pointerdown", function(ev){
+  if(ev.target.closest("aside")) return;
+  dragging=true; moved=false; sx=ev.clientX; sy=ev.clientY; ox=view.x; oy=view.y;
+  stage.classList.add("drag"); stage.setPointerCapture(ev.pointerId);
+});
+stage.addEventListener("pointermove", function(ev){
+  if(!dragging) return;
+  var dx=ev.clientX-sx, dy=ev.clientY-sy;
+  if(Math.abs(dx)+Math.abs(dy) > 3) moved=true;
+  view.x=ox+dx; view.y=oy+dy; apply();
+});
+stage.addEventListener("pointerup", function(ev){
+  dragging=false; stage.classList.remove("drag");
+  if(!moved && !ev.target.closest(".enode") && !ev.target.closest("aside")) closeSide();
+});
+stage.addEventListener("wheel", function(ev){
+  ev.preventDefault();
+  var r = stage.getBoundingClientRect();
+  var mx = ev.clientX-r.left, my = ev.clientY-r.top;
+  var f = Math.exp(-ev.deltaY*0.0016);
+  var nk = Math.max(0.08, Math.min(3, view.k*f));
+  var s = nk/view.k;
+  view.x = mx - (mx-view.x)*s;
+  view.y = my - (my-view.y)*s;
+  view.k = nk; apply();
+}, {passive:false});
+
+fit();
+window.addEventListener("resize", fit);
+})();
+</script>
+</body>
+</html>
