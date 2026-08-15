@@ -18,6 +18,52 @@ at the start of every session. There is no root `CLAUDE.md` — this file is it.
 - **Evidence before completion claims.** Run the verifying command and read its
   output before stating that anything passes, builds or is fixed.
 
+### Plan first. Every change, no exceptions.
+
+**No edit to `src/`, `pages/` or `deploy/` happens before a written plan
+exists.** Not for a one-line fix, not for an "obvious" one, not because the
+diagnosis is already finished. The diagnosis being finished is precisely when
+this gets skipped.
+
+1. **Write the plan** with the `writing-plans` skill, into `docs/plans/
+   YYYY-MM-DD-<slug>.md`, following the format of the plans already there:
+   Goal, Architecture, Tech Stack, Spec, Global Constraints, a measured
+   starting state, then numbered **Tasks** broken into checkbox **Steps** —
+   a DevOps story with its acceptance criteria, not a paragraph of intent.
+2. **The plan takes its own version bump on creation.**
+3. **Every completed task bumps the version** —
+   `python deploy/sync_version.py <next>` — then rebuild and
+   `python deploy/verify_deploy.py`. A fix in git is not a fix in production.
+
+**The bump is always the patch, plus one, from whatever `VERSION` currently
+reads.** Read the file, add one to the last number, write it back. That is the
+entire rule:
+
+    VERSION says 1.10.1  →  the new plan takes 1.10.2
+                         →  its first completed task takes 1.10.3
+                         →  the next thing, whatever it is, takes 1.10.4
+
+There is no judgement call here, and inventing one is how this goes wrong:
+
+- **Never bump the minor** because a change "feels bigger", changes behaviour,
+  or seems to deserve it. `1.10.1 → 1.11.0` is wrong. It is `1.10.2`.
+- **Never reserve a block** of numbers for a plan's future tasks. Plans
+  interleave, so a reservation is stale as soon as another plan lands. The
+  sequence is **global**, not per-plan.
+- **Never skip a number** to leave room for anything.
+
+A task's bump is decided at the moment it completes, by reading `VERSION` then
+— not when the plan was written.
+4. **Show the owner the diff. Never commit.**
+
+Tests come first inside each task (`test-driven-development`): write the
+failing test, run it and read the failure, then implement.
+
+The version bump is not bookkeeping. `VERSION` is what the running container
+reports in its status bar, so an unbumped change is a change nobody can prove
+is deployed — which is exactly how the footer once read v1.1.0 while the image
+was 1.4.0.
+
 ## Domain
 
 Forex and metals, day and swing trading: financial engineering, MT5, technical /

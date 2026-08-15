@@ -19,11 +19,24 @@ import streamlit as st
 from src.core.biased_pivots import LONG, NEUTRAL, SHORT, Pivots, read, targets
 from src.instruments.registry import INSTRUMENTS
 from src.pages_lib.base import BloombergPage, PageContext
-from src.services.market_data import daily_ohlc
+from src.services.market_data import weekly_ohlc
 from src.services.signal_store import persist_signals
 from src.ui.theme import BloombergTheme as T
 
-_HORIZON_DAYS = 5      # pivot zones are a day-trade construct, not a swing one
+# Pivot levels are recomputed every period: a bar closes and PP/S1/R1/M2/M3 all
+# move. A signal derived from them is therefore valid for about ONE period and
+# no longer. This page used daily pivots with a 5-day horizon, so every signal
+# outlived its own levels by four days -- and the comment here conceded it:
+# "pivot zones are a day-trade construct, not a swing one".
+#
+# Weekly pivots resolve it without touching the maths. `read()` is
+# period-agnostic, and the MQL5 original is period-parameterised
+# (`timePeriodConverter()`), so this is the port catching up. The horizon is
+# derived from the period rather than written next to it, because two numbers
+# that must agree will not stay in agreement if a human maintains both.
+_PIVOT_PERIOD = "weekly"
+_TRADING_DAYS = {"daily": 1, "weekly": 5, "monthly": 21}
+_HORIZON_DAYS = _TRADING_DAYS[_PIVOT_PERIOD]
 
 
 class BiasedPivotsPage(BloombergPage):
@@ -39,6 +52,9 @@ class BiasedPivotsPage(BloombergPage):
         st.caption("⚠ The close used for PP comes from one period **earlier** "
                    "than the high/low — the indicator's own quirk, preserved so "
                    "these levels match the chart.")
+        st.caption("Levels come from the last **completed week**, so a read is "
+                   "good for the week ahead. Daily pivots move every night — "
+                   "too fast for a 5-day swing horizon.")
         st.divider()
 
     @staticmethod
@@ -47,7 +63,7 @@ class BiasedPivotsPage(BloombergPage):
         out: Dict[str, dict] = {}
         for pair, inst in INSTRUMENTS.items():
             try:
-                r: Optional[Pivots] = read(daily_ohlc(inst.ticker))
+                r: Optional[Pivots] = read(weekly_ohlc(inst.ticker))
                 if r is not None:
                     d = r.to_dict()
                     d["_targets"] = targets(r)
