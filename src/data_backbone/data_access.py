@@ -23,7 +23,21 @@ from . import db
 from .config import STALE_DAYS
 
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
-HEADERS = {"User-Agent": "Mozilla/5.0 (trading-dashboard)"}
+
+# Deliberately empty — do NOT put a browser User-Agent back here.
+#
+# `fred.stlouisfed.org` hangs for a spoofed agent and answers instantly for
+# requests' own. Measured 2026-08-15 inside the worker container, same URL,
+# same timeout, only the header differing:
+#
+#     Mozilla/5.0 (trading-dashboard)  ->  ReadTimeout after 20.1s
+#     (no override)                    ->  200 in 0.3s, 423307 bytes
+#
+# That one header is why `fred_series` was empty while the worker ran daily:
+# every series raised ReadTimeout, and `worker.refresh_fred` logs that at
+# WARNING, so nothing ever surfaced it. Guarded by
+# `tests/test_data_backbone_fred.py`.
+HEADERS: dict[str, str] = {}
 
 
 def _stale(index_max, max_age_days: int = STALE_DAYS) -> bool:

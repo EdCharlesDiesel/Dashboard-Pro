@@ -11,6 +11,8 @@ rather than null — the trap `make_row` exists to close.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from src.services import mt5_link, open_positions
@@ -345,3 +347,79 @@ def test_live_terminal_to_guard_end_to_end(fake, monkeypatch):
     # And a genuinely independent idea stays clean.
     assert check_stack("GBP/ZAR", "LONG", book) == []
     assert len(open_positions.unstopped()) == 3
+
+
+# ── closed_deals: broker clock -> true UTC ────────────────────────────────────
+class FakeDeal:
+    def __init__(self, epoch, ticket=1, position_id=1, symbol="EURUSD",
+                 dtype=0, entry=0, volume=0.1, price=1.1, profit=0.0):
+        self.ticket = ticket
+        self.position_id = position_id
+        self.symbol = symbol
+        self.type = dtype
+        self.entry = entry
+        self.volume = volume
+        self.price = price
+        self.profit = profit
+        self.commission = 0.0
+        self.swap = 0.0
+        self.comment = ""
+        self.time = epoch
+
+
+class FakeHistoryMT5(FakeMT5):
+    def __init__(self, deals, **kw):
+        super().__init__(**kw)
+        self._deals = deals
+        self.range_args = None
+
+    def history_deals_get(self, start, end):
+        self.range_args = (start, end)
+        return self._deals
+
+
+# 2026-08-14 12:00:00 UTC, as the server would stamp it if the server *is* UTC.
+_EPOCH_NOON_UTC = int(datetime(2026, 8, 14, 12, 0, tzinfo=timezone.utc).timestamp())
+
+
+class TestClosedDealsUtcOffset:
+    def test_utc_broker_needs_no_correction(self):
+        fake = FakeHistoryMT5([FakeDeal(_EPOCH_NOON_UTC)])
+        out = mt5_link.closed_deals(mt5=fake, broker_utc_offset=0.0)
+        assert out["ok"] is True
+        assert out["deals"][0]["time"] == datetime(2026, 8, 14, 12, 0,
+                                                   tzinfo=timezone.utc)
+
+    def test_offset_subtracts_so_a_utc_plus_3_broker_reads_back_as_utc(self):
+        # A broker on UTC+3 stamps 12:00 on a fill that really happened at
+        # 09:00 UTC. Getting this sign backwards would push every trade later
+        # rather than earlier, and nothing downstream would notice.
+        fake = FakeHistoryMT5([FakeDeal(_EPOCH_NOON_UTC)])
+        out = mt5_link.closed_deals(mt5=fake, broker_utc_offset=3.0)
+        assert out["deals"][0]["time"] == datetime(2026, 8, 14, 9, 0,
+                                                   tzinfo=timezone.utc)
+
+    def test_negative_offset_shifts_the_other_way(self):
+        fake = FakeHistoryMT5([FakeDeal(_EPOCH_NOON_UTC)])
+        out = mt5_link.closed_deals(mt5=fake, broker_utc_offset=-5.0)
+        assert out["deals"][0]["time"] == datetime(2026, 8, 14, 17, 0,
+                                                   tzinfo=timezone.utc)
+
+    def test_query_bounds_are_converted_into_server_time(self):
+        # The terminal reads the range in server time, so the bounds must be
+        # skewed the opposite way to the per-deal correction.
+        fake = FakeHistoryMT5([])
+        mt5_link.closed_deals(days=7, lookback_days=180, mt5=fake,
+                              broker_utc_offset=3.0)
+        start, end = fake.range_args
+        span_days = (end - start).days
+        assert span_days == 181          # 180 lookback + 1 day of upper padding
+        # Both ends pushed forward by the offset, not just one.
+        assert start.hour == (datetime.now(timezone.utc)
+                              - timedelta(days=180)
+                              + timedelta(hours=3)).hour
+
+    def test_terminal_is_always_shut_down(self):
+        fake = FakeHistoryMT5([FakeDeal(_EPOCH_NOON_UTC)])
+        mt5_link.closed_deals(mt5=fake)
+        assert fake.shutdowns == 1

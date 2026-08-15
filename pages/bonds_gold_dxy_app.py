@@ -14,12 +14,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from src.ui.theme import BloombergTheme
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.market_data import daily_ohlc
 
 st.set_page_config(
     page_title="Bonds → Gold → DXY · Trading System",
@@ -68,13 +68,17 @@ TICKERS = {
 
 @st.cache_data(ttl=3600, show_spinner="Fetching market data...")
 def load_data(period: str = "5y") -> pd.DataFrame:
-    raw = yf.download(
-        list(TICKERS.values()),
-        period=period,
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-    )["Close"]
+    # One canonical fetch per ticker instead of a multi-ticker download. The
+    # spine's `cached_ohlc` already defaults to auto_adjust=True, which is what
+    # this page asked for — TIP is a distribution-paying ETF, so unadjusted
+    # closes would step on every ex-date.
+    closes = {}
+    for key, tic in TICKERS.items():
+        frame = daily_ohlc(tic, period=period)
+        if frame.empty or "Close" not in frame.columns:
+            return pd.DataFrame()
+        closes[tic] = frame["Close"].rename(tic)
+    raw = pd.concat(closes.values(), axis=1, sort=True)
     df = pd.DataFrame({
         "yield10": raw[TICKERS["yield10"]] / 10.0,  # ^TNX quotes 42.5 = 4.25%
         "dxy": raw[TICKERS["dxy"]],
