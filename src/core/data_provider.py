@@ -238,20 +238,34 @@ def _get_macro_data_impl(fred, fetch) -> Tuple[Dict[str, Dict[str, float]], bool
 
 @st.cache_data(ttl=3600)
 def fetch_fred_series(series_id, fred_key, limit=36):
+    """Last `limit` observations of a FRED series, as a [date, value] frame.
+
+    Routed through the canonical macro spine
+    (`src/services/fred_data.fred_series`) rather than a private HTTP client:
+    Postgres when the worker holds the series, HTTP otherwise, and the spine
+    persists what it fetches so the next caller is served locally.
+
+    `fred_key` is retained for call-site compatibility but is **no longer
+    required** — the spine's fallback uses FRED's public CSV endpoint. This
+    function used to return None outright without a key, which is why Market
+    Overview's macro strip was blank on any machine that lacked one.
+
+    The return contract is unchanged: a DataFrame with `date` and `value`
+    columns sorted oldest-first, or None when there is nothing to show.
+    """
     from src.core import observability
-    if not fred_key:
-        return None
-    url = (f"https://api.stlouisfed.org/fred/series/observations"
-           f"?series_id={series_id}&api_key={fred_key}&file_type=json&sort_order=desc&limit={limit}")
+    from src.services.fred_data import fred_series
+
     with observability.track_fetch("fred_series", series_id=series_id, limit=limit) as fetch:
         try:
-            r = requests.get(url, timeout=8)
-            data = r.json()
-            obs = data.get("observations", [])
-            df = pd.DataFrame(obs)[["date", "value"]]
-            df["value"] = pd.to_numeric(df["value"], errors="coerce")
-            df["date"] = pd.to_datetime(df["date"])
-            out = df.dropna().sort_values("date")
+            s = fred_series(series_id)
+            if s is None or s.empty:
+                return None
+            out = s.tail(limit).reset_index()
+            out.columns = ["date", "value"]
+            out["value"] = pd.to_numeric(out["value"], errors="coerce")
+            out["date"] = pd.to_datetime(out["date"])
+            out = out.dropna().sort_values("date")
             fetch.rows = len(out)
             return out
         except Exception:

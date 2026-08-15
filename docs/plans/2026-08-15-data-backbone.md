@@ -13,6 +13,8 @@
 ## Global Constraints
 
 - Never commit. Make changes only; the repo owner reviews and commits.
+- **A plan gets its own bump too.** This plan took **1.9.1** on creation, so
+  Task 1 lands on 1.9.2 and Task 2 on 1.9.3.
 - **Bump the version on every completed task** (`python deploy/sync_version.py <next>`), and rebuild + `python deploy/verify_deploy.py` before calling a task done — a fix in git is not a fix in production.
 - Run tests as `PYTHONIOENCODING=utf-8 python -m pytest`.
 - Return complete implementations — no TODO comments, no placeholder code.
@@ -116,7 +118,7 @@ Expected: non-zero, dated within a few days. Note the worker refreshes daily, so
 - [ ] **Step 6: Bump, rebuild, verify sync**
 
 ```bash
-python deploy/sync_version.py 1.9.1 && docker compose build && docker compose up -d && python deploy/verify_deploy.py
+python deploy/sync_version.py 1.9.2 && docker compose build && docker compose up -d && python deploy/verify_deploy.py
 ```
 
 - [ ] **Step 7: Show the owner the diff. Do not commit.**
@@ -262,7 +264,7 @@ def read_fred_series(series_id: str, start=None) -> pd.Series:
                      index=pd.to_datetime([r.date for r in rows]), name=series_id)
 ```
 
-- [ ] **Step 6: Bump to 1.9.2, rebuild, `verify_deploy.py`, show the diff.**
+- [ ] **Step 6: Bump to 1.9.3, rebuild, `verify_deploy.py`, show the diff.**
 
 ---
 

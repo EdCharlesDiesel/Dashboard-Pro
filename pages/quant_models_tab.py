@@ -28,13 +28,12 @@ from src.core.quant_models import (fit_ou, ou_signal, fit_garch,
                                    garch_position_size, gbm_null_test,
                                    uip_carry_analysis, kalman_dynamic_beta,
                                    engle_granger)
-from src.core.secrets import fred_api_key
 from src.instruments.registry import INSTRUMENTS
 from src.services.alert_service import NotifyCache
+from src.services.fred_data import fred_series
 from src.services.market_data import daily_ohlc
 from src.services.tool_log import log_tool_usage
 
-FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 _LOG_NS = "quant_models_log"
 _YEARS_HISTORY = 6
 _CUSTOM_YAHOO = "Custom Yahoo ticker…"
@@ -78,19 +77,17 @@ def _fetch_yf(ticker: str, start: str) -> pd.Series:
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def _fetch_fred(series_id: str, start: str) -> pd.Series:
-    import requests
-    key = fred_api_key()
-    if not key:
-        raise RuntimeError("FRED_API_KEY not found in st.secrets or env.")
-    r = requests.get(FRED_URL, params={
-        "series_id": series_id, "api_key": key, "file_type": "json",
-        "observation_start": start}, timeout=30)
-    r.raise_for_status()
-    obs = r.json()["observations"]
-    s = pd.Series(
-        [float(o["value"]) if o["value"] != "." else np.nan for o in obs],
-        index=pd.to_datetime([o["date"] for o in obs]), name=series_id)
-    return s.dropna()
+    """FRED observations from `start`, through the canonical macro spine.
+
+    Served from Postgres when the worker already holds the series, HTTP
+    otherwise — and the spine writes that fetch back, so the next reader of
+    the same series is local. `start` is inclusive, as before.
+
+    No API key is required any more: the spine's fallback uses FRED's public
+    CSV endpoint, so this page now works on a machine with no FRED_API_KEY
+    where it previously raised.
+    """
+    return fred_series(series_id, start=start).rename(series_id)
 
 
 def _history_start() -> str:

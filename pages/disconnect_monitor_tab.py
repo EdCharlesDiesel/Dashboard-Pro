@@ -45,13 +45,12 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from src.core.quant_models import fit_ou
-from src.core.secrets import fred_api_key
 from src.services.alert_service import NotifyCache
+from src.services.fred_data import fred_series
 from src.services.market_data import daily_ohlc
 from src.services.signal_store import persist_signals
 from src.services.tool_log import log_tool_usage
 
-FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 PAIRS = {
     "Real yield vs DXY": {
@@ -100,19 +99,16 @@ OU_MAX_HALF_LIFE = 120
 # ---------------------------------------------------------------------------
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def fetch_fred(series_id: str, start: str) -> pd.Series:
-    import requests
-    key = fred_api_key()
-    if not key:
-        raise RuntimeError("FRED_API_KEY not found in st.secrets or env.")
-    r = requests.get(FRED_URL, params={
-        "series_id": series_id, "api_key": key, "file_type": "json",
-        "observation_start": start}, timeout=30)
-    r.raise_for_status()
-    obs = r.json()["observations"]
-    s = pd.Series(
-        [float(o["value"]) if o["value"] != "." else np.nan for o in obs],
-        index=pd.to_datetime([o["date"] for o in obs]), name=series_id)
-    return s.dropna()
+    """FRED observations from `start`, through the canonical macro spine.
+
+    Postgres when the worker holds the series, HTTP otherwise — and the spine
+    persists that fetch, so the next reader is local. `start` stays inclusive.
+
+    No API key needed any more: the spine's fallback uses FRED's public CSV
+    endpoint, so the macro board renders on a machine with no FRED_API_KEY
+    where this previously raised.
+    """
+    return fred_series(series_id, start=start).rename(series_id)
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
