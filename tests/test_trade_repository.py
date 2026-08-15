@@ -168,32 +168,66 @@ class TestWrites:
         assert params == (42,)
         assert conn.committed is True
 
-    def test_import_mt4_rows_batches_and_counts(self, monkeypatch):
+    @staticmethod
+    def _capture_values(monkeypatch, returned_ids):
+        """Stub execute_values, returning the ids the DB would hand back."""
         captured = {}
 
-        def fake_execute_batch(cur, sql, payload):
+        def fake_execute_values(cur, sql, payload, template=None, fetch=False):
             captured["sql"] = sql
             captured["payload"] = payload
+            captured["template"] = template
+            captured["fetch"] = fetch
+            return returned_ids
 
         monkeypatch.setattr(
-            "src.db.trade_repository.psycopg2.extras.execute_batch",
-            fake_execute_batch,
+            "src.db.trade_repository.psycopg2.extras.execute_values",
+            fake_execute_values,
         )
+        return captured
+
+    def _row(self, **kw):
+        base = {"logged_at": "t", "instrument": "EUR/USD", "ticker": "EURUSD=X",
+                "direction": "Long", "session": "x", "lot_size": 0.1,
+                "entry_price": 1.1, "close_price": 1.2, "outcome": "WIN",
+                "pips_gained": 100, "r_multiple": 2.0, "sl_pips": 50,
+                "notes": "MT4 #123", "profit": 55.0, "ignored": "dropped"}
+        base.update(kw)
+        return base
+
+    def test_import_mt4_rows_batches_and_counts(self, monkeypatch):
+        captured = self._capture_values(monkeypatch, [(1,)])
         cur = FakeCursor()
         repo, conn = _repo(cur)
-        rows = [
-            {"logged_at": "t", "instrument": "EUR/USD", "ticker": "EURUSD=X",
-             "direction": "Long", "session": "x", "lot_size": 0.1,
-             "entry_price": 1.1, "close_price": 1.2, "outcome": "WIN",
-             "pips_gained": 100, "r_multiple": 2.0, "sl_pips": 50,
-             "notes": "MT4 #123", "profit": 55.0, "ignored": "dropped"},
-        ]
-        n = repo.import_mt4_rows(rows)
+        n = repo.import_mt4_rows([self._row()])
         assert n == 1
         # Only the mapped keys are forwarded (extra keys dropped).
         assert "ignored" not in captured["payload"][0]
         assert captured["payload"][0]["instrument"] == "EUR/USD"
+        assert captured["payload"][0]["source"] == "mt4_import"
         assert conn.committed is True
+
+    def test_conflicting_rows_are_not_counted_as_imported(self, monkeypatch):
+        # Two rows sent, one swallowed by ON CONFLICT DO NOTHING: the caller
+        # must be told 1, not 2, or a duplicate looks like a fresh import.
+        captured = self._capture_values(monkeypatch, [(7,)])
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        n = repo.import_closed_rows(
+            [self._row(notes="MT5 #1"), self._row(notes="MT5 #2")],
+            source="mt5_import")
+        assert n == 1
+        assert "ON CONFLICT DO NOTHING" in captured["sql"]
+        assert "RETURNING id" in captured["sql"]
+        assert captured["fetch"] is True
+
+    def test_source_is_bound_per_row_not_baked_into_sql(self, monkeypatch):
+        captured = self._capture_values(monkeypatch, [(1,)])
+        cur = FakeCursor()
+        repo, _ = _repo(cur)
+        repo.import_closed_rows([self._row()], source="mt5_import")
+        assert captured["payload"][0]["source"] == "mt5_import"
+        assert "'mt5_import'" not in captured["sql"]
 
     def test_import_mt4_rows_empty_is_noop(self):
         cur = FakeCursor()

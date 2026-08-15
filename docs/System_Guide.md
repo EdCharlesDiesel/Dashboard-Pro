@@ -7,7 +7,17 @@ them into a single, disciplined trade decision.*
 
 ## 1. What this system is
 
-Dashboard Pro is a **forex & metals day-trading terminal** built on Streamlit.
+Dashboard Pro is a **forex & metals swing-trading terminal** built on Streamlit.
+
+> **Swing, not day trading — and the code says so.** Measured 2026-08-15:
+> every persisted signal carries a 5- or 20-day horizon and none is shorter
+> than a day; the canonical spine holds only daily (`300d`) and weekly (`2y`)
+> windows, and `hourly_ohlc` has no callers at all; stops are 1.5x the
+> *daily* ATR; and the dedupe key is `pair + bias + FX-session-day`, which
+> makes a second same-day entry structurally impossible. The 15-minute pages
+> time the entry, they do not pick the trade - `fib_entry` reads 15m bars and
+> still stamps a 5-day horizon. The 5-minute sweep is a refresh cadence, not
+> a signal frequency.
 It is not a black box that spits out "buy" or "sell" — it is a set of 45
 purpose-built lenses on the same 22-instrument universe (21 forex pairs +
 Gold/Silver/Platinum), organized so that working through them in order

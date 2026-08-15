@@ -32,11 +32,9 @@ try:
 except Exception:
     yf = None
 
-from src.core.secrets import fred_api_key
 from src.instruments import INSTRUMENTS
+from src.services.fred_data import fred_series
 from src.services.parallel_fetch import run_parallel
-
-FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 # pair -> (base, quote, yfinance ticker) — every forex pair in the registry (18
 # pairs; was 5 hardcoded majors). Metals have no base-currency rate concept,
@@ -273,24 +271,17 @@ def _cache(ttl):
 
 @_cache(ttl=3600)
 def load_fred(sid):
-    # A tighter timeout than the yfinance loaders: fail fast so one bad series
-    # doesn't cap the whole parallel batch at a long timeout.
-    key = fred_api_key()
-    if not key:
-        return pd.Series(dtype=float)
-    params = {
-        "series_id": sid, "api_key": key, "file_type": "json",
-        "sort_order": "asc", "limit": 100000,
-    }
-    r = requests.get(FRED_OBS_URL, params=params, timeout=8)
-    r.raise_for_status()
-    obs = r.json().get("observations", [])
-    d = pd.DataFrame(obs)
-    if d.empty:
-        return pd.Series(dtype=float)
-    d["date"] = pd.to_datetime(d["date"], errors="coerce")
-    d["value"] = pd.to_numeric(d["value"], errors="coerce")
-    return d.dropna(subset=["date"]).set_index("date")["value"].dropna()
+    """A FRED series through the canonical macro spine.
+
+    Postgres when the worker holds it, HTTP otherwise, and the spine persists
+    what it fetches. The old private client returned an empty Series whenever
+    FRED_API_KEY was unset, which silently blanked the whole rate-bias table;
+    the spine's fallback needs no key.
+
+    Still returns an empty Series rather than raising — this feeds a parallel
+    batch (`run_parallel`), where one bad series must not sink the rest.
+    """
+    return fred_series(sid)
 
 
 @_cache(ttl=1800)

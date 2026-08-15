@@ -279,8 +279,67 @@ def margin_warning(account: Optional[Dict[str, Any]],
             "it further.".format(level, danger, tail))
 
 
+def detect_server_utc_offset(mt5=None, symbol: str = "EURUSD",
+                             max_tick_age_s: int = 600) -> Dict[str, Any]:
+    """Measure the broker's clock against UTC. ``{"ok", "hours", "message"}``.
+
+    Deliberately **not** wired into :func:`closed_deals` automatically. The
+    measurement compares the last tick's timestamp to the system clock, so it is
+    only meaningful while the market is quoting: run it at a weekend and the
+    freshest tick is Friday's close, which would read as a ~48h offset and
+    silently rewrite every timestamp in the journal. The weekly import job runs
+    Sunday 20:00, squarely inside that dead window — exactly when naive
+    auto-detection is at its most confidently wrong.
+
+    So this is a one-shot tool for *finding* the number during trading hours;
+    the number itself is then passed explicitly. ``max_tick_age_s`` is the guard:
+    a stale tick returns ``ok=False`` rather than a plausible-looking lie.
+    """
+    mod = mt5 or _import_mt5()
+    out: Dict[str, Any] = {"ok": False, "hours": 0.0, "message": ""}
+    if mod is None:
+        out["message"] = "MetaTrader5 package not installed (Windows only)."
+        return out
+    if not mod.initialize():
+        out["message"] = "Terminal not reachable: {0}".format(_fmt_error(mod))
+        return out
+    try:
+        tick = mod.symbol_info_tick(symbol)
+        if tick is None or not getattr(tick, "time", 0):
+            out["message"] = "No tick for {0}: {1}".format(symbol, _fmt_error(mod))
+            return out
+        now = datetime.now(timezone.utc)
+        server = datetime.fromtimestamp(int(tick.time), tz=timezone.utc)
+        delta_h = (server - now).total_seconds() / 3600.0
+        # Broker offsets are whole hours; anything else is tick staleness, not
+        # a timezone. Rounding first means the staleness guard measures the
+        # residual rather than the offset itself.
+        hours = round(delta_h)
+        residual_s = abs((delta_h - hours) * 3600.0)
+        if residual_s > max_tick_age_s:
+            # Plain ASCII: this string reaches a Windows console, which is not
+            # always UTF-8, and a mangled byte in a diagnostic is a diagnostic
+            # people stop reading.
+            out["message"] = (
+                "Last {0} tick is {1:.0f}s off a whole-hour offset - market "
+                "likely closed. Re-measure during trading hours.".format(
+                    symbol, residual_s))
+            return out
+        out.update(ok=True, hours=float(hours),
+                   message="Broker clock is UTC{0:+.0f}".format(hours))
+        return out
+    except Exception as exc:  # noqa: BLE001 — a link read must never break a page
+        out["message"] = "Offset probe failed: {0}".format(exc)
+        return out
+    finally:
+        try:
+            mod.shutdown()
+        except Exception:
+            pass
+
+
 def closed_deals(days: int = 7, lookback_days: int = 180,
-                 mt5=None) -> Dict[str, Any]:
+                 mt5=None, broker_utc_offset: float = 0.0) -> Dict[str, Any]:
     """Closed deals whose *exit* falls in the last ``days``, as plain dicts.
 
     Returns ``{"ok", "message", "deals"}``. Read-only and never raises — same
@@ -293,6 +352,17 @@ def closed_deals(days: int = 7, lookback_days: int = 180,
     worth grading. The window is filtered down to ``days`` by exit time later,
     in :func:`src.services.mt5_trade_import.pair_deals`, so the wider fetch
     costs a little IO and buys correctness.
+
+    ``broker_utc_offset`` is the broker's timezone in hours east of UTC, the
+    same convention as ``mt4_import.to_journal_rows``. MT5 reports deal times as
+    the *server's* wall clock packed into a Unix timestamp, so reading them as
+    UTC is only correct when the server runs UTC — measured true for this
+    account (Exness-MT5Trial9) but not for brokers on UTC+2/+3. Subtracting the
+    offset here, at the boundary, means everything downstream — the ``days``
+    cutoff in ``pair_deals``, ``session_for_hour``, and the naive-UTC
+    ``logged_at`` that ``source_scorecard._bars_after`` compares against price
+    bars — sees true UTC and needs no knowledge of the broker.
+    Find the value with :func:`detect_server_utc_offset` during trading hours.
     """
     mod = mt5 or _import_mt5()
     out: Dict[str, Any] = {"ok": False, "message": "", "deals": []}
@@ -305,7 +375,12 @@ def closed_deals(days: int = 7, lookback_days: int = 180,
     try:
         now = datetime.now(timezone.utc)
         start = now - timedelta(days=max(int(lookback_days), int(days)))
-        raw = mod.history_deals_get(start, now + timedelta(days=1))
+        # The terminal reads these bounds as server time, so convert out of true
+        # UTC on the way in — the mirror of the per-deal correction below. The
+        # day of padding on the upper bound would hide a few hours' skew, but a
+        # window that means what it says is worth two additions.
+        skew = timedelta(hours=float(broker_utc_offset or 0.0))
+        raw = mod.history_deals_get(start + skew, now + skew + timedelta(days=1))
         if raw is None:
             code = 0
             try:
@@ -334,12 +409,16 @@ def closed_deals(days: int = 7, lookback_days: int = 180,
                 "commission": float(getattr(d, "commission", 0.0) or 0.0),
                 "swap": float(getattr(d, "swap", 0.0) or 0.0),
                 "comment": str(getattr(d, "comment", "") or ""),
-                "time": datetime.fromtimestamp(
-                    int(getattr(d, "time", 0) or 0), tz=timezone.utc),
+                # Server wall clock -> true UTC. Same direction as
+                # mt4_import.to_journal_rows: a broker on UTC+3 stamps 15:00 on
+                # a fill that happened at 12:00 UTC, so the offset subtracts.
+                "time": (datetime.fromtimestamp(
+                    int(getattr(d, "time", 0) or 0), tz=timezone.utc)
+                    - timedelta(hours=float(broker_utc_offset or 0.0))),
             })
         out.update(ok=True, deals=deals,
-                   message="{0} deal(s) over {1}d".format(len(deals),
-                                                          lookback_days))
+                   message="{0} deal(s) over {1}d (broker UTC{2:+.0f})".format(
+                       len(deals), lookback_days, float(broker_utc_offset or 0.0)))
         return out
     except Exception as exc:  # noqa: BLE001 — a link read must never break a page
         out["message"] = "MT5 history read failed: {0}".format(exc)

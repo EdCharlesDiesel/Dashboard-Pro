@@ -1,46 +1,28 @@
-# Project AI Instructions
+# Dashboard-Pro — Project Instructions
 
-Authoritative project guidance lives in the root **CLAUDE.md** (architecture,
-commands, forex domain conventions). Read that first.
+Authoritative guidance for Claude Code in this repository, loaded automatically
+at the start of every session. There is no root `CLAUDE.md` — this file is it.
 
-The previous content of this file described a different stack (FastAPI,
-SQLAlchemy, Redis, Docker, Pytest) and did not match this repository — this is
-a Streamlit + yfinance + psycopg2 application with no test suite or Docker.
+## Working agreement
 
-Still-applicable preferences:
-
-- Financial Engineering.
-- MT5.
-- Streamlit.
-- Python.
-- Day Trading.
-- Swing trading.
-- Quantitative trading.
-- Technical analysis.
-- Fundamental analysis.
-- Sentiment analysis.
-- Risk management.
-- Forex domain conventions.
-- Signals engine
-- Everything Forex and predicting market data.
-- Traders, market makers, and other financial professionals.
-- Mathematical models and algorithms.
-- Predictive modeling.
-- Data science.
-- Price forecasting.
-- Optimization.
-- Oil and gas.
-- Gold
-- Object-Oriented Programming.
-- Data structures.
-- Machine learning.
-- Use type hints on new code.
+- **Never commit.** Make code changes only; the repository owner reviews and
+  commits. No `git commit`, no push, no PR unless explicitly asked.
+- ALWAYS USE SKILLs provided. ALways
+- Active work targets the **`DEV-04`** branch, never `Production`.
 - Return complete implementations — no TODO comments, no placeholder code.
-- Prefer composition over inheritance (see `BloombergPage` template-method
+- Use type hints on new code.
+- Prefer composition over inheritance (the `BloombergPage` template-method
   pattern in `src/pages_lib/base.py`).
-- Never hardcode secrets; they belong in `.streamlit/secrets.toml`
-  (gitignored), not `.streamlit/config.toml` (tracked).
-  This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+- Never hardcode secrets: they live in `.streamlit/secrets.toml` (gitignored),
+  never in `.streamlit/config.toml` (tracked).
+- **Evidence before completion claims.** Run the verifying command and read its
+  output before stating that anything passes, builds or is fixed.
+
+## Domain
+
+Forex and metals, day and swing trading: financial engineering, MT5, technical /
+fundamental / sentiment analysis, risk management, quantitative and predictive
+modelling, price forecasting, gold and oil.
 
 ## What this is
 
@@ -50,7 +32,7 @@ multipage app:
 - **`app.py`** — the entry point. A thin shim that runs `DailyTradingPage`
   (the 18-point checklist). This is the master: every page follows its
   terminal look (`BloombergPage` + `BloombergTheme`).
-- **`pages/`** — the 22 workflow pages, including `market-overview.py` (the
+- **`pages/`** — the 56 workflow pages, including `market-overview.py` (the
   former standalone "Macro Dashboard Pro", now a tabbed page sharing
   `src/core/`).
 - **`archive/`** — dead experiments; never touch.
@@ -157,17 +139,17 @@ entries on `:`/`=` and keeps only the key. If you extend it, preserve that.
 Pages come in two generations that must look identical:
 
 1. **Framework pages** (Checklist, Setup Ranker, Correlations, DXY vs Gold) subclass `BloombergPage` in `src/pages_lib/base.py` — a template method (`configure()` / `sidebar()` / `body()`) that handles page config, theme injection, sidebar nav, and the status bar. The files in `pages/` and the root entrypoint are 5-line shims; implementations live in `src/pages_lib/`. **New pages should use this framework.**
-2. **Legacy pages** (the other 18 in `pages/`) are standalone scripts with inline CSS. They are visually harmonized by calling `BloombergTheme.apply()` immediately after `st.set_page_config()` and by a global flatten rule in the theme (no rounded corners anywhere). Their inline hexes were bulk-remapped to the terminal palette — don't reintroduce GitHub-dark colors (`#0d1117`, `#388bfd`, …) or `plotly_white`.
+2. **Legacy pages** (the rest of `pages/`) are standalone scripts with inline CSS. They are visually harmonized by calling `BloombergTheme.apply()` immediately after `st.set_page_config()` and by a global flatten rule in the theme (no rounded corners anywhere). Their inline hexes were bulk-remapped to the terminal palette — don't reintroduce GitHub-dark colors (`#0d1117`, `#388bfd`, …) or `plotly_white`.
 
 ### Single sources of truth (never duplicate these)
 
 - **`src/instruments/registry.py`** — `INSTRUMENTS` (21 forex pairs + Gold/Silver/Platinum with ticker, pip value, pip size), `CORR_GROUPS` (correlated-exposure groups), `TYPICAL_SPREADS`, `TREND_TIMEFRAMES`. The registry is dict-compatible (`INSTRUMENTS[name]["ticker"]`) for legacy callers, but `INSTRUMENTS.get(name)` returns an `Instrument` dataclass — use attribute access on it, never `.get()`.
-- **`src/pages_lib/navigation.py`** — `NAV_SECTIONS` defines the sidebar nav for all 21 pages, grouped as the 8-step trading workflow (scan → filter → weekly bias → daily confirm → 4H zone → 15M trigger → risk/execute → review). To add/reorder pages, edit only this file. Legacy pages call `render_sidebar_nav()`; framework pages get it from the base class.
+- **`src/pages_lib/navigation.py`** — `NAV_SECTIONS` defines the sidebar nav for all 56 pages, grouped into 6 sections by trading rhythm (Morning Brief → Pre-session → Session → Weekend → Research Lab → Reference). To add/reorder pages, edit only this file. Legacy pages call `render_sidebar_nav()`; framework pages get it from the base class.
 - **`src/ui/charts.py` `ChartKit`** — the **chart stencil**: every new Plotly figure is composed from its primitives (`panels` → `candles`/`line`/`bars`/`band`/`hline`/`levels` → `finish`, rendered with `config=ChartKit.PLOTLY_CONFIG`) so all charts share one look from one place. Never hand-roll `make_subplots` + `update_layout` boilerplate in a page; legacy hand-rolled charts migrate to ChartKit opportunistically (leading-indicators and forecast_tab are the reference migrations). `ChartBuilder.trend_panel`/`radar` are preserved page-specific composites. **TradingView pilot** (`src/ui/tv_charts.py`): an opt-in second renderer using TradingView's open-source lightweight-charts via the `streamlit-lightweight-charts` component, wired behind a shared sidebar engine radio (`tv_charts.engine_toggle(key)`; **TradingView is the default** when `streamlit-lightweight-charts` is importable, Plotly when it isn't — so the radio never opens on a choice that immediately warns) on **leading-indicators, market-structure, 4H-confluence-zone, and amd-scanner**. Pure composable builders (`candle_series`/`line_series`/`level_series`/`histogram_series`/`marker`/`price_chart`, plus the page composer `leading_charts`) are unit-tested in `tests/test_tv_charts.py`; `render`/`engine_toggle`/`available` are the only impure parts. Every wired page keeps its full-fidelity Plotly chart as the **fallback** (each render is wrapped `try: tv … except: plotly`), and it is still what the user gets by picking Terminal or when the component is missing — so no chart can ever fail to render, but TradingView is what opens first. Known engine limits carried as honest captions: no shaded rectangles (confluence zones render as top/centre/bottom lines), no horizontal histogram (AMD volume-profile stays Plotly-only), crosshairs don't sync across panes. `available()` degrades to ChartKit when the optional component isn't installed. Evaluate-before-committing; don't blanket-replace the remaining ~35 charts (radar/volume-profile/equity-curve shapes don't map to lightweight-charts).
 - **`src/core/volume_profile.py`** — the **fixed-range volume profile** (TradingView's FRVP), pure and unit-tested. `fixed_range_profile()` distributes each bar's activity across every price bin its high–low touches and returns a `VolumeProfile` carrying **POC / VAH / VAL**; `value_area()` is the standard Market Profile expansion (annex whichever *pair* of adjacent bins is heavier until 70% is enclosed — the CBOT/TradingView convention, not a one-row greedy walk). The range is anchored to a **session break** rather than a hand-dragged selection, which is what makes the POC reproducible: `previous_day_range()` (FX day rolling at `FX_DAY_BREAK_HOUR` = 21:00 UTC ≈ the 17:00 NY close), `previous_session_range()` for the named kill zones (window hours imported from `SessionService` — not redefined), or `last_n_bars_range()`. **The session still forming is never profiled** — its POC would move on every rerun. Two honesty constraints are baked in and surfaced as captions: zero-volume spot FX falls back to per-bar **true range** as an activity proxy (`is_proxy` says which you got — the module owns `true_range`/`has_usable_volume`, and `pages/amd-scanner.py` now delegates to it rather than keeping a second copy), and the **buy/sell split is inferred from bar direction** (up-closing = buy), not from the tape. `read_profile()` classifies price as ABOVE/IN/BELOW value. Rendered as the AMD scanner's **"📊 Fixed Range VP"** tab, which overlays the profile *on* the price panel at its anchor via Plotly `add_shape` rectangles (buy/sell stacked horizontally, out-of-value rows dimmed) with POC/VAH/VAL carried forward to the right edge — Plotly-only for the same reason the AMD volume profile is, since lightweight-charts has no horizontal histogram.
 - **`src/ui/theme.py`** — `BloombergTheme` color tokens + injected CSS. Terminal green-on-black. ⚠️ The accent token is named `AMBER` but holds terminal green `#00ff41` (renamed look, kept name to avoid touching every call site). `.streamlit/config.toml` `[theme]` must be kept in sync with these tokens so native widgets (dropdown popovers, sliders) match the custom CSS.
 - **`src/core/signals.py`** — `score_setup()` is the multi-timeframe scorer used by Setup Ranker, Fib Entry, and `app.py`. **7 always-scored directional criteria** (weekly EMA/RSI/structure, daily trend/structure/MACD, 4H structure) + **3 quality gates** (ATR Volatile, 4H Zone, Spread/ATR — excluded from `score`/`grade`), plus **two conditional directional criteria**: a **`Daily 200MA`** regime filter (period from `AppConfig.ema_long`; longs want price above the daily 200 SMA, shorts below) added whenever the daily frame has ≥200 bars, and **Currency Strength** when the caller supplies a `currency_strength_diff` (Setup Ranker and Fib Entry wire this via `_SetupRankerDataFeed.currency_strength_diff()`; commodities skip it). Both are **omitted rather than scored 0** when unavailable, so thin history / no fundamental read never *penalises* a pair — `max_score` is 7, 8 or 9 accordingly. The 200MA is deliberately a **scored criterion, not a veto**: every new trend starts by crossing the 200, so vetoing would hide the first (best) leg of every reversal. ⚠️ It is the **daily** 200 — a 200-period MA on an intraday chart spans ~8 days and routinely disagrees; that's a timeframe difference, not a bug. `grade`/`pct` are always computed as a **percentage** of `max_score` (A ≥80%, B ≥60%, C ≥40%, D otherwise) so 7/8/9-point results stay comparable — never compare raw `score` across pairs without checking `max_score` first. Indicator math also lives in `src/indicators/` (`TechnicalIndicators`, `TrendSignalEvaluator` — the 6-condition trend scorer).
-- **`src/services/market_data.py`** — the **canonical OHLC spine**: one fixed window per timeframe (`weekly_ohlc` = 2y daily resampled to W, `daily_ohlc` = 300d, `h4_ohlc` = 90d hourly resampled to 4h, `hourly_ohlc` = 30d; all `ttl=300`), lifted from `_SetupRankerDataFeed` (which now delegates to it) and routed through `market_cache.cached_ohlc`. Pages fetch OHLC through these functions — a page may widen `period`/`days` for chart depth, but interval/resample/TTL are fixed here and nowhere else. Never re-introduce per-page `cached_ohlc`/`yf.download` fetchers with private windows: an EMA over a private lookback is how pages drift out of sync.
+- **`src/services/market_data.py`** — the **canonical OHLC spine**: one fixed window per timeframe (`weekly_ohlc` = 2y daily resampled to W, `daily_ohlc` = 300d, `h4_ohlc` = 90d hourly resampled to 4h, `hourly_ohlc` = 30d; all `ttl=300`), lifted from `_SetupRankerDataFeed` (which now delegates to it) and routed through `market_cache.cached_ohlc`. Pages fetch OHLC through these functions — a page may widen `period`/`days` for chart depth, but interval/resample/TTL are fixed here and nowhere else. Never re-introduce per-page `cached_ohlc`/`yf.download` fetchers with private windows: an EMA over a private lookback is how pages drift out of sync. **`tests/test_ohlc_spine.py` now enforces this** by static analysis over `pages/` and `src/pages_lib/` — a new `yf.download`/`yf.Ticker` call fails the suite. A reasoned entry in its `LEGITIMATE_NON_SPINE` is the escape hatch, and the bar is "the spine cannot serve this series" (CFTC positioning, FRED economics) — *not* "this is not a registry pair": `cached_ohlc` is ticker-generic and serves `^NDX`, `DX-Y.NYB`, `ES=F`, `^VIX`, `TIP` perfectly well. Two things to know when migrating a page: the spine defaults to `auto_adjust=True` (immaterial for FX/metals/futures, material for a distribution-paying ETF), and converting a `start=` date to `period="Nd"` needs a few days of slack or the bar sitting exactly on the boundary is silently dropped. Sub-hourly frames (15m/30m) have no canonical function; route them through `cached_ohlc` as `fib_entry._fetch_15m` does.
 - **`src/core/bias.py`** — the **canonical direction**: `timeframe_bias()` (three unanimous votes — EMA20 vs EMA50, price vs each; `score_setup`'s weekly criterion generalized) and `house_view()` (Weekly 3 / Daily 2 / 4H 1 weighted composite, renormalized over available frames). Pure and unit-tested. `src/services/bias_service.py` wires it to the spine and caches; `show_house_view(pair, page_read=..., page_label=...)` renders the shared strip (`HouseViewStrip` in `src/ui/components.py`) that every signal page shows for its focus pair — a page's own read is a *lens* and may disagree, but the strip flags any opposite-direction conflict via `is_conflict()`/`normalize_direction()`. Strip wired: weekly-ema, daily-trend, weekly-swing, daily-macd, forecast_tab, market-structure, 4H-confluence-zone, confluence-checker, trend-signals (detail panel), vwap-ema-gold, dxy-gold, instrument-predictor, predictive, twenty_day_breakout, amd-scanner; Market Overview's trading ideas and Daily Cockpit's aligned ideas carry inline "opposes house view" flags instead. **MTF Matrix is the consensus board**: `render_mtf_matrix_tab` renders the whole universe's house view (the legacy candle-sentiment grid survives in an expander as a secondary lens). New directional pages should call `show_house_view` rather than inventing another trend definition.
 - **`src/services/house_view_backtest.py`** — walk-forward validation of the house view (pure, unit-tested): recomputes the composite per historical day with **no lookahead** (EMA recursion prefix property for the daily leg; one partial-week recursion step on the completed-week weekly EMA for the weekly leg — a unit test proves per-day equivalence with `bias.house_view` on truncated frames) and reports hit rate / mean signed forward return per state (BULLISH/BEARISH/ALIGNED/NEUTRAL vs ALL DAYS baseline) at 5/10/20-day horizons. Weekly+Daily legs only (hourly history can't reach back years for 4H; renormalization handles it as live). Rendered as MTF Matrix's "🧪 Validation" tab. A research tool — not a signal source, not tool-logged, same policy as the other backtest pages.
 - **`src/services/source_scorecard.py`** — the **evidence engine**: resolves every persisted `trade_setups` row against subsequent price action (recorded R for closed rows; conservative TP/SL bar replay, stop-only horizon marks, or 10-bar directional hit/miss for open signals — never guessing on Neutral/data-less rows) and aggregates win rate / avg R / expectancy per `source` tag. Pure and unit-tested; rendered as the Trade Journal's "🏆 Source Scorecard" tab (price history via the spine's `daily_ohlc`). This is how you find out which signal pages deserve trust — extend it rather than writing another ad-hoc outcome evaluator (`signal_expiry` handles live invalidation badges; the scorecard handles historical resolution).

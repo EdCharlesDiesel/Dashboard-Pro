@@ -210,6 +210,19 @@ class TradeRepository:
     INDEX_DDL = (
         "CREATE INDEX IF NOT EXISTS idx_trade_setups_logged_at "
         "ON trade_setups (logged_at DESC)",
+        # Broker imports are deduped in application code by reading the
+        # already-seen ticket set and filtering before insert. That is a
+        # read-then-write race: the weekly scheduled job and a manual run can
+        # both read a set lacking position 3089069590 and both insert it,
+        # double-counting its P/L and letting the Source Scorecard weight one
+        # trade as two. This index makes the database the arbiter instead.
+        #
+        # Partial by design: it covers only the broker feeds, whose `notes`
+        # carry a unique "MT4 #<ticket>" / "MT5 #<position id>" tag. Signal
+        # rows share boilerplate notes by the hundred and must stay exempt.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_trade_setups_broker_ticket "
+        "ON trade_setups (source, notes) "
+        "WHERE source IN ('mt4_import', 'mt5_import') AND notes IS NOT NULL",
     )
 
     # ── schema ──────────────────────────────────────────────────────────────
@@ -490,25 +503,40 @@ class TradeRepository:
         """
         if not rows:
             return 0
+        # ON CONFLICT DO NOTHING makes the `uq_trade_setups_broker_ticket` index
+        # the arbiter of duplicates, so two concurrent importers racing the same
+        # ticket cannot both insert it. No conflict target is named: the index is
+        # partial, and restating its predicate here would be a second place to
+        # keep in sync for no gain.
+        #
+        # RETURNING + `fetch=True` is what keeps the count honest. A row silently
+        # dropped by the conflict clause must not be reported as imported, and
+        # `execute_batch` cannot tell us — its rowcount reflects only the final
+        # batch. `execute_values` collects the returned ids across every page.
         sql = """
             INSERT INTO trade_setups (
                 logged_at, instrument, ticker, direction, session, lot_size,
                 entry_price, close_price, outcome, pips_gained, r_multiple,
                 sl_pips, is_open, source, notes, profit
-            ) VALUES (
-                %(logged_at)s, %(instrument)s, %(ticker)s, %(direction)s, %(session)s, %(lot_size)s,
-                %(entry_price)s, %(close_price)s, %(outcome)s, %(pips_gained)s, %(r_multiple)s,
-                %(sl_pips)s, FALSE, %(source)s, %(notes)s, %(profit)s
-            )
+            ) VALUES %s
+            ON CONFLICT DO NOTHING
+            RETURNING id
         """
+        template = (
+            "(%(logged_at)s, %(instrument)s, %(ticker)s, %(direction)s, "
+            "%(session)s, %(lot_size)s, %(entry_price)s, %(close_price)s, "
+            "%(outcome)s, %(pips_gained)s, %(r_multiple)s, %(sl_pips)s, "
+            "FALSE, %(source)s, %(notes)s, %(profit)s)"
+        )
         payload = [dict({k: r.get(k) for k in (
             "logged_at", "instrument", "ticker", "direction", "session", "lot_size",
             "entry_price", "close_price", "outcome", "pips_gained", "r_multiple",
             "sl_pips", "notes", "profit")}, source=source) for r in rows]
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:
-            psycopg2.extras.execute_batch(cur, sql, payload)
+            inserted = psycopg2.extras.execute_values(
+                cur, sql, payload, template=template, fetch=True)
             conn.commit()
-        return len(payload)
+        return len(inserted or [])
 
     def delete_setup(self, trade_id: int) -> None:
         with closing(self._connect()) as conn, conn, conn.cursor() as cur:

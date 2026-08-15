@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from src.services.mt5_trade_import import (
+    broker_utc_offset,
     pair_deals,
     parse_close_level,
     trips_to_journal_rows,
@@ -41,9 +42,10 @@ class TestParseCloseLevel:
 
 class TestPairDeals:
     def test_reassembles_a_long_round_trip(self):
-        trips = pair_deals([deal(1, 0, 0, 4339.899, hours_ago=5),
-                            deal(1, 1, 1, 4354.912, profit=150.13, hours_ago=2)],
-                           days=7, now=NOW)
+        trips, _held = pair_deals(
+            [deal(1, 0, 0, 4339.899, hours_ago=5),
+             deal(1, 1, 1, 4354.912, profit=150.13, hours_ago=2)],
+            days=7, now=NOW)
         assert len(trips) == 1
         t = trips[0]
         assert t["direction"] == "Long"
@@ -53,35 +55,42 @@ class TestPairDeals:
 
     def test_direction_comes_from_the_entry_not_the_exit(self):
         # Exit type is always the opposite of entry; reading it inverts trades.
-        trips = pair_deals([deal(2, 0, 1, 18.668, hours_ago=5),
-                            deal(2, 1, 0, 18.763, profit=-58.74, hours_ago=2)],
-                           days=7, now=NOW)
+        trips, _held = pair_deals(
+            [deal(2, 0, 1, 18.668, hours_ago=5),
+             deal(2, 1, 0, 18.763, profit=-58.74, hours_ago=2)],
+            days=7, now=NOW)
         assert trips[0]["direction"] == "Short"
 
     def test_open_position_is_skipped(self):
-        assert pair_deals([deal(3, 0, 0, 4339.9)], days=7, now=NOW) == []
+        trips, held = pair_deals([deal(3, 0, 0, 4339.9)], days=7, now=NOW)
+        assert trips == []
+        assert held["still_open"] == 1
 
     def test_exit_without_its_entry_is_skipped(self):
         # Opened before the fetch window: no entry price, so not scoreable.
-        assert pair_deals([deal(4, 1, 1, 111.917, profit=-9.99)],
-                          days=7, now=NOW) == []
+        trips, held = pair_deals([deal(4, 1, 1, 111.917, profit=-9.99)],
+                                 days=7, now=NOW)
+        assert trips == []
+        assert held["unpaired_exits"] == 1
 
     def test_trip_closed_before_the_cutoff_is_excluded(self):
-        trips = pair_deals([deal(5, 0, 0, 4339.9, hours_ago=24 * 30),
-                            deal(5, 1, 1, 4354.9, profit=10.0, hours_ago=24 * 20)],
-                           days=7, now=NOW)
+        trips, _held = pair_deals(
+            [deal(5, 0, 0, 4339.9, hours_ago=24 * 30),
+             deal(5, 1, 1, 4354.9, profit=10.0, hours_ago=24 * 20)],
+            days=7, now=NOW)
         assert trips == []
 
     def test_long_hold_counts_when_it_closed_inside_the_window(self):
         # Entry far outside `days` — the wider lookback is the whole point.
-        trips = pair_deals([deal(6, 0, 0, 4300.0, hours_ago=24 * 90),
-                            deal(6, 1, 1, 4400.0, profit=500.0, hours_ago=3)],
-                           days=7, now=NOW)
+        trips, _held = pair_deals(
+            [deal(6, 0, 0, 4300.0, hours_ago=24 * 90),
+             deal(6, 1, 1, 4400.0, profit=500.0, hours_ago=3)],
+            days=7, now=NOW)
         assert len(trips) == 1
         assert trips[0]["entry_price"] == pytest.approx(4300.0)
 
     def test_partial_closes_aggregate_into_one_trip(self):
-        trips = pair_deals([
+        trips, _held = pair_deals([
             deal(7, 0, 0, 4400.0, vol=0.2, hours_ago=5),
             deal(7, 1, 1, 4410.0, vol=0.1, profit=100.0, hours_ago=3),
             deal(7, 1, 1, 4420.0, vol=0.1, profit=200.0, hours_ago=2),
@@ -92,17 +101,85 @@ class TestPairDeals:
         assert t["close_price"] == pytest.approx(4415.0)  # volume-weighted
         assert t["profit"] == pytest.approx(300.0)
 
+    def test_still_open_remainder_is_held_back_not_stored_as_complete(self):
+        # 0.2 opened, only 0.1 scaled out. Storing this would write a closed row
+        # carrying half the trade's P/L, and dedupe on position id would then
+        # block the correction forever.
+        trips, held = pair_deals([
+            deal(10, 0, 0, 4400.0, vol=0.2, hours_ago=5),
+            deal(10, 1, 1, 4410.0, vol=0.1, profit=100.0, hours_ago=2),
+        ], days=7, now=NOW)
+        assert trips == []
+        assert held["partially_closed"] == 1
+
+    def test_held_position_is_emitted_once_it_closes_in_full(self):
+        # The same position a week later, with the remainder closed at a loss:
+        # now it settles as one row whose P/L is the true net, not the +100
+        # that a premature import would have frozen in.
+        trips, held = pair_deals([
+            deal(10, 0, 0, 4400.0, vol=0.2, hours_ago=5),
+            deal(10, 1, 1, 4410.0, vol=0.1, profit=100.0, hours_ago=3),
+            deal(10, 1, 1, 4380.0, vol=0.1, profit=-500.0, hours_ago=2),
+        ], days=7, now=NOW)
+        assert len(trips) == 1
+        assert trips[0]["volume"] == pytest.approx(0.2)
+        assert trips[0]["profit"] == pytest.approx(-400.0)
+        assert held["partially_closed"] == 0
+
+    def test_exit_volume_exceeding_entry_is_held_back(self):
+        # Entry legs fell outside the window, so the volume-weighted entry
+        # price would be computed from an incomplete set.
+        trips, held = pair_deals([
+            deal(11, 0, 0, 4400.0, vol=0.1, hours_ago=5),
+            deal(11, 1, 1, 4410.0, vol=0.2, profit=100.0, hours_ago=2),
+        ], days=7, now=NOW)
+        assert trips == []
+        assert held["partially_closed"] == 1
+
+    def test_volume_is_the_size_opened_across_scale_ins(self):
+        trips, _held = pair_deals([
+            deal(12, 0, 0, 4400.0, vol=0.1, hours_ago=6),
+            deal(12, 0, 0, 4420.0, vol=0.1, hours_ago=5),
+            deal(12, 1, 1, 4430.0, vol=0.2, profit=300.0, hours_ago=2),
+        ], days=7, now=NOW)
+        assert trips[0]["volume"] == pytest.approx(0.2)
+        assert trips[0]["entry_price"] == pytest.approx(4410.0)  # weighted
+
+    def test_close_by_deal_counts_as_an_exit(self):
+        # entry == 3 only ever closes, so it pairs like a normal exit rather
+        # than being dropped.
+        trips, held = pair_deals([
+            deal(13, 0, 0, 4400.0, vol=0.1, hours_ago=5),
+            deal(13, 3, 1, 4410.0, vol=0.1, profit=100.0, hours_ago=2),
+        ], days=7, now=NOW)
+        assert len(trips) == 1
+        assert trips[0]["profit"] == pytest.approx(100.0)
+        assert held["reversals"] == 0
+
+    def test_reversal_deal_is_held_and_counted_not_dropped(self):
+        # entry == 2 spans a close and an opposing open; the split is not
+        # recoverable from the deal, so booking it would invent a P/L.
+        trips, held = pair_deals([
+            deal(14, 0, 0, 4400.0, vol=0.1, hours_ago=5),
+            deal(14, 2, 1, 4410.0, vol=0.3, profit=100.0, hours_ago=2),
+        ], days=7, now=NOW)
+        assert trips == []
+        assert held["reversals"] == 1
+
     def test_commission_and_swap_land_in_profit(self):
-        trips = pair_deals([deal(8, 0, 0, 4400.0, hours_ago=5),
-                            deal(8, 1, 1, 4410.0, profit=100.0, commission=-2.0,
-                                 swap=-1.5, hours_ago=2)], days=7, now=NOW)
+        trips, _held = pair_deals(
+            [deal(8, 0, 0, 4400.0, hours_ago=5),
+             deal(8, 1, 1, 4410.0, profit=100.0, commission=-2.0,
+                  swap=-1.5, hours_ago=2)],
+            days=7, now=NOW)
         assert trips[0]["profit"] == pytest.approx(96.5)
 
     def test_stop_price_read_from_the_close_comment(self):
-        trips = pair_deals([deal(9, 0, 0, 18.668, symbol="EURZAR", hours_ago=5),
-                            deal(9, 1, 1, 18.763, symbol="EURZAR", profit=-58.74,
-                                 comment="[sl 18.76307]", hours_ago=2)],
-                           days=7, now=NOW)
+        trips, _held = pair_deals(
+            [deal(9, 0, 0, 18.668, symbol="EURZAR", hours_ago=5),
+             deal(9, 1, 1, 18.763, symbol="EURZAR", profit=-58.74,
+                  comment="[sl 18.76307]", hours_ago=2)],
+            days=7, now=NOW)
         assert trips[0]["stop_price"] == pytest.approx(18.76307)
 
 
@@ -192,3 +269,24 @@ class TestTripsToJournalRows:
         rows, skipped = trips_to_journal_rows(
             [self._trip(close_price=None)], SMAP)
         assert rows == [] and skipped == {"XAUUSD": 1}
+
+
+class TestBrokerUtcOffset:
+    """The env-var default that feeds `closed_deals(broker_utc_offset=...)`."""
+
+    def test_absent_env_means_utc(self, monkeypatch):
+        monkeypatch.delenv("MT5_BROKER_UTC_OFFSET", raising=False)
+        assert broker_utc_offset() == 0.0
+
+    def test_reads_a_whole_hour_offset(self, monkeypatch):
+        monkeypatch.setenv("MT5_BROKER_UTC_OFFSET", "3")
+        assert broker_utc_offset() == 3.0
+
+    def test_negative_offsets_are_supported(self, monkeypatch):
+        monkeypatch.setenv("MT5_BROKER_UTC_OFFSET", "-5")
+        assert broker_utc_offset() == -5.0
+
+    def test_garbage_falls_back_to_utc_rather_than_raising(self, monkeypatch):
+        # A scheduled import must not die over a typo in the environment.
+        monkeypatch.setenv("MT5_BROKER_UTC_OFFSET", "UTC+3")
+        assert broker_utc_offset() == 0.0

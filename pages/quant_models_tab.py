@@ -23,18 +23,17 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 
 from src.core.quant_models import (fit_ou, ou_signal, fit_garch,
                                    garch_position_size, gbm_null_test,
                                    uip_carry_analysis, kalman_dynamic_beta,
                                    engle_granger)
-from src.core.secrets import fred_api_key
 from src.instruments.registry import INSTRUMENTS
 from src.services.alert_service import NotifyCache
+from src.services.fred_data import fred_series
+from src.services.market_data import daily_ohlc
 from src.services.tool_log import log_tool_usage
 
-FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 _LOG_NS = "quant_models_log"
 _YEARS_HISTORY = 6
 _CUSTOM_YAHOO = "Custom Yahoo ticker…"
@@ -47,32 +46,48 @@ _CUSTOM_RATE = "Custom FRED series…"
 # ------------------------------------------------------------------------- #
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def _fetch_yf(ticker: str, start: str) -> pd.Series:
-    px = yf.download(ticker, start=start, interval="1d",
-                     auto_adjust=False, progress=False)
-    if px.empty:
+    """Daily closes from `start`, through the canonical spine.
+
+    The spine takes a `period`, not a start date, so the span is converted to
+    days and the frame is then trimmed back to `start` — the boundary stays
+    exactly what the caller asked for rather than approximately it, which
+    matters because the cointegration and Kalman fits below are sensitive to
+    how much history they are handed.
+
+    The index is forced tz-naive as before, but conditionally: `tz_localize(None)`
+    raises on an index that is already naive, and the spine can return either
+    depending on whether the bars came from Postgres or straight from Yahoo.
+    """
+    begin = pd.Timestamp(start)
+    # +7d of slack: `period="Nd"` measures back from today and can land just
+    # inside `begin`, dropping a bar sitting exactly on it (measured: the
+    # 2024-01-01 bar vanished at an exact 957d span). Over-fetch a little and
+    # let the trim below define the left edge, not the fetch window.
+    days = max((pd.Timestamp.today().normalize() - begin).days, 1) + 7
+    df = daily_ohlc(ticker, period=f"{days}d")
+    if df.empty or "Close" not in df.columns:
         return pd.Series(dtype=float)
-    if isinstance(px.columns, pd.MultiIndex):
-        px.columns = px.columns.get_level_values(0)
-    s = px["Close"].dropna()
-    s.index = pd.to_datetime(s.index).tz_localize(None)
-    return s
+    s = df["Close"].dropna()
+    idx = pd.to_datetime(s.index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    s.index = idx
+    return s[s.index >= begin]
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def _fetch_fred(series_id: str, start: str) -> pd.Series:
-    import requests
-    key = fred_api_key()
-    if not key:
-        raise RuntimeError("FRED_API_KEY not found in st.secrets or env.")
-    r = requests.get(FRED_URL, params={
-        "series_id": series_id, "api_key": key, "file_type": "json",
-        "observation_start": start}, timeout=30)
-    r.raise_for_status()
-    obs = r.json()["observations"]
-    s = pd.Series(
-        [float(o["value"]) if o["value"] != "." else np.nan for o in obs],
-        index=pd.to_datetime([o["date"] for o in obs]), name=series_id)
-    return s.dropna()
+    """FRED observations from `start`, through the canonical macro spine.
+
+    Served from Postgres when the worker already holds the series, HTTP
+    otherwise — and the spine writes that fetch back, so the next reader of
+    the same series is local. `start` is inclusive, as before.
+
+    No API key is required any more: the spine's fallback uses FRED's public
+    CSV endpoint, so this page now works on a machine with no FRED_API_KEY
+    where it previously raised.
+    """
+    return fred_series(series_id, start=start).rename(series_id)
 
 
 def _history_start() -> str:

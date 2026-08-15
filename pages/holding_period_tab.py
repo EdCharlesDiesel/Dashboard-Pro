@@ -45,9 +45,9 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 
 from src.services.alert_service import NotifyCache
+from src.services.market_data import daily_ohlc
 from src.services.tool_log import log_tool_usage
 from src.instruments import INSTRUMENTS as _REGISTRY_INSTRUMENTS
 
@@ -64,12 +64,20 @@ PAIRS = {name: info.ticker for name, info in _REGISTRY_INSTRUMENTS.items()}
 
 @st.cache_data(ttl=12 * 3600, show_spinner="Fetching daily bars...")
 def fetch_daily(ticker: str, years: int) -> pd.DataFrame:
-    df = yf.download(ticker, period=f"{years}y", interval="1d",
-                     auto_adjust=False, progress=False)
-    if df.empty:
-        return df
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    """Daily closes over `years`, through the canonical spine.
+
+    The spine's own `period` argument carries the widening, so interval and
+    resample rule stay defined in `src/services/market_data.py` alone. The 12h
+    page cache above is deliberate and unchanged: this page pulls years of
+    daily bars, which do not move intraday, and re-fetching them on every
+    widget touch would punish the shared spine for no gain.
+
+    MultiIndex flattening is gone — `market_cache.cached_ohlc` already returns
+    the flattened shape.
+    """
+    df = daily_ohlc(ticker, period=f"{years}y")
+    if df.empty or "Close" not in df.columns:
+        return pd.DataFrame()
     return df[["Close"]].dropna()
 
 
