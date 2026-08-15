@@ -32,9 +32,9 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 
 from src.services.alert_service import NotifyCache
+from src.services.market_data import daily_ohlc, hourly_ohlc
 from src.services.tool_log import log_tool_usage
 
 ET = "America/New_York"
@@ -50,12 +50,9 @@ TRADING_DAYS = 252
 @st.cache_data(ttl=6 * 3600, show_spinner="Fetching ES=F hourly bars...")
 def fetch_es_hourly(period: str = "730d") -> pd.DataFrame:
     """ES futures 1h bars, ET-indexed, with per-bar open->close returns."""
-    df = yf.download("ES=F", period=period, interval="1h",
-                     auto_adjust=False, progress=False)
-    if df.empty:
-        return df
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    df = hourly_ohlc("ES=F", days=int(str(period).rstrip("d") or 730))
+    if df.empty or not {"Open", "Close"} <= set(df.columns):
+        return pd.DataFrame()
     df = df.tz_convert(ET) if df.index.tz is not None else df.tz_localize("UTC").tz_convert(ET)
     df = df[["Open", "Close"]].dropna()
     # Per-bar return isolates the hour itself (no gap contamination).
@@ -67,12 +64,9 @@ def fetch_es_hourly(period: str = "730d") -> pd.DataFrame:
 
 @st.cache_data(ttl=6 * 3600, show_spinner="Fetching VIX...")
 def fetch_vix(period: str = "730d") -> pd.Series:
-    vix = yf.download("^VIX", period=period, interval="1d",
-                      auto_adjust=False, progress=False)
-    if vix.empty:
+    vix = daily_ohlc("^VIX", period=period)
+    if vix.empty or "Close" not in vix.columns:
         return pd.Series(dtype=float)
-    if isinstance(vix.columns, pd.MultiIndex):
-        vix.columns = vix.columns.get_level_values(0)
     s = vix["Close"].copy()
     s.index = pd.to_datetime(s.index).date
     s.name = "vix"

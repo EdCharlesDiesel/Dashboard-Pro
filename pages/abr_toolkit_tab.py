@@ -15,7 +15,9 @@ the same pooled Postgres connection every other page uses, resolved from
 session state the same way (auto_connect()). `render(repo=None)` skips
 journaling when the DB isn't configured.
 
-Data source: yfinance (1h fetched and resampled for H4/H6).
+Data source: the canonical OHLC spine (`src/services/market_data.py`), with H6
+resampled from the canonical hourly frame. A live MT5 terminal takes precedence
+when one is running.
 """
 
 from __future__ import annotations
@@ -26,13 +28,13 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 
 from src.db.cache import pooled_repository
 from src.db.connection import current_db_config
 from src.instruments.registry import INSTRUMENTS as _REGISTRY
 from src.instruments.registry import TREND_COMMODITIES as _COMMODITIES
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.market_data import daily_ohlc, h4_ohlc, hourly_ohlc
 from src.ui.theme import BloombergTheme as T
 
 # ----------------------------------------------------------------------------
@@ -374,20 +376,35 @@ def _fetch_ohlc_mt5(symbol: str, tf: str) -> pd.DataFrame:
 
 
 def _fetch_ohlc_yfinance(ticker: str, tf: str) -> pd.DataFrame:
-    """H1/D1 native; H4/H6 resampled from 1h. Returns OHLC, oldest first."""
+    """H1/D1/H4 canonical; H6 resampled from H1. Returns OHLC, oldest first.
+
+    Routed through the canonical spine (`src/services/market_data.py`) rather
+    than a private `yf.download`. The window is widened via the spine's own
+    argument, so interval, resample rule and TTL stay defined in exactly one
+    place — a private lookback here is how this page would drift out of step
+    with every other page reading the same instrument.
+
+    H4 uses the spine's `h4_ohlc` (hourly resampled to 4h, the same operation
+    this function used to do by hand). There is no canonical 6h frame, so that
+    one still resamples locally — from the canonical hourly bars.
+
+    MultiIndex flattening is no longer needed here: `market_cache.cached_ohlc`
+    already returns the flattened shape.
+    """
     if tf == "1d":
-        raw = yf.download(ticker, period="2y", interval="1d",
-                          progress=False, auto_adjust=False)
+        df = daily_ohlc(ticker, period="2y")
+    elif tf == "4h":
+        df = h4_ohlc(ticker, days=720)
     else:
-        raw = yf.download(ticker, period="720d", interval="1h",
-                          progress=False, auto_adjust=False)
-    if raw is None or raw.empty:
+        df = hourly_ohlc(ticker, days=720)
+    if df is None or df.empty:
         return pd.DataFrame()
-    if isinstance(raw.columns, pd.MultiIndex):
-        raw.columns = raw.columns.get_level_values(0)
-    df = raw[["Open", "High", "Low", "Close"]].dropna()
-    if tf in ("4h", "6h"):
-        df = df.resample(tf).agg(
+    cols = ["Open", "High", "Low", "Close"]
+    if not all(c in df.columns for c in cols):
+        return pd.DataFrame()
+    df = df[cols].dropna()
+    if tf == "6h":
+        df = df.resample("6h").agg(
             {"Open": "first", "High": "max", "Low": "min", "Close": "last"}
         ).dropna()
     return df.tail(1500)
@@ -396,8 +413,8 @@ def _fetch_ohlc_yfinance(ticker: str, tf: str) -> pd.DataFrame:
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_ohlc(symbol: str, yf_ticker: str, tf: str) -> pd.DataFrame:
     """Tries the local MT5 terminal first (exact broker candles, all four
-    timeframes native); falls back to yfinance (H4/H6 resampled from H1)
-    when MT5 isn't installed/running. Returns OHLC, oldest first."""
+    timeframes native); falls back to the canonical spine (H6 resampled from
+    H1) when MT5 isn't installed/running. Returns OHLC, oldest first."""
     df = _fetch_ohlc_mt5(symbol, tf)
     if not df.empty:
         return df.tail(1500)

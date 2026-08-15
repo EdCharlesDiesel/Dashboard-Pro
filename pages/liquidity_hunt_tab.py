@@ -27,15 +27,19 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 from sqlalchemy import text
 
 from src.instruments import INSTRUMENTS
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.market_data import hourly_ohlc
 from src.ui.theme import BloombergTheme
 
 HORIZONS = [5, 15, 60]  # forward horizons, in bars
 SAST = "Africa/Johannesburg"
+
+# Lookback selector -> days, for the canonical hourly frame (which takes
+# `days`, not a period string). The 15m/30m paths keep the string as-is.
+_PERIOD_DAYS = {"5d": 5, "1mo": 30, "3mo": 90}
 
 # Full registry universe (21 forex pairs + Gold/Silver/Platinum/WTI), not a
 # hand-picked subset — same tickers every other page scans against.
@@ -45,13 +49,34 @@ SYMBOL_MAP = {name: inst.ticker for name, inst in INSTRUMENTS.items()}
 
 @st.cache_data(ttl=900, show_spinner=False)
 def load_ohlcv(ticker: str, period: str, interval: str) -> pd.DataFrame:
-    df = yf.download(ticker, period=period, interval=interval,
-                     progress=False, auto_adjust=False)
-    if df.empty:
-        return df
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df = df.rename(columns=str.lower)[["open", "high", "low", "close", "volume"]]
+    """Intraday OHLCV, never through a private `yf.download`.
+
+    This page is the one case the canonical spine cannot serve outright: it
+    offers 15m and 30m, and `src/services/market_data.py` models nothing below
+    hourly. So the two paths differ deliberately:
+
+    * **1h** uses the canonical `hourly_ohlc`, widened via its own `days`
+      argument — same interval and TTL as every other page reading hourly bars.
+    * **15m / 30m** go through `market_cache.cached_ohlc`, the shared
+      read-through the spine itself sits on. That is the established pattern
+      for sub-hourly frames (`src/pages_lib/fib_entry.py::_fetch_15m`), and it
+      still buys the shared cache and Postgres persistence that a private
+      `yf.download` gives up.
+
+    MultiIndex flattening is gone — `cached_ohlc` already returns it flattened.
+    """
+    if interval == "1h":
+        df = hourly_ohlc(ticker, days=_PERIOD_DAYS.get(period, 30))
+    else:
+        from src.db.market_cache import cached_ohlc
+        try:
+            df = cached_ohlc(ticker, period=period, interval=interval, ttl=900)
+        except Exception:
+            return pd.DataFrame()
+    cols = ["Open", "High", "Low", "Close", "Volume"]
+    if df is None or df.empty or not all(c in df.columns for c in cols):
+        return pd.DataFrame()
+    df = df[cols].rename(columns=str.lower)
     df.index = pd.to_datetime(df.index, utc=True).tz_convert(SAST)
     return df.dropna(subset=["open", "high", "low", "close"])
 

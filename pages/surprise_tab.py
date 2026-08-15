@@ -35,6 +35,7 @@ from sqlalchemy import text
 from src.core.secrets import send_telegram_message
 from src.instruments.registry import INSTRUMENTS as _REGISTRY
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services.market_data import daily_ohlc
 from src.ui.theme import BloombergTheme as T
 
 CALENDAR_TABLE = "sentry_news"          # written by src/services/news_fetcher.py
@@ -260,9 +261,20 @@ def gold_oil_corr(window: int = 20) -> pd.Series | None:
     Positive = classic safe-haven co-move on geopolitics.
     Negative = the current oil->inflation->hike->USD chain. Sign flip = regime change."""
     try:
-        import yfinance as yf
-        px = yf.download(["GC=F", "BZ=F"], period="1y",
-                         progress=False)["Close"].dropna()
+        # Two canonical fetches joined on the index, rather than one
+        # multi-ticker download. `sort=True` keeps the union chronological —
+        # the rolling correlation depends on that ordering — and the dropna
+        # then leaves only days both legs actually traded, which is what the
+        # old `["Close"].dropna()` produced.
+        gold = daily_ohlc("GC=F", period="1y")
+        oil = daily_ohlc("BZ=F", period="1y")
+        if gold.empty or oil.empty:
+            return None
+        px = pd.concat([gold["Close"].rename("GC=F"),
+                        oil["Close"].rename("BZ=F")],
+                       axis=1, sort=True).dropna()
+        if px.empty:
+            return None
         rets = px.pct_change().dropna()
         return rets["GC=F"].rolling(window).corr(rets["BZ=F"]).dropna()
     except Exception:

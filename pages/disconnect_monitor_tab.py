@@ -26,7 +26,7 @@ Method, per relationship (A = driver, B = asset):
         opportunity" is a story, not an edge.
 
 Data: FRED for real yields / US 2Y (needs FRED_API_KEY in st.secrets or env),
-yfinance for market prices.
+the canonical OHLC spine (src/services/market_data.py) for market prices.
 
 NOTE ON THE REAL YIELD SERIES: FRED has no 2-year TIPS constant maturity.
 Default proxy is DFII5 (5y real yield); switch to a DGS2-minus-T5YIE spread in
@@ -42,12 +42,12 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 from plotly.subplots import make_subplots
 
 from src.core.quant_models import fit_ou
 from src.core.secrets import fred_api_key
 from src.services.alert_service import NotifyCache
+from src.services.market_data import daily_ohlc
 from src.services.signal_store import persist_signals
 from src.services.tool_log import log_tool_usage
 
@@ -117,15 +117,32 @@ def fetch_fred(series_id: str, start: str) -> pd.Series:
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def fetch_yf(ticker: str, start: str) -> pd.Series:
-    px = yf.download(ticker, start=start, interval="1d",
-                     auto_adjust=False, progress=False)
-    if px.empty:
+    """Daily closes from `start`, through the canonical spine.
+
+    The spine takes a `period`, not a start date, so the span is converted to
+    days and the frame trimmed back to `start` — the residual-z and OU
+    half-life fits below read the whole window, so its left edge has to be
+    what the caller asked for, not near it.
+
+    The index is forced tz-naive conditionally: `tz_localize(None)` raises on
+    an already-naive index, and the spine returns either depending on whether
+    the bars came from Postgres or straight from Yahoo.
+    """
+    begin = pd.Timestamp(start)
+    # +7d of slack: `period="Nd"` measures back from today and can land just
+    # inside `begin`, dropping a bar sitting exactly on it (measured: the
+    # 2024-01-01 bar vanished at an exact 957d span). Over-fetch a little and
+    # let the trim below define the left edge, not the fetch window.
+    days = max((pd.Timestamp.today().normalize() - begin).days, 1) + 7
+    df = daily_ohlc(ticker, period=f"{days}d")
+    if df.empty or "Close" not in df.columns:
         return pd.Series(dtype=float)
-    if isinstance(px.columns, pd.MultiIndex):
-        px.columns = px.columns.get_level_values(0)
-    s = px["Close"].dropna()
-    s.index = pd.to_datetime(s.index).tz_localize(None)
-    return s
+    s = df["Close"].dropna()
+    idx = pd.to_datetime(s.index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    s.index = idx
+    return s[s.index >= begin]
 
 
 def real_yield_series(start: str, mode: str) -> pd.Series:

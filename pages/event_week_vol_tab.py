@@ -5,7 +5,7 @@ Empirical test: is there a "busy week of the month" pattern in FX volatility,
 and does anchoring to events (NFP / CPI / FOMC / BoJ / SARB) explain it
 better than the raw week number?
 
-Uses yfinance daily OHLC.
+Uses the canonical OHLC spine (src/services/market_data.py) for daily bars.
 
 Two competing groupings are computed for every instrument:
   1. NAIVE:  week-of-month (1..5) -> mean daily ATR%
@@ -30,10 +30,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 
 from src.instruments import INSTRUMENTS as _REGISTRY_INSTRUMENTS
 from src.services.alert_service import NotifyCache
+from src.services.market_data import daily_ohlc
 from src.services.tool_log import log_tool_usage
 
 # ---------------------------------------------------------------------------
@@ -146,15 +146,34 @@ def build_event_calendar(start: dt.date, end: dt.date,
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def fetch_daily(ticker: str, start: str, end: str) -> pd.DataFrame:
-    df = yf.download(ticker, start=start, end=end,
-                     interval="1d", auto_adjust=False, progress=False)
-    if df.empty:
-        return df
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df = df[["Open", "High", "Low", "Close"]].dropna()
-    df.index = pd.to_datetime(df.index).tz_localize(None)
-    return df
+    """Daily OHLC over [start, end), through the canonical spine.
+
+    The spine takes a `period`, so the span back to `start` is converted to
+    days and both edges are then trimmed here. The right edge is **exclusive**
+    (`< finish`), matching `yf.download`'s `end` semantics — closing that
+    interval instead would quietly add a bar to every window, and this page
+    slices windows around event dates where one extra bar is a wrong answer.
+
+    The index is forced tz-naive conditionally: `tz_localize(None)` raises on
+    an already-naive index, and the spine returns either depending on whether
+    the bars came from Postgres or straight from Yahoo.
+    """
+    begin, finish = pd.Timestamp(start), pd.Timestamp(end)
+    # +7d of slack: `period="Nd"` measures back from today and can land just
+    # inside `begin`, dropping a bar sitting exactly on it (measured: the
+    # 2024-01-01 bar vanished at an exact 957d span). Over-fetch a little and
+    # let the trim below define the left edge, not the fetch window.
+    days = max((pd.Timestamp.today().normalize() - begin).days, 1) + 7
+    df = daily_ohlc(ticker, period=f"{days}d")
+    cols = ["Open", "High", "Low", "Close"]
+    if df.empty or not all(c in df.columns for c in cols):
+        return pd.DataFrame()
+    df = df[cols].dropna()
+    idx = pd.to_datetime(df.index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    df.index = idx
+    return df.loc[(df.index >= begin) & (df.index < finish)]
 
 
 def add_metrics(df: pd.DataFrame) -> pd.DataFrame:

@@ -23,7 +23,6 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 
 from src.core.quant_models import (fit_ou, ou_signal, fit_garch,
                                    garch_position_size, gbm_null_test,
@@ -32,6 +31,7 @@ from src.core.quant_models import (fit_ou, ou_signal, fit_garch,
 from src.core.secrets import fred_api_key
 from src.instruments.registry import INSTRUMENTS
 from src.services.alert_service import NotifyCache
+from src.services.market_data import daily_ohlc
 from src.services.tool_log import log_tool_usage
 
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
@@ -47,15 +47,33 @@ _CUSTOM_RATE = "Custom FRED series…"
 # ------------------------------------------------------------------------- #
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
 def _fetch_yf(ticker: str, start: str) -> pd.Series:
-    px = yf.download(ticker, start=start, interval="1d",
-                     auto_adjust=False, progress=False)
-    if px.empty:
+    """Daily closes from `start`, through the canonical spine.
+
+    The spine takes a `period`, not a start date, so the span is converted to
+    days and the frame is then trimmed back to `start` — the boundary stays
+    exactly what the caller asked for rather than approximately it, which
+    matters because the cointegration and Kalman fits below are sensitive to
+    how much history they are handed.
+
+    The index is forced tz-naive as before, but conditionally: `tz_localize(None)`
+    raises on an index that is already naive, and the spine can return either
+    depending on whether the bars came from Postgres or straight from Yahoo.
+    """
+    begin = pd.Timestamp(start)
+    # +7d of slack: `period="Nd"` measures back from today and can land just
+    # inside `begin`, dropping a bar sitting exactly on it (measured: the
+    # 2024-01-01 bar vanished at an exact 957d span). Over-fetch a little and
+    # let the trim below define the left edge, not the fetch window.
+    days = max((pd.Timestamp.today().normalize() - begin).days, 1) + 7
+    df = daily_ohlc(ticker, period=f"{days}d")
+    if df.empty or "Close" not in df.columns:
         return pd.Series(dtype=float)
-    if isinstance(px.columns, pd.MultiIndex):
-        px.columns = px.columns.get_level_values(0)
-    s = px["Close"].dropna()
-    s.index = pd.to_datetime(s.index).tz_localize(None)
-    return s
+    s = df["Close"].dropna()
+    idx = pd.to_datetime(s.index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    s.index = idx
+    return s[s.index >= begin]
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
