@@ -29,12 +29,9 @@ src/services/cot_cache/
 # Editor atomic-write temp files (accidentally committed before)
 *.py.tmp.*
 *.tmp.*
-.streamlit/secrets.toml
-.streamlit/secrets.toml
+
 .coverage
-logs/
 .claude/settings.local.json
-.streamlit/secrets.toml
 
 # foglamp architecture scan (.foglamp/). Tracked: scan.json (the map),
 # template.html (the renderer), render.py + introspect.py (the tooling).
@@ -45,3 +42,8 @@ logs/
 .foglamp/scan.lock.json
 .foglamp/code.json
 .foglamp/scan.html
+
+# Obsidian vault — local scratchpad, not project source. Keeps out the
+# vendored plugin bundles (~820 KB of minified main.js) and workspace.json,
+# which rewrites itself every time a pane moves.
+Obsidian/

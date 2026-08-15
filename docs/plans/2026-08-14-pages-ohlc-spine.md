@@ -281,3 +281,7 @@ Two disconnects measured on 2026-08-14 are **not** addressed here, because each 
 - **Placeholder scan:** the `<span>d` in Tasks 4-6 is computed in the step's own code line, not left to the reader.
 - **Type consistency:** `daily_ohlc(ticker: str, period: str)` and `hourly_ohlc(ticker: str, days: int)` are used with those exact types in every task.
 - **Known gap:** the 19 files calling `market_cache.cached_ohlc` directly are the softer half of the same rule. The guard does not yet flag them, because several are legitimate (`market_data.py` itself, the DB layer). Tightening that needs a per-file read and belongs in a follow-up plan once the loud offenders are gone.
+
+---
+
+Module map: [[Architecture]] · Docs index: [[README]]

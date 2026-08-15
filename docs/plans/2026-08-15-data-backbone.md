@@ -458,3 +458,7 @@ Simpler — remove the package, the worker service and both tables, and let page
 - **Type consistency:** `fred_series(series_id: str, start: str | None) -> pd.Series` is used with those types in Tasks 2 and 3; `read_fred_series` returns the same shape `_read_stored` is expected to.
 - **Known risk:** Task 4 drops a table. Step 1 dumps it first and Step 2 re-proves there is no reader, with an explicit STOP if there is.
 - **Sequencing:** Task 1 must land before Task 2, or the spine reads an empty table and every page silently falls back to HTTP — working, but proving nothing.
+
+---
+
+Module map: [[Architecture]] · Docs index: [[README]]
