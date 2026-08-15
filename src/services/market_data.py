@@ -79,6 +79,31 @@ def weekly_ohlc(ticker: str, period: str = WEEKLY_PERIOD) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+MONTHLY_PERIOD = "5y"    # ~60 monthly bars — enough for a 12-month lookback
+
+
+def monthly_ohlc(ticker: str, period: str = MONTHLY_PERIOD) -> pd.DataFrame:
+    """Canonical monthly bars: daily bars resampled to month-end (default 5y).
+
+    Resampled from daily rather than pulled as native ``1mo`` bars — the same
+    convention ``weekly_ohlc`` follows, and for the same reason. Native monthly
+    bars are a *different* series from the daily one every other timeframe
+    derives from, which is how a month's change comes to disagree with the weeks
+    inside it. The in-progress month is included as a partial bar, identically
+    for every page.
+    """
+    from src.db.market_cache import cached_ohlc
+    try:
+        df = _ohlcv(cached_ohlc(ticker, period=period, interval="1d",
+                                ttl=CANONICAL_TTL))
+        if df.empty:
+            return df
+        # "ME", not the removed "M": month-end is the pandas 3.0 spelling.
+        return _resample(df, "ME")
+    except Exception:
+        return pd.DataFrame()
+
+
 def h4_ohlc(ticker: str, days: int = H4_DAYS) -> pd.DataFrame:
     """Canonical 4-hour bars: hourly bars resampled to 4h (default 90d, ttl 300)."""
     from src.db.market_cache import cached_ohlc
