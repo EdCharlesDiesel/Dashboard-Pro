@@ -13,8 +13,11 @@
 ## Global Constraints
 
 - Never commit. Make changes only; the repo owner reviews and commits.
-- **A plan gets its own bump too.** This plan took **1.10.1** on creation, so
-  Task 1 lands on 1.10.2, Task 2 on 1.10.3, and so on.
+- **A plan gets its own bump too.** This plan took **1.10.1** on creation.
+  Do NOT reserve a block of numbers for its tasks: each task bumps to whatever
+  VERSION currently reads, plus one, at the moment that task completes. Other
+  plans land in between, and that is fine — the sequence is global, not
+  per-plan.
 - **Bump the version on every completed task** (`python deploy/sync_version.py <next>`), and rebuild + `python deploy/verify_deploy.py` before calling a task done — a fix in git is not a fix in production.
 - Run tests as `PYTHONIOENCODING=utf-8 python -m pytest`.
 - Return complete implementations — no TODO comments, no placeholder code.
