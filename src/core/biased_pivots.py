@@ -37,6 +37,7 @@ omitted here rather than reproduced as fake zeros.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -91,7 +92,50 @@ def levels(high: float, low: float, close_prev: float) -> Dict[str, float]:
     }
 
 
-def read(df: pd.DataFrame, zone_frac: float = DEFAULT_ZONE_FRAC) -> Optional[Pivots]:
+# How long a bar must have been closed before its OHLC is trusted.
+#
+# A bar is closed by *index* the moment the provider dates the next one, but its
+# close can still be revised for a while afterwards. Measured 2026-08-13: two
+# reads of the same daily bar 50 and 110 minutes after the 21:00 UTC FX day
+# break returned different closes and therefore opposite pivot zones -- AUD/ZAR
+# 11.42590 then 11.39812, USD/ZAR 16.19230 then 16.13787. Six hours clears the
+# observed revision window with room to spare while still letting a European
+# morning sweep use yesterday's bar.
+SETTLE_HOURS: float = 6.0
+
+
+def settled_period_index(df: pd.DataFrame, settle_hours: float = SETTLE_HOURS,
+                         now: Optional[datetime] = None) -> Optional[int]:
+    """Positional index of the newest bar old enough to trust: -2, or -3.
+
+    The forming bar's own timestamp is when the previous bar closed, so the age
+    of ``df.index[-1]`` is the age of the close at ``-2``. When that is inside
+    the settling window, step back one bar.
+
+    Returns ``None`` when the frame is too short for the choice made. Falling
+    back needs a fourth bar, because ``read()`` still takes the indicator's
+    ``shft+1`` close from one position older than the period — on a three-row
+    frame ``-4`` would wrap round to the newest bar and reintroduce exactly the
+    repaint this exists to stop.
+    """
+    if df is None or df.empty or len(df) < 3:
+        return None
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return -2          # no clock, so no evidence of freshness
+    closed_at = df.index[-1]
+    if getattr(closed_at, "tzinfo", None) is not None:
+        closed_at = closed_at.tz_convert("UTC").tz_localize(None)
+    reference = now or datetime.utcnow()
+    if getattr(reference, "tzinfo", None) is not None:
+        reference = reference.astimezone(timezone.utc).replace(tzinfo=None)
+    age_hours = (reference - closed_at.to_pydatetime()).total_seconds() / 3600.0
+    if age_hours >= settle_hours:
+        return -2
+    return -3 if len(df) >= 4 else None
+
+
+def read(df: pd.DataFrame, zone_frac: float = DEFAULT_ZONE_FRAC,
+         now: Optional[datetime] = None) -> Optional[Pivots]:
     """Pivot read for the current period from a completed daily frame.
 
     Uses the last **closed** bar as the pivot period and the bar before it for
@@ -113,15 +157,20 @@ def read(df: pd.DataFrame, zone_frac: float = DEFAULT_ZONE_FRAC) -> Optional[Piv
     desk swings, and a signal that is persisted, deduped and later scored has to
     be a function of the bar it names. One bar, one answer.
     """
-    if df is None or df.empty or len(df) < 3:
+    # This runs first because it is also the None/empty/too-short guard: the
+    # column check below dereferences `df.columns` and would raise on None.
+    # Length and freshness are both decided here — a bar that closed minutes ago
+    # can still be revised by the provider, so `-2` is not automatically safe.
+    idx = settled_period_index(df, now=now)
+    if idx is None:
         return None
     if not {"High", "Low", "Close"}.issubset(df.columns):
         return None
 
-    period = df.iloc[-2]           # last completed period -> high/low, and the
+    period = df.iloc[idx]          # newest *settled* period -> high/low, and the
                                    # close being judged (same bar it is stamped
                                    # with, so the read cannot drift intrabar)
-    earlier = df.iloc[-3]          # one older -> close (the source's shft+1)
+    earlier = df.iloc[idx - 1]     # one older -> close (the source's shft+1)
     price = float(period["Close"])
 
     high, low = float(period["High"]), float(period["Low"])
@@ -148,7 +197,7 @@ def read(df: pd.DataFrame, zone_frac: float = DEFAULT_ZONE_FRAC) -> Optional[Piv
 
     return Pivots(
         price=price, direction=direction, zone=zone, reason=reason,
-        bar_time=df.index[-2] if isinstance(df.index, pd.DatetimeIndex) else None,
+        bar_time=df.index[idx] if isinstance(df.index, pd.DatetimeIndex) else None,
         **{k: float(v) for k, v in lv.items()},
     )
 
