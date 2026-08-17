@@ -47,7 +47,7 @@
       { "id": "bb-worker", "label": "Data backbone worker", "kind": "cron", "sub": "APScheduler, daily refresh", "sourceRef": "src/data_backbone/worker.py", "detail": "Warms the store on startup then upserts every watched ticker and FRED series once a day." },
       { "id": "sentry", "label": "Evening sentry", "kind": "cron", "sub": "17:00-20:00 SAST window", "sourceRef": "src/services/evening_sentry.py", "detail": "Runs the evening shift: scores the watchlist, journals to Postgres, pings Telegram only on state change. No auto-execution." },
       { "id": "mt5-sync", "label": "MT5 sync loop", "kind": "cron", "sub": "Startup item, desktop session", "sourceRef": "deploy/mt5_sync.py", "group": "Broker desk", "detail": "Session-resident loop pushing live balance and open positions into the DB. Task Scheduler cannot do this - mt5.initialize needs the interactive desktop." },
-      { "id": "mt5-watchdog", "label": "MT5 sync watchdog", "kind": "cron", "sub": "restarts a wedged sync loop", "sourceRef": "deploy/mt5_watchdog.py", "group": "Broker desk", "detail": "Never imports MetaTrader5 itself, so it cannot wedge the way its patient does." },
+      { "id": "mt5-watchdog", "label": "MT5 sync watchdog", "kind": "cron", "sub": "restarts the loop or terminal", "sourceRef": "deploy/mt5_watchdog.py", "group": "Broker desk", "detail": "Never imports MetaTrader5, so it cannot wedge like its patient. Judges liveness by the sync log growing, not the process existing. A quiet log restarts the loop; IPC timeouts bounce the terminal." },
 
       { "id": "claude-code", "label": "Claude Code (MCP)", "kind": "agent", "sub": "16 MT5 tools behind 4 gates", "domain": "claude.ai", "detail": "External agent driving the real terminal on explicit instruction; trade tools sit behind four independent guardrails." },
       { "id": "ranker-polish", "label": "Setup rationale polish", "kind": "agent", "sub": "Grade-A only, fails soft", "sourceRef": "src/pages_lib/setup_ranker.py:162", "group": "AI surfaces", "detail": "Rewrites the deterministic rationale facts into an analyst paragraph, preserving every number verbatim." },
@@ -152,6 +152,7 @@
       { "from": "mt5-sync", "to": "mt5-link", "kind": "calls" },
       { "from": "mt5-sync", "to": "pg", "kind": "writes", "label": "balance + open positions" },
       { "from": "mt5-watchdog", "to": "mt5-sync", "kind": "triggers", "label": "restarts if wedged" },
+      { "from": "mt5-watchdog", "to": "mt5-terminal", "kind": "triggers", "label": "bounces if hung" },
 
       { "from": "market-data", "to": "pg", "kind": "writes", "label": "read-through market_bars" },
       { "from": "market-data", "to": "yahoo", "kind": "reads", "label": "only on stale/miss" },

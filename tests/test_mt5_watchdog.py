@@ -42,7 +42,8 @@ def wd(tmp_path):
 
 @pytest.fixture
 def state(wd):
-    return {"backoff": wd.BACKOFF_START, "next_try": 0.0, "warned_at": 0.0}
+    return {"backoff": wd.BACKOFF_START, "next_try": 0.0, "warned_at": 0.0,
+            "terminal_restarted_at": 0.0}
 
 
 class _FakeSync:
@@ -198,8 +199,139 @@ class TestRestartSafety:
             sync.release_lock()
 
 
+class TestFailedStreak:
+    def test_counts_only_back_to_back_failures(self, wd):
+        with open(wd.SYNC_LOG, "w", encoding="utf-8") as fh:
+            fh.write("[2026-08-18 05:00:00 UTC] NOT SYNCED: IPC timeout (-10005)\n")
+            fh.write("[2026-08-18 05:05:00 UTC] ok - balance=1.0\n")
+            fh.write("[2026-08-18 05:10:00 UTC] NOT SYNCED: IPC timeout (-10005)\n")
+            fh.write("[2026-08-18 05:15:00 UTC] NOT SYNCED: IPC timeout (-10005)\n")
+        assert wd.failed_streak() == 2          # the pre-success one does not count
+
+    def test_loop_banners_neither_break_nor_pad_the_streak(self, wd):
+        # A restart writes "[loop] syncing every 300s" between cycles. That is
+        # not a cycle: counting it would fake a failure, and breaking on it
+        # would reset a streak that is genuinely continuing.
+        with open(wd.SYNC_LOG, "w", encoding="utf-8") as fh:
+            fh.write("[2026-08-18 05:00:00 UTC] NOT SYNCED: IPC timeout (-10005)\n")
+            fh.write("[loop] syncing every 300s - session-resident\n")
+            fh.write("[2026-08-18 05:05:00 UTC] NOT SYNCED: IPC timeout (-10005)\n")
+        assert wd.failed_streak() == 2
+
+    def test_no_log_is_no_streak(self, wd):
+        assert wd.failed_streak() == 0
+
+
+class TestTerminalRestart:
+    def _failing(self, wd, count):
+        """A live loop whose last `count` cycles all failed."""
+        import time
+        with open(wd.SYNC_LOG, "w", encoding="utf-8") as fh:
+            fh.write("[2026-08-18 04:00:00 UTC] ok - balance=1.0\n")
+            for _ in range(count):
+                fh.write("[2026-08-18 05:00:00 UTC] NOT SYNCED: IPC timeout (-10005)\n")
+        now = time.time()
+        os.utime(wd.SYNC_LOG, (now, now))       # heartbeat fresh: loop is alive
+
+    def test_hung_terminal_is_bounced(self, wd, fake_sync, state, monkeypatch):
+        self._failing(wd, wd.TERMINAL_RESTART_AFTER_FAILS)
+        bounced = []
+        monkeypatch.setattr(wd, "restart_terminal", lambda: bounced.append(1) or True)
+        monkeypatch.setattr(wd, "restart", lambda *a: pytest.fail("bounced the loop"))
+        assert wd.check(fake_sync, state) is False
+        assert bounced == [1]
+
+    def test_short_streak_is_left_alone(self, wd, fake_sync, state, monkeypatch):
+        # A blip must never bounce a healthy terminal.
+        self._failing(wd, wd.TERMINAL_RESTART_AFTER_FAILS - 1)
+        monkeypatch.setattr(wd, "restart_terminal", lambda: pytest.fail("bounced on a blip"))
+        assert wd.check(fake_sync, state) is False
+
+    def test_cooldown_blocks_a_second_bounce(self, wd, fake_sync, state, monkeypatch):
+        self._failing(wd, wd.TERMINAL_RESTART_AFTER_FAILS + 3)
+        calls = []
+        monkeypatch.setattr(wd, "restart_terminal", lambda: calls.append(1) or True)
+        assert wd.check(fake_sync, state) is False
+        assert wd.check(fake_sync, state) is False      # immediately again
+        assert calls == [1], "restarted the terminal twice inside the cooldown"
+
+    def test_a_dead_loop_still_takes_priority(self, wd, fake_sync, state, monkeypatch):
+        # Failures plus a quiet log means the loop itself is gone. Restart the
+        # loop; bouncing the terminal would not bring the loop back.
+        with open(wd.SYNC_LOG, "w", encoding="utf-8") as fh:
+            for _ in range(wd.TERMINAL_RESTART_AFTER_FAILS + 2):
+                fh.write("[2026-08-18 05:00:00 UTC] NOT SYNCED: IPC timeout (-10005)\n")
+        import time
+        old = time.time() - (wd.STALE_AFTER + 60)
+        os.utime(wd.SYNC_LOG, (old, old))
+        monkeypatch.setattr(wd, "restart_terminal", lambda: pytest.fail("bounced a dead loop's terminal"))
+        monkeypatch.setattr(wd, "restart", lambda s, reason: True)
+        assert wd.check(fake_sync, state) is True
+
+    def test_missing_executable_is_reported_not_raised(self, wd, monkeypatch):
+        monkeypatch.setattr(wd, "TERMINAL_EXE", r"C:\no\such\terminal64.exe")
+        said = []
+        monkeypatch.setattr(wd, "emit", lambda line: said.append(line))
+        assert wd.restart_terminal() is False
+        assert any("not found" in line for line in said)
+
+
+class TestLaunchIsDetached:
+    """The loop must not end up a child of the watchdog.
+
+    On 2026-08-18, restarting the watchdog to load new code killed the sync
+    loop with it: the loop was a direct child, so `taskkill /T` walked into it.
+    Bouncing the supervisor must never cause the outage it exists to prevent.
+    """
+
+    def test_windows_launch_goes_through_start_so_the_loop_is_orphaned(self, wd, monkeypatch):
+        monkeypatch.setattr(wd.os, "name", "nt")
+        argv = wd.launch_argv()
+        assert argv[:3] == ["cmd", "/c", "start"]
+        assert argv[3] == "", "start would steal the executable path as a window title"
+        assert wd.SYNC_PY in argv and "--loop" in argv
+
+    def test_posix_launch_is_direct(self, wd, monkeypatch):
+        monkeypatch.setattr(wd.os, "name", "posix")
+        assert wd.launch_argv()[0] == wd.PYTHONW
+
+    def test_interval_is_carried_through(self, wd, monkeypatch):
+        monkeypatch.setattr(wd.os, "name", "posix")
+        argv = wd.launch_argv()
+        assert argv[argv.index("--loop") + 1] == str(wd.LOOP_INTERVAL)
+
+
 class TestIsolation:
-    def test_watchdog_never_imports_the_broker_module(self, wd):
+    def test_loading_the_watchdog_does_not_pull_in_the_broker(self):
+        """The real contract, checked in a subprocess.
+
+        `sys.modules` is process-global, so an in-process assertion passes or
+        fails on whether some *other* test in the suite imported MetaTrader5
+        first — nothing to do with the watchdog. This test asserted exactly
+        that and duly passed alone while failing the full suite. A subprocess
+        is the only honest way to ask the question, and it also covers the
+        transitive case: `load_sync()` is the one call that could drag the
+        broker in behind our back.
+        """
+        import subprocess
+        import sys
+        import textwrap
+
+        probe = textwrap.dedent("""
+            import importlib.util, sys
+            spec = importlib.util.spec_from_file_location("probe", sys.argv[1])
+            m = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(m)
+            m.load_sync()          # the one call that could import the broker
+            print("LEAKED" if "MetaTrader5" in sys.modules else "CLEAN")
+        """)
+        result = subprocess.run(
+            [sys.executable, "-c", probe,
+             os.path.join(_REPO, "deploy", "mt5_watchdog.py")],
+            capture_output=True, text=True, timeout=60)
+        assert "CLEAN" in result.stdout, result.stdout + result.stderr
+
+    def test_watchdog_declares_no_broker_import(self, wd):
         # The whole point: a supervisor that can wedge inside mt5.initialize()
         # the way its patient does is not a supervisor.
         #
@@ -207,8 +339,6 @@ class TestIsolation:
         # explaining why it does not import it, so a text search reports a
         # violation that is really the documentation of the rule.
         import ast
-        import sys
-        assert "MetaTrader5" not in sys.modules
 
         source = open(os.path.join(_REPO, "deploy", "mt5_watchdog.py"),
                       encoding="utf-8").read()

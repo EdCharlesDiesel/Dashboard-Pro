@@ -97,7 +97,7 @@ class TestFavours:
         monkeypatch.setattr(carry, "fred_series", lambda s, start=None: _series(4.0))
         assert carry.favours("EUR/USD", "Long") is None
 
-    def test_the_dead_band_edge_is_live(self, monkeypatch):
+    def test_a_differential_exactly_on_the_dead_band_is_neutral(self, monkeypatch):
         table = {"FEDFUNDS": 4.0, "ECBDFR": 4.0 - carry.DEAD_BAND_PCT}
 
         def fake(series_id, start=None):
