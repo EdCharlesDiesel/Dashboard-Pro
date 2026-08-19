@@ -42,7 +42,7 @@
   "dir": {
    "path": "pages/",
    "count": 56,
-   "loc": 22042,
+   "loc": 22145,
    "sample": [
     {
      "path": "pages/15m-fib-entry.py",
@@ -118,7 +118,7 @@
     },
     {
      "path": "pages/abr_toolkit_tab.py",
-     "loc": 678,
+     "loc": 695,
      "doc": "abr_toolkit_tab.py",
      "classes": [
       {
@@ -180,7 +180,7 @@
       {
        "name": "_fetch_ohlc_yfinance",
        "sig": "(ticker, tf) -> pd.DataFrame",
-       "doc": "H1/D1 native; H4/H6 resampled from 1h. Returns OHLC, oldest first.",
+       "doc": "H1/D1/H4 canonical; H6 resampled from H1. Returns OHLC, oldest first.",
        "kind": "private"
       },
       {
@@ -231,6 +231,7 @@
       "src.db.connection",
       "src.instruments.registry",
       "src.pages_lib.navigation",
+      "src.services.market_data",
       "src.ui",
       "src.ui.theme"
      ]
@@ -353,7 +354,7 @@
     },
     {
      "path": "pages/bonds_gold_dxy_app.py",
-     "loc": 360,
+     "loc": 364,
      "doc": "Bonds → Gold → DXY : Interactive learning module",
      "classes": [],
      "functions": [
@@ -372,6 +373,7 @@
      ],
      "imports": [
       "src.pages_lib.navigation",
+      "src.services.market_data",
       "src.ui.theme"
      ]
     }
@@ -1084,7 +1086,7 @@
  "mt5-watchdog": {
   "file": {
    "path": "deploy/mt5_watchdog.py",
-   "loc": 349,
+   "loc": 436,
    "doc": "Keep the MT5 sync loop alive, in the logged-on desktop session.",
    "classes": [],
    "functions": [
@@ -1110,6 +1112,18 @@
      "name": "heartbeat_age",
      "sig": "(now=…)",
      "doc": "Seconds since the sync log last grew, or ``None`` if it does not exist.",
+     "kind": "public"
+    },
+    {
+     "name": "_tail_text",
+     "sig": "(window=…) -> str",
+     "doc": "The end of the sync log. Read the tail rather than the whole file: it is",
+     "kind": "private"
+    },
+    {
+     "name": "failed_streak",
+     "sig": "() -> int",
+     "doc": "How many sync cycles have failed back-to-back since the last success.",
      "kind": "public"
     },
     {
@@ -1143,6 +1157,12 @@
      "kind": "public"
     },
     {
+     "name": "restart_terminal",
+     "sig": "() -> bool",
+     "doc": "Bounce the MetaTrader terminal itself.",
+     "kind": "public"
+    },
+    {
      "name": "restart",
      "sig": "(sync, reason) -> bool",
      "doc": "Kill whatever holds the lock, confirm it let go, and start a fresh loop.",
@@ -1170,7 +1190,7 @@
  "ranker-polish": {
   "file": {
    "path": "src/pages_lib/setup_ranker.py",
-   "loc": 1598,
+   "loc": 1672,
    "doc": "Setup Ranker page — Bloomberg-terminal version.",
    "classes": [
     {
@@ -1202,10 +1222,10 @@
       "_render_exposure_strip(cls, results, account_bal, risk_pct, rr_ratio) -> None",
       "_held_positions() -> list",
       "_stack_warnings(pair, direction, held) -> list",
-      "_render_held_book(cls, held) -> None",
-      "_exposure_badge(cls, pair, direction, held)",
-      "_cockpit_context(pairs) -> dict",
-      "_cockpit_badge(r, cockpit) -> tuple"
+      "_book_age_minutes(stamp) -> Optional[float]",
+      "_age_text(minutes) -> str",
+      "_stale_banner(cls, minutes, stamp) -> str",
+      "_render_held_book(cls, held) -> None"
      ]
     }
    ],
@@ -1403,7 +1423,7 @@
  "market-data": {
   "file": {
    "path": "src/services/market_data.py",
-   "loc": 123,
+   "loc": 148,
    "doc": "Canonical market-data spine — the one OHLC feed every page reads from.",
    "classes": [],
    "functions": [
@@ -1429,6 +1449,12 @@
      "name": "weekly_ohlc",
      "sig": "(ticker, period=…) -> pd.DataFrame",
      "doc": "Canonical weekly bars: daily bars resampled to W (default 2y, ttl 300).",
+     "kind": "public"
+    },
+    {
+     "name": "monthly_ohlc",
+     "sig": "(ticker, period=…) -> pd.DataFrame",
+     "doc": "Canonical monthly bars: daily bars resampled to month-end (default 5y).",
      "kind": "public"
     },
     {
@@ -1464,7 +1490,7 @@
  "data-provider": {
   "file": {
    "path": "src/core/data_provider.py",
-   "loc": 258,
+   "loc": 272,
    "doc": "",
    "classes": [
     {
@@ -1542,14 +1568,15 @@
     {
      "name": "fetch_fred_series",
      "sig": "(series_id, fred_key, limit=…)",
-     "doc": "",
+     "doc": "Last `limit` observations of a FRED series, as a [date, value] frame.",
      "kind": "public"
     }
    ],
    "imports": [
     "src.core",
     "src.core.config",
-    "src.db.market_cache"
+    "src.db.market_cache",
+    "src.services.fred_data"
    ]
   }
  },
@@ -1622,7 +1649,7 @@
  "ranker": {
   "file": {
    "path": "src/pages_lib/setup_ranker.py",
-   "loc": 1598,
+   "loc": 1672,
    "doc": "Setup Ranker page — Bloomberg-terminal version.",
    "classes": [
     {
@@ -1654,10 +1681,10 @@
       "_render_exposure_strip(cls, results, account_bal, risk_pct, rr_ratio) -> None",
       "_held_positions() -> list",
       "_stack_warnings(pair, direction, held) -> list",
-      "_render_held_book(cls, held) -> None",
-      "_exposure_badge(cls, pair, direction, held)",
-      "_cockpit_context(pairs) -> dict",
-      "_cockpit_badge(r, cockpit) -> tuple"
+      "_book_age_minutes(stamp) -> Optional[float]",
+      "_age_text(minutes) -> str",
+      "_stale_banner(cls, minutes, stamp) -> str",
+      "_render_held_book(cls, held) -> None"
      ]
     }
    ],
@@ -2665,7 +2692,7 @@
  "mt5-link": {
   "file": {
    "path": "src/services/mt5_link.py",
-   "loc": 351,
+   "loc": 430,
    "doc": "Live MetaTrader 5 terminal link — read the real book, not a saved file.",
    "classes": [
     {
@@ -2733,8 +2760,14 @@
      "kind": "public"
     },
     {
+     "name": "detect_server_utc_offset",
+     "sig": "(mt5=…, symbol=…, max_tick_age_s=…) -> Dict[str, Any]",
+     "doc": "Measure the broker's clock against UTC. ``{\"ok\", \"hours\", \"message\"}``.",
+     "kind": "public"
+    },
+    {
      "name": "closed_deals",
-     "sig": "(days=…, lookback_days=…, mt5=…) -> Dict[str, Any]",
+     "sig": "(days=…, lookback_days=…, mt5=…, broker_utc_offset=…) -> Dict[str, Any]",
      "doc": "Closed deals whose *exit* falls in the last ``days``, as plain dicts.",
      "kind": "public"
     }
@@ -2750,7 +2783,7 @@
  "mt5-trade-import": {
   "file": {
    "path": "src/services/mt5_trade_import.py",
-   "loc": 245,
+   "loc": 340,
    "doc": "Import closed MT5 deals into ``trade_setups`` as graded, closed rows.",
    "classes": [],
    "functions": [
@@ -2768,7 +2801,7 @@
     },
     {
      "name": "pair_deals",
-     "sig": "(deals, days=…, now=…) -> List[Dict[str, Any]]",
+     "sig": "(deals, days=…, now=…) -> Tuple[List[Dict[str, Any]], Dict[str, int]]",
      "doc": "Reassemble deals into round trips closed within the last ``days``.",
      "kind": "public"
     },
@@ -2779,8 +2812,14 @@
      "kind": "public"
     },
     {
+     "name": "broker_utc_offset",
+     "sig": "() -> float",
+     "doc": "Broker timezone in hours east of UTC, from ``MT5_BROKER_UTC_OFFSET``.",
+     "kind": "public"
+    },
+    {
      "name": "import_closed_trades",
-     "sig": "(days=…, cfg=…, mt5=…) -> Dict[str, Any]",
+     "sig": "(days=…, cfg=…, mt5=…, utc_offset=…) -> Dict[str, Any]",
      "doc": "Read closed MT5 deals and store the new ones. Never raises.",
      "kind": "public"
     }
@@ -2795,10 +2834,69 @@
    ]
   }
  },
+ "deploy-verify": {
+  "file": {
+   "path": "deploy/verify_deploy.py",
+   "loc": 219,
+   "doc": "Does the running container actually contain the code in this working tree?",
+   "classes": [],
+   "functions": [
+    {
+     "name": "_is_source",
+     "sig": "(rel) -> bool",
+     "doc": "",
+     "kind": "private"
+    },
+    {
+     "name": "fingerprint",
+     "sig": "(files) -> str",
+     "doc": "SHA-256 over ``{relative path: bytes}``, order-independent.",
+     "kind": "public"
+    },
+    {
+     "name": "read_host_tree",
+     "sig": "(root=…) -> Dict[str, bytes]",
+     "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "read_container_tree",
+     "sig": "(container) -> Dict[str, bytes]",
+     "doc": "Stream /app sources out of a running container via tar.",
+     "kind": "public"
+    },
+    {
+     "name": "parse_ps",
+     "sig": "(stdout) -> List[str]",
+     "doc": "Container names whose image is a dashboard-pro tag, from `docker ps`.",
+     "kind": "public"
+    },
+    {
+     "name": "app_containers",
+     "sig": "() -> List[str]",
+     "doc": "Running containers built from the app image (the db is not one).",
+     "kind": "public"
+    },
+    {
+     "name": "compare",
+     "sig": "() -> Tuple[int, List[str]]",
+     "doc": "Returns ``(status, lines)`` where status is IN_SYNC / DRIFT / UNVERIFIABLE.",
+     "kind": "public"
+    },
+    {
+     "name": "main",
+     "sig": "(argv=…) -> int",
+     "doc": "",
+     "kind": "public"
+    }
+   ],
+   "imports": []
+  }
+ },
  "mt5-import-cron": {
   "file": {
    "path": "deploy/mt5_trade_import.py",
-   "loc": 49,
+   "loc": 71,
    "doc": "Scheduled entry point: import closed MT5 trades into ``trade_setups``.",
    "classes": [],
    "functions": [
@@ -2810,6 +2908,7 @@
     }
    ],
    "imports": [
+    "src.services.mt5_link",
     "src.services.mt5_trade_import"
    ]
   }

@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mt5__mt5_status",
+      "mcp__mt5__account_info",
+      "mcp__mt5__get_positions",
+      "mcp__mt5__get_pending_orders",
+      "mcp__mt5__get_quote",
+      "mcp__mt5__get_candles",
+      "mcp__mt5__get_candles_range",
+      "mcp__mt5__get_history",
+      "mcp__mt5__symbol_info",
+      "mcp__mt5__list_symbols",
+      "mcp__mt5__calc_margin",
+      "Bash(.venv/Scripts/python.exe -m pytest*)",
+      "Bash(git status*)",
+      "Bash(git diff*)"
+    ],
+    "ask": [
+      "mcp__mt5__open_position",
+      "mcp__mt5__close_position",
+      "mcp__mt5__modify_position",
+      "mcp__mt5__place_pending_order",
+      "mcp__mt5__cancel_pending_order",
+      "Bash(docker compose*)"
+    ],
+    "deny": [
+      "Read(./.streamlit/secrets.toml)",
+      "Bash(git commit*)",
+      "Bash(git push*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/PostToolUse.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import html as _html
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 # Two prices within this fractional band collapse to one alert-dedupe bucket, so
@@ -20,6 +20,15 @@ _ALERT_PRICE_BAND = 0.0035
 # persisted signal so the Source Scorecard can mark a swing read and a 15m
 # trigger on their own clocks instead of one global 10-day default.
 _HORIZON_DAYS = 20
+
+# How old the stored book may get before this page says so out loud. The MT5
+# sync writes every 300s, so 15 minutes is three missed writes — long enough
+# that a slow cycle is not an alarm, short enough to catch a dead feed.
+#
+# Not cosmetic: on 2026-08-18 the terminal went unreachable at 05:57 and the
+# machine then slept until 16:06, so this page served a ten-hour-old book while
+# looking perfectly normal — every exposure check on it silently wrong.
+_STALE_BOOK_AFTER_MIN = 15
 
 
 def alert_price_bucket(price: float, band: float = _ALERT_PRICE_BAND) -> int:
@@ -820,6 +829,46 @@ class SetupRankerPage(BloombergPage):
         except Exception:
             return []
 
+    @staticmethod
+    def _book_age_minutes(stamp) -> Optional[float]:
+        """Minutes since the book was stored, or ``None`` if unreadable.
+
+        A naive timestamp is read as UTC because that is what
+        `open_positions.save` writes; guessing local time here would
+        under-report the age by the offset and hide exactly the staleness this
+        exists to surface.
+        """
+        if not stamp:
+            return None
+        try:
+            when = datetime.fromisoformat(str(stamp))
+        except (TypeError, ValueError):
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - when).total_seconds() / 60.0)
+
+    @staticmethod
+    def _age_text(minutes: float) -> str:
+        if minutes < 90:
+            return "{0:.0f} min".format(minutes)
+        if minutes < 60 * 48:
+            return "{0:.1f} hours".format(minutes / 60)
+        return "{0:.1f} days".format(minutes / 1440)
+
+    @classmethod
+    def _stale_banner(cls, minutes: float, stamp) -> str:
+        return (
+            f'<div style="border:2px solid {T.RED};color:{T.RED};padding:8px;'
+            f'margin-top:6px;font-size:12px;font-weight:700;'
+            f'font-family:\'JetBrains Mono\',monospace;">'
+            f'⚠ BOOK IS STALE — last synced {_html.escape(cls._age_text(minutes))} ago '
+            f'({_html.escape(str(stamp))}).<br>'
+            f'The MT5 sync is not running or the terminal is unreachable. Positions '
+            f'opened or closed since then are invisible here, so every exposure and '
+            f'stack check on this page may be wrong. Check logs/mt5_sync.log.</div>'
+        )
+
     @classmethod
     def _render_held_book(cls, held: list) -> None:
         """What you're already holding, netted per currency.
@@ -828,16 +877,33 @@ class SetupRankerPage(BloombergPage):
         EUR/AUD stack: three pairs, two different direction words, no shared
         CORR_GROUPS entry — but one currency leg carrying all of it.
         """
+        try:
+            from src.services.open_positions import saved_at
+            stamp = saved_at()
+        except Exception:
+            stamp = None
+        age_min = cls._book_age_minutes(stamp)
+        stale = age_min is not None and age_min > _STALE_BOOK_AFTER_MIN
+
         if not held:
+            # An empty book is not proof of an empty account, and a *stale*
+            # empty book is the worst state this page can be in: every stack
+            # check silently passes, so the page looks its most encouraging
+            # exactly when it knows the least. Say so instead of rendering
+            # nothing.
+            if stale:
+                Panel(
+                    title="📌 POSITIONS YOU ALREADY HOLD",
+                    tag="stale",
+                    body_html=cls._stale_banner(age_min, stamp),
+                ).show()
             return
         try:
             from src.services.exposure import net_currency_exposure
             from src.services.mt5_link import margin_warning
-            from src.services.open_positions import (account_snapshot, saved_at,
-                                                     unstopped)
+            from src.services.open_positions import account_snapshot, unstopped
             net = net_currency_exposure(held)
             no_stop = unstopped(held)
-            stamp = saved_at()
             account = account_snapshot()
             margin_txt = margin_warning(account)
         except Exception:
@@ -890,12 +956,20 @@ class SetupRankerPage(BloombergPage):
                 + (f' · margin level {lvl:,.0f}%' if lvl else '')
                 + '</div>'
             )
-        age = (f'<div style="color:{T.GREY};font-size:10px;margin-top:6px;">'
-               f'Book as of {_html.escape(str(stamp))} · sync the MT5 terminal '
-               f'(or re-import your statement) to refresh.</div>') if stamp else ""
+        if stale:
+            age = cls._stale_banner(age_min, stamp)
+        elif stamp:
+            fresh = (" · synced {0} ago".format(cls._age_text(age_min))
+                     if age_min is not None else "")
+            age = (f'<div style="color:{T.GREY};font-size:10px;margin-top:6px;">'
+                   f'Book as of {_html.escape(str(stamp))}{_html.escape(fresh)} · '
+                   f'sync the MT5 terminal (or re-import your statement) to '
+                   f'refresh.</div>')
+        else:
+            age = ""
         Panel(
             title="📌 POSITIONS YOU ALREADY HOLD",
-            tag=f"{len(held)} open",
+            tag=("⚠ STALE" if stale else f"{len(held)} open"),
             body_html=(
                 f'<div>{chips}</div>'
                 f'<div style="color:{T.GREY};font-size:10px;margin-top:6px;">'
