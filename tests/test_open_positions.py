@@ -15,6 +15,7 @@ to tmp_path.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -274,3 +275,78 @@ def test_statement_to_guard_end_to_end(statement_bytes):
     assert "GBP/AUD SHORT" in aud.summary()
 
     assert len(open_positions.unstopped()) == 3
+
+
+class TestBrokerPnlSurvivesTheStore:
+    """The page runs in a Linux container with no MetaTrader, so it cannot
+    convert a non-USD-quoted pair by quoting the market. The broker already
+    did that arithmetic — its P/L is in account currency — so the store has to
+    carry it, together with the price it was measured at.
+
+    Without both, a EUR/AUD projection is reported in AUD as though it were
+    USD: about 1.4x out, with no error anywhere.
+    """
+
+    def test_make_row_keeps_broker_pnl_and_current_price(self):
+        from src.services.open_positions import make_row
+        row = make_row(pair="EUR/AUD", direction="SHORT", lot_size=0.2,
+                       entry_price=1.62915, profit=-50.38, price_current=1.6327)
+        assert row["profit"] == -50.38
+        assert row["price_current"] == 1.6327
+
+    def test_clean_does_not_silently_drop_them(self):
+        # _clean rebuilds each row as {k: row.get(k) for k in _FIELDS}, so a
+        # field missing from _FIELDS vanishes without raising - the failure
+        # mode this test exists to catch.
+        from src.services.open_positions import _clean
+        kept = _clean([{"pair": "EUR/AUD", "direction": "SHORT",
+                        "profit": -50.38, "price_current": 1.6327}])[0]
+        assert kept["profit"] == -50.38
+        assert kept["price_current"] == 1.6327
+
+    def test_absent_broker_fields_stay_none_rather_than_zero(self):
+        # Zero is a real P/L. None means "not reported", and the projection
+        # must be able to tell those apart.
+        from src.services.open_positions import make_row
+        row = make_row(pair="EUR/USD", direction="LONG", lot_size=0.1)
+        assert row["profit"] is None and row["price_current"] is None
+
+
+class TestAgeMinutes:
+    """How old the stored book is — the single implementation.
+
+    Freshness is read from the *book's* stamp, not the balance's:
+    `account_state` writes `updated_at` as naive **local** time, so a container
+    running UTC computes a negative age for a balance the host wrote minutes
+    ago — a number from the future, which reads as permanently fresh.
+    `saved_at()` is ISO UTC and is written by the same sync call.
+    """
+
+    def test_none_when_nothing_is_stored(self, monkeypatch):
+        monkeypatch.setattr(open_positions, "saved_at", lambda: None)
+        assert open_positions.age_minutes() is None
+
+    def test_minutes_since_the_stored_stamp(self, monkeypatch):
+        monkeypatch.setattr(open_positions, "saved_at",
+                            lambda: "2026-08-20T17:00:00+00:00")
+        now = datetime(2026, 8, 20, 17, 30, tzinfo=timezone.utc)
+        assert open_positions.age_minutes(now) == pytest.approx(30.0)
+
+    def test_a_naive_stamp_is_read_as_utc_not_local(self, monkeypatch):
+        # The trap. Read as local time in a UTC container this is off by the
+        # offset, and on this host that means -120 minutes.
+        monkeypatch.setattr(open_positions, "saved_at", lambda: "2026-08-20 17:00:00")
+        now = datetime(2026, 8, 20, 17, 30, tzinfo=timezone.utc)
+        assert open_positions.age_minutes(now) == pytest.approx(30.0)
+
+    def test_unparseable_stamp_is_none_not_an_exception(self, monkeypatch):
+        monkeypatch.setattr(open_positions, "saved_at", lambda: "not a date")
+        assert open_positions.age_minutes() is None
+
+    def test_a_future_stamp_clamps_to_zero(self, monkeypatch):
+        # Host/container clock skew must read as "fresh", never as a negative
+        # age printed on screen.
+        monkeypatch.setattr(open_positions, "saved_at",
+                            lambda: "2026-08-20T18:00:00+00:00")
+        now = datetime(2026, 8, 20, 17, 30, tzinfo=timezone.utc)
+        assert open_positions.age_minutes(now) == 0.0

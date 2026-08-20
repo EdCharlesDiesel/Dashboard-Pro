@@ -6,7 +6,7 @@
     "tagline": "Forex & metals trading desk - signals, risk, live MT5",
     "date": "2026-08-12"
   },
-  "stats": { "agents": 4, "models": 2, "tools": 16, "integrations": 12 },
+  "stats": { "agents": 5, "models": 2, "tools": 16, "integrations": 12 },
   "topModels": [
     { "id": "opus", "label": "Claude Opus 4.8", "domain": "claude.ai" },
     { "id": "haiku", "label": "Claude Haiku 4.5", "domain": "claude.ai" }
@@ -95,7 +95,9 @@
       { "id": "anthropic-api", "label": "Anthropic API", "kind": "external", "sub": "optional, self-disabling", "domain": "anthropic.com" },
       { "id": "gmail", "label": "Gmail SMTP", "kind": "external", "sub": "app password", "domain": "gmail.com" },
       { "id": "telegram", "label": "Telegram", "kind": "external", "sub": "sentry state-change pings", "domain": "telegram.org" },
-      { "id": "healthchecks", "label": "healthchecks.io", "kind": "external", "sub": "dead-sentry alarm", "domain": "healthchecks.io" }
+      { "id": "healthchecks", "label": "healthchecks.io", "kind": "external", "sub": "dead-sentry alarm", "domain": "healthchecks.io" },
+      { "id": "session-subagents", "label": "Session subagents", "kind": "agent", "sub": "score, risk, plan, review", "domain": "claude.ai", "group": "AI surfaces", "detail": "Four read-only reviewers in .claude/agents, one per session step: setup scoring, risk audit, trade-plan writing, closed-trade review. None gets a trade tool - the gates are not delegable." },
+      { "id": "tool-audit-hook", "label": "Tool-call audit hook", "kind": "service", "sub": "PostToolUse -> jsonl, append-only", "group": "AI surfaces", "detail": "Fires on every tool call in a session and appends it to logs/mt5_tool_audit.jsonl. The only record of what actually reached the broker that the agent did not write itself." }
     ],
     "edges": [
       { "from": "cockpit", "to": "precomputed", "kind": "reads", "label": "already-scored board" },
@@ -184,7 +186,10 @@
       { "from": "news", "to": "ff", "kind": "reads" },
       { "from": "alerts", "to": "gmail", "kind": "writes", "label": "HTML alert email" },
       { "from": "alerts", "to": "notify-cache", "kind": "writes", "label": "never send twice" },
-      { "from": "observability", "to": "pg", "kind": "writes", "label": "app_events" }
+      { "from": "observability", "to": "pg", "kind": "writes", "label": "app_events" },
+      { "from": "claude-code", "to": "session-subagents", "kind": "calls", "label": "one per session step" },
+      { "from": "session-subagents", "to": "mt5-read-tools", "kind": "calls", "label": "read-only, no trade" },
+      { "from": "claude-code", "to": "tool-audit-hook", "kind": "triggers", "label": "every tool call" }
     ]
   }
 }
