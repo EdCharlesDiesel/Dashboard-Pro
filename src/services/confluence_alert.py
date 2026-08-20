@@ -151,6 +151,35 @@ def subject_for(items: Iterable[Confluence]) -> str:
     return f"{lead} — {names}{more} (all 3 agree)"
 
 
+TELEGRAM_LIMIT = 4096          # hard API limit; over it the send fails outright
+
+
+def build_telegram(items: Iterable[Confluence]) -> str:
+    """The entry alert as one Telegram message.
+
+    Deliberately not a third formatter: the plain-text half of
+    :func:`build_email` already carries the pair, direction, the ENTRY
+    FIRED/IN ZONE badge, entry/stop/tp1/tp2 and all three agreeing legs.
+    The subject leads so the phone's notification preview is readable
+    without opening the chat.
+
+    Sent verbatim, with no escaping, because
+    ``secrets.send_telegram_message`` posts without a ``parse_mode``.
+    Under Markdown the lone underscore in ``ENTRY_FIRED`` would open an
+    italic span and the unmatched one would make Telegram reject the whole
+    message with a 400 - losing the alert, not just its formatting.
+    """
+    rows = list(items)
+    if not rows:
+        return ""
+    _, plain = build_email(rows)
+    msg = subject_for(rows) + "\n\n" + plain
+    if len(msg) > TELEGRAM_LIMIT:
+        tail = "\n... truncated"
+        msg = msg[:TELEGRAM_LIMIT - len(tail)] + tail
+    return msg
+
+
 def build_email(items: Iterable[Confluence]) -> tuple:
     """``(html, plain)`` for the confluence alert. Pure — no Streamlit, no I/O,
     so the body is unit-testable and identical from page or worker."""

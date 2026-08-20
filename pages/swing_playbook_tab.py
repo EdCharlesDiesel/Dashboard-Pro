@@ -22,6 +22,7 @@ import streamlit as st
 
 from src.instruments.registry import INSTRUMENTS
 from src.pages_lib.navigation import render_sidebar_nav
+from src.services import account_state, open_positions
 from src.services.alert_service import NotifyCache
 from src.services.swing_playbook_service import (
     build_playbook,
@@ -55,7 +56,39 @@ with st.sidebar:
     )
 
     st.divider()
-    account = st.number_input("Account size", value=10_000.0, min_value=0.0, step=500.0)
+    # Sized off the balance the MT5 sync stores. This page used a hardcoded
+    # $10,000 and never touched session state at all, so unlike the other
+    # sizing pages it could not even inherit the right number by arriving from
+    # one - every weekly plan came out 2.6x too large against a real $3,844.
+    acct = account_state.get()
+    live_bal = account_state.get_balance(0.0)
+    has_live = bool(acct) and live_bal > 0
+
+    use_live = st.checkbox(
+        "🔗 Use live balance from MT5",
+        value=bool(st.session_state.get("swpb_use_live_bal", has_live)) and has_live,
+        disabled=not has_live,
+        help="Reads the balance the MT5 sync stores. Uncheck to plan against a "
+             "hypothetical account size.",
+    )
+    st.session_state["swpb_use_live_bal"] = use_live
+
+    if use_live and has_live:
+        # Assigned every run, never setdefault: a value seeded once goes stale
+        # in silence as the account moves, which is the same bug in a new coat.
+        account = live_bal
+        st.session_state["account_bal"] = live_bal
+        _age = open_positions.age_minutes()
+        if _age is not None and _age > 15:
+            st.error(f"⚠ Balance is **{_age:.0f} min old** - the MT5 sync is "
+                     f"not running. See logs/mt5_sync.log.")
+        st.caption(f"Account size: **${live_bal:,.2f}** live · "
+                   f"{acct.get('source', '')}")
+    else:
+        account = st.number_input(
+            "Account size", min_value=0.0, step=500.0,
+            value=float(st.session_state.get("account_bal", 10_000.0)))
+        st.session_state["account_bal"] = account
     risk_pct = st.number_input(
         "Risk per trade (%)", value=1.0, min_value=0.25, max_value=3.0, step=0.25,
     ) / 100
