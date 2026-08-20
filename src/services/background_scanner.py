@@ -245,6 +245,7 @@ def scan_once() -> dict:
     # and fired constantly; requiring the 15M leg means every email has an
     # entry to take right now. Deliberately rare (see confluence_alert docs).
     emailed = 0
+    telegrammed = 0
     try:
         confluences = _find_confluences(grade_a, board_pairs)
     except Exception as exc:
@@ -252,27 +253,54 @@ def scan_once() -> dict:
         # neither may cost us the ingest/score/store work already done.
         logger.warning("[bg-scanner] confluence scan failed: %s", exc)
         confluences = []
-    if confluences and alert_service.email_configured():
+    # Two independent channels. This whole block used to sit behind
+    # `email_configured()`, so an owner with Telegram and no SMTP received
+    # nothing at all - the alert was suppressed by a check about a different
+    # delivery mechanism.
+    if confluences:
         try:
+            from src.core import secrets as core_secrets
+
             cache = alert_service.NotifyCache("confluence_alert")
             seen = cache.load()
             fresh = [c for c in confluences if c.dedupe_key() not in seen]
             if fresh:
-                html, plain = confluence_alert.build_email(fresh)
-                ok, msg = alert_service.send_email(
-                    confluence_alert.subject_for(fresh), html, plain,
-                    source="confluence_bg")
-                if ok:
-                    cache.filter_new([c.dedupe_key() for c in fresh])
-                    emailed = len(fresh)
+                delivered = False
+
+                if alert_service.email_configured():
+                    html, plain = confluence_alert.build_email(fresh)
+                    ok, msg = alert_service.send_email(
+                        confluence_alert.subject_for(fresh), html, plain,
+                        source="confluence_bg")
+                    if ok:
+                        delivered = True
+                        emailed = len(fresh)
+                    else:
+                        logger.warning("[bg-scanner] confluence email failed: %s", msg)
+
+                # Attempted unconditionally: the sender reports "not
+                # configured" harmlessly rather than raising.
+                ok_tg, msg_tg = core_secrets.send_telegram_message(
+                    confluence_alert.build_telegram(fresh))
+                if ok_tg:
+                    delivered = True
+                    telegrammed = len(fresh)
                 else:
-                    logger.warning("[bg-scanner] confluence email failed: %s", msg)
+                    logger.warning("[bg-scanner] confluence telegram failed: %s", msg_tg)
+
+                # filter_new() records keys as seen, so it runs once and only
+                # if something actually arrived. Marking on email alone would
+                # let a working Telegram plus broken SMTP re-alert forever;
+                # marking on neither would swallow an alert nobody received.
+                if delivered:
+                    cache.filter_new([c.dedupe_key() for c in fresh])
         except Exception as exc:
-            logger.warning("[bg-scanner] confluence email step failed: %s", exc)
+            logger.warning("[bg-scanner] confluence alert step failed: %s", exc)
 
     stats = {"at": datetime.now().isoformat(timespec="seconds"),
              "scored": len(results), "pairs": len(board_pairs),
-             "grade_a": len(grade_a), "emailed": emailed, "saved": saved}
+             "grade_a": len(grade_a), "emailed": emailed,
+             "telegrammed": telegrammed, "saved": saved}
     last_scan.clear()
     last_scan.update(stats)
     logger.info("[bg-scanner] %s", stats)

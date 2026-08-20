@@ -1086,7 +1086,7 @@
  "mt5-watchdog": {
   "file": {
    "path": "deploy/mt5_watchdog.py",
-   "loc": 436,
+   "loc": 452,
    "doc": "Keep the MT5 sync loop alive, in the logged-on desktop session.",
    "classes": [],
    "functions": [
@@ -1148,6 +1148,12 @@
      "name": "lock_is_free",
      "sig": "(sync, timeout=…) -> bool",
      "doc": "Whether the sync lock can be taken, polling up to ``timeout``.",
+     "kind": "public"
+    },
+    {
+     "name": "launch_argv",
+     "sig": "()",
+     "doc": "Argv that starts the loop *without* leaving it a child of this process.",
      "kind": "public"
     },
     {

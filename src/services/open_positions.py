@@ -28,7 +28,8 @@ _STATE_KEY = "open_positions"
 # Fields the guard and the UI actually read. Anything else in a row is dropped
 # on save so the blob can't silently grow into a second trade log.
 _FIELDS = ("ticket", "pair", "direction", "lot_size", "entry_price",
-           "stop_loss", "take_profit", "has_stop", "opened_at", "label")
+           "stop_loss", "take_profit", "has_stop", "opened_at", "label",
+           "profit", "price_current")
 
 
 def make_row(
@@ -41,6 +42,8 @@ def make_row(
     take_profit: Optional[float] = None,
     opened_at: Optional[str] = None,
     label: Optional[str] = None,
+    profit: Optional[float] = None,
+    price_current: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Build one stored position row — the single definition of the shape.
 
@@ -65,6 +68,13 @@ def make_row(
         "has_stop": has_stop,
         "opened_at": str(opened_at) if opened_at else None,
         "label": str(label) if label else "",
+        # The broker's own floating P/L, in account currency, and the price
+        # it was measured at. Together they recover the exact quote->account
+        # conversion factor the broker used, which the Linux container has
+        # no other way to obtain. None means "not reported" - zero is a
+        # real P/L and the two must stay distinguishable.
+        "profit": float(profit) if profit is not None else None,
+        "price_current": float(price_current) if price_current is not None else None,
     }
 
 
@@ -169,6 +179,33 @@ def load() -> List[Dict[str, Any]]:
     """The stored book (DB preferred, then local JSON). Empty list when unset."""
     stored = _db_read() or _json_read() or {}
     return _clean(stored.get("positions"))
+
+
+def age_minutes(now: Optional[datetime] = None) -> Optional[float]:
+    """Minutes since the book was stored, or ``None`` if that cannot be known.
+
+    Read the *book's* stamp for freshness, never the balance's. `saved_at()` is
+    ISO UTC; `account_state` writes its `updated_at` as naive **local** time, so
+    a container running UTC computes a negative age for a balance the host wrote
+    minutes ago — a timestamp from the future, which reads as permanently fresh
+    and would silence exactly the staleness warning it was meant to raise. Both
+    are written by the same `mt5_link.sync()` call, so the book's stamp answers
+    for both.
+
+    A naive stamp is therefore read as UTC, and clock skew clamps to zero rather
+    than printing a negative age.
+    """
+    stamp = saved_at()
+    if not stamp:
+        return None
+    try:
+        when = datetime.fromisoformat(str(stamp))
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    ref = now if now is not None else datetime.now(timezone.utc)
+    return max(0.0, (ref - when).total_seconds() / 60.0)
 
 
 def saved_at() -> Optional[str]:

@@ -38,8 +38,22 @@ class TestPipValueUsd:
         pos = tc.Position("EURUSD", "long", 1.0, 1.09, 1.08)
         assert tc.pip_value_usd(pos, usdjpy=150.0) == pytest.approx(10.0)
 
-    def test_exotic_quote_falls_back_to_flat_rate(self):
+    def test_known_exotic_uses_its_registry_pip_not_the_flat_guess(self):
+        """Changed deliberately on 2026-08-20, not to make a red test green.
+
+        This previously asserted the flat $10/lot the code itself described as
+        "close enough for a threat gauge". It is not close enough: EUR/GBP is
+        12.5 per lot and a ZAR cross is 0.62, so the guess overstated a ZAR
+        position's pip value about 16x on a board whose whole job is sizing
+        risk. The registry is the single source of truth for pip value, so a
+        pair it knows now uses the real number.
+        """
         pos = tc.Position("EURGBP", "long", 1.0, 0.85, 0.84)
+        assert tc.pip_value_usd(pos, usdjpy=150.0) == pytest.approx(12.5)
+
+    def test_unknown_exotic_still_falls_back_to_the_flat_rate(self):
+        # The fallback is not gone, just demoted to symbols nothing knows.
+        pos = tc.Position("ABCXYZ", "long", 1.0, 2.0, 1.9)
         assert tc.pip_value_usd(pos, usdjpy=150.0) == pytest.approx(10.0)
 
 
@@ -220,7 +234,13 @@ class TestBuildReport:
         assert rep.components == expected
         total = sum(expected[k] * tc.WEIGHTS[k] for k in expected) / sum(tc.WEIGHTS.values())
         assert rep.score == pytest.approx(round(total, 1))
-        assert rep.state == tc.band(total)
+        # Updated 2026-08-20 with the red-component veto. The intent is
+        # unchanged - the state is derived from the scores - but the derivation
+        # is no longer band(total): a maxed component now sets a floor, so the
+        # headline cannot be averaged back to green.
+        assert rep.state == tc.overall_state(total, expected)
+        assert rep.detail["state_driver"] == [
+            k for k, v in expected.items() if tc.band(v) == rep.state]
         assert rep.detail["usdjpy_last"] == pytest.approx(163.5)
         assert rep.detail["worst_cluster_ccy"] == worst_ccy
 
@@ -310,3 +330,134 @@ class TestLastState:
     def test_returns_none_when_journal_is_empty(self):
         conn = _FakeConn(fetchone_row=None)
         assert tc.last_state(conn) is None
+
+
+class TestRegistryUnits:
+    """The board's numbers are only as good as its pip maths.
+
+    Hardcoded 0.0001/100k assumptions are right for FX majors and wrong by
+    1000x on gold and 16x on a ZAR cross - both of which sit in the live book.
+    Measured 2026-08-20 against a real 0.2-lot gold position: the old maths
+    reported $2,738,100 of stop risk on a $3.6k account.
+    """
+
+    def test_gold_pip_comes_from_the_registry(self):
+        assert tc.pip_size("XAUUSD") == 0.1
+
+    def test_gold_stop_risk_is_dollars_not_millions(self):
+        pos = tc.Position("XAUUSD", "long", 0.2, 4522.388, 4385.483)
+        assert tc.stop_risk_usd(pos, 150.0) == pytest.approx(2738.0, abs=5.0)
+
+    def test_zar_cross_uses_its_real_pip_value(self):
+        # 0.62 per lot from the registry, not the $10/lot exotic fallback.
+        pos = tc.Position("USDZAR", "short", 0.2, 16.12873, 16.34195)
+        assert tc.pip_value_usd(pos, 150.0) == pytest.approx(0.124, rel=0.02)
+
+    def test_fx_majors_are_unchanged(self):
+        # The fallback still governs anything the registry does not know, so
+        # no existing behaviour shifts underneath the other 40 tests.
+        pos = tc.Position("EURUSD", "long", 1.0, 1.1000, 1.0950)
+        assert tc.pip_size("EURUSD") == 0.0001
+        assert tc.pip_value_usd(pos, 150.0) == pytest.approx(10.0, rel=0.01)
+
+    def test_unknown_pair_keeps_the_old_fallback(self):
+        assert tc.pip_size("XXXYYY") == 0.0001
+        assert tc.pip_size("XXXJPY") == 0.01
+
+
+BOOK_ROW = {"pair": "USD/ZAR", "direction": "SHORT", "lot_size": 0.2,
+            "entry_price": 16.12873, "stop_loss": 16.34195,
+            "take_profit": 15.903, "has_stop": True}
+
+
+class TestPositionsFromBook:
+    """Converting the stored MT5 book into board positions.
+
+    Three format mismatches, none of which raises: the book uses "USD/ZAR"
+    where Position wants "USDZAR", "SHORT" where it wants "short", and can
+    carry no stop at all.
+    """
+
+    def test_the_slash_is_stripped_so_quote_parses(self):
+        pos, _ = tc.positions_from_book([BOOK_ROW])
+        assert pos[0].pair == "USDZAR"
+        assert pos[0].quote == "ZAR"          # "/ZA" if the slash survives
+
+    def test_direction_is_lowercased(self):
+        """The silent one. Exposure netting does `1 if direction == "long"`,
+        so an uppercased "LONG" counts as a *short* and the entire board
+        inverts without raising anything."""
+        pos, _ = tc.positions_from_book([dict(BOOK_ROW, direction="LONG")])
+        assert pos[0].direction == "long"
+
+    def test_a_position_with_no_stop_is_separated_not_dropped(self):
+        # Unbounded risk is the most important thing this board can say, so it
+        # must never vanish just because the maths needs a number.
+        row = dict(BOOK_ROW, stop_loss=None, has_stop=False)
+        pos, unstopped = tc.positions_from_book([row])
+        assert pos == []
+        assert unstopped and unstopped[0]["pair"] == "USD/ZAR"
+
+    def test_a_zero_stop_counts_as_no_stop(self):
+        # Both platforms report "no stop" as 0.0, not as null.
+        row = dict(BOOK_ROW, stop_loss=0.0, has_stop=False)
+        pos, unstopped = tc.positions_from_book([row])
+        assert pos == [] and len(unstopped) == 1
+
+    def test_a_mixed_book_splits_correctly(self):
+        pos, unstopped = tc.positions_from_book(
+            [BOOK_ROW, dict(BOOK_ROW, stop_loss=None, has_stop=False)])
+        assert len(pos) == 1 and len(unstopped) == 1
+
+    def test_an_empty_book_is_two_empty_lists(self):
+        assert tc.positions_from_book([]) == ([], [])
+
+    def test_gold_survives_the_round_trip_with_sane_risk(self):
+        row = {"pair": "XAU/USD", "direction": "LONG", "lot_size": 0.2,
+               "entry_price": 4522.388, "stop_loss": 4385.483, "has_stop": True}
+        pos, _ = tc.positions_from_book([row])
+        assert pos[0].pair == "XAUUSD"
+        assert tc.stop_risk_usd(pos[0], 150.0) == pytest.approx(2738.0, abs=5.0)
+
+
+class TestOverallState:
+    """The headline may never be greener than the worst single component.
+
+    Live case, 2026-08-20: concentration 100/100 with every other component 0
+    gives a weighted mean of 30.0, which banded green while the correlated
+    stop-out stood at 173% of equity. Concentration's weight is 30, so it could
+    never reach the 40 amber requires - the most dangerous condition the board
+    measures was structurally unable to change its colour.
+    """
+
+    def test_a_red_component_forces_red_despite_a_green_average(self):
+        comps = {"concentration": 100.0, "intervention": 0.0, "squeeze": 0.0,
+                 "calendar": 0.0, "regime": 0.0}
+        assert tc.band(30.0) == "green"                 # the old answer
+        assert tc.overall_state(30.0, comps) == "red"
+
+    def test_an_amber_component_forces_at_least_amber(self):
+        comps = {"concentration": 55.0, "intervention": 0.0, "squeeze": 0.0,
+                 "calendar": 0.0, "regime": 0.0}
+        assert tc.overall_state(16.5, comps) == "amber"
+
+    def test_all_green_components_leave_the_state_alone(self):
+        comps = {k: 10.0 for k in tc.WEIGHTS}
+        assert tc.overall_state(10.0, comps) == "green"
+
+    def test_the_worst_component_wins_not_the_first(self):
+        comps = {"concentration": 5.0, "intervention": 5.0, "squeeze": 95.0,
+                 "calendar": 5.0, "regime": 5.0}
+        assert tc.overall_state(23.0, comps) == "red"
+
+    def test_no_components_falls_back_to_the_average(self):
+        assert tc.overall_state(80.0, {}) == "red"
+        assert tc.overall_state(10.0, {}) == "green"
+
+    def test_it_never_reports_greener_than_any_component(self):
+        # The invariant, stated directly rather than by example.
+        for worst in (0.0, 39.9, 40.0, 69.9, 70.0, 100.0):
+            comps = {"concentration": worst, "intervention": 0.0,
+                     "squeeze": 0.0, "calendar": 0.0, "regime": 0.0}
+            total = worst * tc.WEIGHTS["concentration"] / sum(tc.WEIGHTS.values())
+            assert tc.overall_state(total, comps) == tc.band(worst)

@@ -103,7 +103,7 @@ def load_journal_trades(cfg, limit: int = 500, executed_only=None):
         cur.execute(f"""
             SELECT id, logged_at, instrument, ticker, direction, session,
                    score, verdict, sl_pips, tp1_pips, tp2_pips, rr_tp1,
-                   lot_size, risk_amount,
+                   lot_size, risk_amount, profit,
                    entry_price, close_price, outcome, pips_gained, r_multiple,
                    is_open, checks_passed, checks_total, source, notes,
                    checks_detail, invalidated_at, invalidation_price
@@ -953,8 +953,8 @@ if n_closed == 0:
 # ══════════════════════════════════════════════════════════════════
 # TABS
 # ══════════════════════════════════════════════════════════════════
-tab_equity, tab_session, tab_pair, tab_dir, tab_src, tab_log = st.tabs([
-    "📈 Equity Curve", "🕐 By Session", "💱 By Pair", "↕️ By Direction",
+tab_equity, tab_money, tab_session, tab_pair, tab_dir, tab_src, tab_log = st.tabs([
+    "📈 Equity Curve", "💰 Growth", "🕐 By Session", "💱 By Pair", "↕️ By Direction",
     "🏆 Source Scorecard", "📋 Trade Log"
 ])
 
@@ -1534,6 +1534,123 @@ with tab_log:
         file_name=f"trade_journal_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
         mime="text/csv",
     )
+
+
+# ──────────────────────────────────────────────────────────────────
+# TAB 2 — GROWTH (money)
+# ──────────────────────────────────────────────────────────────────
+# The R-based equity curve above covers the whole history; this one answers a
+# different question — how many dollars the account actually made, and what the
+# open book is worth if every target or every stop is reached.
+#
+# Money exists only for MT5-imported rows. The 42 MT4-era rows carry neither
+# `profit` nor `risk_amount`, so their money cannot be reconstructed at all —
+# hence the window caption rather than a silently short curve.
+with tab_money:
+    from src.services.position_risk import book_projection
+
+    _money = df_closed[df_closed["profit"].notna()].copy() if "profit" in df_closed else pd.DataFrame()
+    realised = float(_money["profit"].sum()) if not _money.empty else 0.0
+
+    _book = open_positions.load()
+    _acct = open_positions.account_snapshot() or {}
+    _stamp = open_positions.saved_at()
+    proj = book_projection(_book)
+
+    _bal = float(_acct.get("balance") or account_state.get_balance(0.0) or 0.0)
+    _ccy = "" if not proj["converted"] else "$"
+
+    c1, c2, c3, c4 = st.columns(4)
+    for col, val, lbl, color in [
+        (c1, f"{_ccy}{realised:+,.2f}", f"Realised · {len(_money)} closed", "#00ff66" if realised >= 0 else "#ff3344"),
+        (c2, f"{_ccy}{proj['floating']:+,.2f}", f"Floating · {len(_book)} open", "#00ff66" if proj["floating"] >= 0 else "#ff3344"),
+        (c3, f"{_ccy}{proj['at_target']:+,.2f}", "If all TP hit", "#00ff66"),
+        (c4, f"{_ccy}{proj['at_stop']:+,.2f}", "If all SL hit", "#ff3344"),
+    ]:
+        with col:
+            st.markdown(
+                f'<div class="metric-box"><div class="metric-value" style="color:{color};">{val}</div>'
+                f'<div class="metric-label">{lbl}</div></div>',
+                unsafe_allow_html=True)
+
+    if not proj["converted"]:
+        # usd_pnl reports the raw quote currency rather than zero when it has no
+        # rate. Printing a dollar sign on that would overstate a ZAR cross ~16x,
+        # so the figures above deliberately carry no currency symbol.
+        st.warning(
+            "⚠ Figures are **unconverted quote currency**, not account currency — "
+            "no broker P/L stored for: " + ", ".join(proj["unconverted"]) +
+            ". Run the MT5 sync to refresh the book.")
+
+    # Balance path: where the account actually went, trade by trade.
+    if not _money.empty:
+        _m = _money.sort_values("logged_at").copy()
+        _m["balance"] = (_bal - realised) + _m["profit"].cumsum()
+        fig_m = go.Figure()
+        fig_m.add_trace(go.Scatter(
+            x=_m["logged_at"], y=_m["balance"], mode="lines+markers",
+            line=dict(color="#00ff41", width=2.5),
+            marker=dict(size=6, color=["#00ff66" if v >= 0 else "#ff3344" for v in _m["profit"]]),
+            name="Balance", hovertemplate="%{x|%d %b}<br>$%{y:,.2f}<extra></extra>",
+        ))
+        # Where the balance would end if every open target/stop resolved.
+        for _lvl, _clr, _txt in ((proj["at_target"], "#00ff66", "all TP"),
+                                 (proj["at_stop"], "#ff3344", "all SL")):
+            fig_m.add_hline(y=_bal + _lvl, line_dash="dot", line_color=_clr,
+                            annotation_text=f"{_txt}: ${_bal + _lvl:,.0f}",
+                            annotation_position="right")
+        fig_m.update_layout(
+            template="plotly_dark", height=380,
+            margin=dict(l=10, r=90, t=30, b=10),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            title="Account balance from closed trades",
+            yaxis_title="Balance ($)", showlegend=False,
+        )
+        st.plotly_chart(fig_m, use_container_width=True)
+    else:
+        st.info("◇ No closed trades carry a money figure yet. Run the MT5 sync.")
+
+    # The open book, one row per position.
+    if _book:
+        _rows_out = []
+        for _p in _book:
+            _one = book_projection([_p])
+            _rows_out.append({
+                "Pair": _p.get("pair"), "Dir": _p.get("direction"),
+                "Lots": _p.get("lot_size"), "Entry": _p.get("entry_price"),
+                "Now": _p.get("price_current"),
+                "Floating": round(_one["floating"], 2),
+                "At TP": round(_one["at_target"], 2) if _p.get("take_profit") else None,
+                "At SL": round(_one["at_stop"], 2) if _p.get("stop_loss") else None,
+            })
+        st.dataframe(pd.DataFrame(_rows_out), use_container_width=True, hide_index=True)
+
+    # Freshness and window, stated rather than assumed.
+    if _stamp:
+        try:
+            _age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(_stamp))).total_seconds() / 60
+        except (TypeError, ValueError):
+            _age = None
+        if _age is not None and _age > 15:
+            st.error(f"⚠ Book is **{_age:.0f} min old** ({_stamp}). The MT5 sync loop "
+                     f"is not running — every figure here is stale. See logs/mt5_sync.log.")
+        else:
+            st.caption(f"Book as of {_stamp}"
+                       + (f" · {_age:.0f} min ago" if _age is not None else ""))
+    st.caption("Money covers MT5-imported trades only — MT4-era rows carry no "
+               "monetary P/L. The Equity Curve tab remains the full-history view in R.")
+
+    if st.button("🔄 Pull closed trades from MT5", key="tj_pull_closed"):
+        try:
+            from src.services.mt5_trade_import import import_closed_trades
+            _res = import_closed_trades(days=7)
+            if _res.get("imported"):
+                st.success(f"Imported {_res['imported']} closed trade(s).")
+                st.rerun()
+            else:
+                st.info(_res.get("message") or "Nothing new.")
+        except Exception as _exc:            # noqa: BLE001 - a button must not break the page
+            st.error(f"MT5 unavailable: {_exc}")
 
 # Footer
 st.markdown("""

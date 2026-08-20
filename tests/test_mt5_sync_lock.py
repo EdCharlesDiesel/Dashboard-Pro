@@ -143,3 +143,47 @@ class TestLoopGuard:
                             lambda *a, **k: called.__setitem__("lock", 1))
         sync.main([])
         assert called["n"] == 1 and called["lock"] == 0
+
+
+class TestClosedTradeImport:
+    """The loop also keeps the journal current.
+
+    Before this, closed deals reached the journal only when somebody ran
+    deploy/mt5_trade_import.py by hand — on 2026-08-20 the journal's last
+    trade was six days old.
+    """
+
+    @staticmethod
+    def _ok_link(monkeypatch):
+        """Make mt5_link.sync() succeed without touching a terminal."""
+        import types
+        fake = types.ModuleType("src.services.mt5_link")
+        fake.sync = lambda: {"ok": True, "saved": 0, "message": "fake",
+                             "account": {"balance": 1.0, "equity": 1.0}}
+        import src.services
+        monkeypatch.setattr(src.services, "mt5_link", fake, raising=False)
+        monkeypatch.setitem(__import__("sys").modules,
+                            "src.services.mt5_link", fake)
+
+    def test_a_successful_sync_also_imports_closed_trades(self, sync, monkeypatch):
+        calls = []
+        # Signature matters: sync_once calls _import_closed(days=7). A stub
+        # taking no arguments raises TypeError, which the production guard
+        # swallows by design - so a mismatched stub reads as "never ran".
+        monkeypatch.setattr(sync, "_import_closed",
+                            lambda days=7: calls.append(days) or {"imported": 2})
+        self._ok_link(monkeypatch)
+        assert sync.sync_once() == 0
+        assert calls == [7], "the journal import never ran"
+
+    def test_a_failing_import_cannot_take_the_loop_down(self, sync, monkeypatch):
+        # The book and the balance are the loop's job; the journal is a bonus.
+        # A wrong position size is a trading loss, a stale journal is an
+        # inconvenience - they must not share a failure path, or the watchdog
+        # starts bouncing a healthy terminal over a database hiccup.
+        def boom(days=7):
+            raise RuntimeError("database unreachable")
+
+        monkeypatch.setattr(sync, "_import_closed", boom)
+        self._ok_link(monkeypatch)
+        assert sync.sync_once() == 0, "a journal failure must not fail the sync"

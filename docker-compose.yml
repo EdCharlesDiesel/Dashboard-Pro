@@ -137,6 +137,13 @@ services:
       GMAIL_SENDER: "Ckhotso@gmail.com"
       GMAIL_APP_PASSWORD: "dsqf gaoj gdfw pjvg"
       GMAIL_RECIPIENT: "Ckhotso@gmail.com"
+      # Telegram entry alerts. Values are interpolated from the gitignored
+      # .env at `up` time and are deliberately NOT written into this tracked
+      # file. Empty is safe: send_telegram_message reports "not configured"
+      # and the email channel is unaffected.
+
+      TELEGRAM_BOT_TOKEN: "AAEW4oe0zvKEb-pwnjIPQo0sNWmS_CLHcD0"
+      TELEGRAM_CHAT_ID: "8745401727:"
     # The image bakes a Streamlit HTTP healthcheck; this service serves
     # no HTTP, so the check can only ever fail. Disable rather than
     # leave it permanently red and teach everyone to ignore it.

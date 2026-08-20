@@ -22,6 +22,8 @@ import pandas as pd
 import requests
 from sqlalchemy import text
 
+from src.instruments.registry import INSTRUMENTS
+
 # ---------------------------------------------------------------------------
 # Config defaults (overridable from the UI)
 # ---------------------------------------------------------------------------
@@ -64,7 +66,29 @@ class Position:
         return self.pair[3:6].upper()
 
 
+def _instrument(pair: str):
+    """The registry entry for a broker-style pair like ``XAUUSD``, or ``None``.
+
+    This module speaks unslashed symbols; ``INSTRUMENTS`` keys on ``XAU/USD``.
+    """
+    p = str(pair or "").upper()
+    if len(p) < 6:
+        return None
+    return INSTRUMENTS.get("{0}/{1}".format(p[:3], p[3:6]))
+
+
 def pip_size(pair: str) -> float:
+    """Pip size from the registry, falling back to the FX rule of thumb.
+
+    The rule of thumb — 0.01 for JPY, 0.0001 for everything else — is right for
+    FX and wrong by a factor of 1000 on gold, whose pip is 0.1. Measured on a
+    real 0.2-lot gold position on 2026-08-20, that turned $2,738 of stop risk
+    into $2,738,100. The registry is the single source of truth for pip size;
+    the fallback survives only for symbols it does not carry.
+    """
+    inst = _instrument(pair)
+    if inst is not None and getattr(inst, "pip_size", None):
+        return float(inst.pip_size)
     return 0.01 if pair.upper().endswith("JPY") else 0.0001
 
 
@@ -76,12 +100,60 @@ def pip_value_usd(pos: Position, usdjpy: float) -> float:
         return units * 0.01 / usdjpy          # e.g. 0.20 lots -> ¥2 000/pip -> USD
     if pos.quote == "USD":
         return units * 0.0001
+    # Exotic quote. The JPY and USD branches above are exact and, for JPY, use
+    # the *live* rate passed in - better than the registry's static pip, which
+    # implies USD/JPY around 110. Only this last branch was a guess: a flat
+    # $10/lot, which overstates a ZAR cross about 16x (its real pip is 0.62).
+    inst = _instrument(pos.pair)
+    if inst is not None and getattr(inst, "pip", None):
+        return pos.lots * float(inst.pip)
     return pos.lots * 10.0
 
 
 def stop_risk_usd(pos: Position, usdjpy: float) -> float:
     pips = abs(pos.entry - pos.stop) / pip_size(pos.pair)
     return pips * pip_value_usd(pos, usdjpy)
+
+
+def positions_from_book(rows) -> tuple[list[Position], list[dict]]:
+    """Stored MT5 book rows -> ``(positions, unstopped_rows)``.
+
+    The board used to read a hand-typed table; this is the adapter that lets it
+    read the real book instead. Three mismatches are absorbed here, and every
+    one of them fails silently if it is not:
+
+    * ``"USD/ZAR"`` -> ``"USDZAR"``. ``Position.quote`` is ``pair[3:6]``, so a
+      surviving slash yields ``"/ZA"`` and every quote-currency branch misfires.
+    * ``"SHORT"`` -> ``"short"``. Exposure netting is ``1 if direction ==
+      "long" else -1``, so an uppercased ``"LONG"`` is counted as a short and
+      the whole board inverts without raising.
+    * No stop. ``stop_risk_usd`` does ``abs(entry - stop)``; ``None`` raises and
+      ``0.0`` is how both platforms spell "no stop". Those rows are returned
+      separately rather than dropped - a position with unbounded risk is the
+      most important thing this board can say, and silently omitting it would
+      make the gauges look better precisely when they should not.
+    """
+    positions: list[Position] = []
+    unstopped: list[dict] = []
+
+    for row in rows or []:
+        pair = str(row.get("pair") or "").replace("/", "").upper()
+        stop = row.get("stop_loss")
+        entry = row.get("entry_price")
+        if not pair or entry is None:
+            continue
+        if not stop or float(stop) <= 0:
+            unstopped.append(dict(row))
+            continue
+        positions.append(Position(
+            pair=pair,
+            direction=str(row.get("direction") or "").strip().lower(),
+            lots=float(row.get("lot_size") or 0.0),
+            entry=float(entry),
+            stop=float(stop),
+        ))
+
+    return positions, unstopped
 
 
 def currency_exposure(positions: list[Position]) -> dict[str, float]:
@@ -282,6 +354,29 @@ def band(score: float) -> str:
     return "green" if score < 40 else ("amber" if score < 70 else "red")
 
 
+_SEVERITY = {"green": 0, "amber": 1, "red": 2}
+
+
+def overall_state(total: float, comps: dict) -> str:
+    """The headline state: never greener than the worst single component.
+
+    The weighted average alone is not a safe headline. Concentration carries 30
+    of the 100 points, so a maxed-out concentration score contributes 30 - below
+    the 40 at which amber starts. On 2026-08-20 that printed GREEN over a
+    correlated stop-out worth 173% of equity: the one condition that can empty
+    the account was the one condition that could not change the colour.
+
+    A weighted mean can never exceed its largest term, so ``band(total)`` is
+    already <= the worst component's band, and this ``max`` resolves to the
+    worst component today. It is written as a max of both so the intent is
+    legible here, and so it stays correct if the weights are ever changed into
+    something that is not a proper mean.
+    """
+    worst = max((band(v) for v in comps.values()),
+                key=_SEVERITY.__getitem__, default="green")
+    return max(band(total), worst, key=_SEVERITY.__getitem__)
+
+
 @dataclass
 class ThreatReport:
     components: dict          # name -> score
@@ -318,7 +413,11 @@ def build_report(positions: list[Position], equity: float,
         "jpy_cot_percentile": cot_pct,
         "red_events": events, "headline_hits": hits, "regime": regime,
     }
-    return ThreatReport(comps, detail, round(total, 1), band(total))
+    state = overall_state(total, comps)
+    # Which components sit at the headline's severity. The page prints these so
+    # that "RED, composite 30.0/100" reads as a rule rather than a broken widget.
+    detail["state_driver"] = [k for k, v in comps.items() if band(v) == state]
+    return ThreatReport(comps, detail, round(total, 1), state)
 
 
 # ---------------------------------------------------------------------------
