@@ -18,6 +18,7 @@ from src.pages_lib.navigation import render_sidebar_nav
 from src.instruments.registry import INSTRUMENTS, TREND_COMMODITIES
 from src.services.alert_service import NotifyCache
 from src.services.tool_log import log_tool_usage
+from src.services import account_state, open_positions
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -643,11 +644,51 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**💰 Account**")
-    account_bal = st.number_input(
-        "Account Balance ($)",
-        value=float(st.session_state.get("account_bal", 10000.0)),
-        min_value=0.0, step=500.0, format="%.2f")
-    st.session_state["account_bal"] = account_bal
+    # Sized off the balance the MT5 sync stores, not a number typed in. This
+    # page defaulted to a hardcoded $10,000; against a real $3,844 that is
+    # every lot size 2.6x too large - the same failure a stale $5,182 against
+    # a real $1,989 already produced once. It was masked because `account_bal`
+    # is shared session state, so arriving from the Setup Ranker (which does
+    # read the live balance) left the right number behind. Landing here first
+    # did not.
+    acct = account_state.get()
+    live_bal = account_state.get_balance(0.0)
+    has_live = bool(acct) and live_bal > 0
+
+    use_live = st.checkbox(
+        "🔗 Use live balance from MT5",
+        value=bool(st.session_state.get("rs_use_live_bal", has_live)) and has_live,
+        disabled=not has_live,
+        help="Reads the balance the MT5 sync stores, so sizing reflects the "
+             "real account. Uncheck to size against a hypothetical balance.",
+    )
+    st.session_state["rs_use_live_bal"] = use_live
+
+    if use_live and has_live:
+        account_bal = live_bal
+        st.session_state["account_bal"] = live_bal
+        # A dead sync loop must not size the next trade in silence.
+        age = open_positions.age_minutes()
+        if age is not None and age > 15:
+            st.error(
+                f"⚠ Balance is **{age:.0f} min old** - the MT5 sync is not "
+                f"running, so every lot size below is sized off a stale "
+                f"number. See logs/mt5_sync.log.")
+        st.markdown(
+            f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;">'
+            f'BAL <span style="color:#00ff41;font-weight:700;">${live_bal:,.2f}</span> '
+            f'<span style="color:#9a9a9a;font-size:10px;">live · '
+            f'{acct.get("source", "")} · {str(acct.get("updated_at", ""))[-8:]}'
+            f'</span></div>',
+            unsafe_allow_html=True)
+    else:
+        if not has_live:
+            st.caption("No live balance stored - run the MT5 sync, or enter one below.")
+        account_bal = st.number_input(
+            "Account Balance ($)",
+            value=float(st.session_state.get("account_bal", 10000.0)),
+            min_value=0.0, step=500.0, format="%.2f")
+        st.session_state["account_bal"] = account_bal
     risk_pct = st.slider("Risk per Trade (%)", 0.25, 5.0,
                          float(st.session_state.get("risk_pct", 1.0)), 0.25)
     st.session_state["risk_pct"] = risk_pct

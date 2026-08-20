@@ -32,7 +32,9 @@ from src.core.config import (
     default_config as config, CANDLE_STYLE, CHART_LAYOUT, EMA_COLORS,
     RSI_LINE, RSI_OB, RSI_OS,
 )
-from src.core.data_provider import fetch_data, fetch_fred_series
+from src.core.data_provider import fetch_fred_series
+from src.services.market_data import (CANONICAL_TTL, daily_ohlc, h4_ohlc,
+                                      hourly_ohlc, monthly_ohlc, weekly_ohlc)
 from src.services.parallel_fetch import run_parallel
 from src.core.signals import generate_trading_ideas
 from src.pages_lib.navigation import render_sidebar_nav
@@ -276,6 +278,25 @@ def check_and_notify(ideas: List[Dict]) -> List[Dict]:
 # ============================================================================
 # DATA LOADING
 # ============================================================================
+# `config.timeframes` key -> the canonical spine function that serves it.
+#
+# Every page reads OHLC through src/services/market_data.py so that an EMA on
+# one page is computed over the same bars as the same EMA on another. This page
+# used to call `data_provider.fetch_data` with its own windows: 66 daily bars
+# where the spine serves 214, and native `1wk` bars where the spine resamples
+# from daily. Prices matched; indicators did not.
+_SPINE = {
+    "Weekly": weekly_ohlc,
+    "Daily": daily_ohlc,
+    "4 Hour": h4_ohlc,
+    "Hourly": hourly_ohlc,
+    "Monthly": monthly_ohlc,
+}
+
+# Fetched alongside the tab timeframes, but deliberately not tabs themselves.
+_EXTRA_TIMEFRAMES = ("Monthly",)
+
+
 def load_all_market_data() -> Dict:
     """Fetches all market data. Cached across reruns for config.cache_ttl seconds."""
     import streamlit as st
@@ -285,16 +306,30 @@ def load_all_market_data() -> Dict:
         # Every (timeframe, pair) pull is an independent I/O-bound fetch —
         # fan them out across a thread pool instead of a serial double loop
         # (5 timeframes × ~24 pairs = ~120 round-trips serially).
-        data = {tf: {} for tf in config.timeframes}
+        # Monthly is fetched but is NOT a `config.timeframes` entry: that dict
+        # drives the page's tab list, and this frame feeds the "What changed"
+        # panel rather than a tab of its own. Adding it there would create an
+        # empty Monthly tab with no chart or indicator code behind it.
+        loaded = list(config.timeframes) + list(_EXTRA_TIMEFRAMES)
+        data = {tf: {} for tf in loaded}
         work = [
-            (tf_name, tf_cfg, pair_name, symbol)
-            for tf_name, tf_cfg in config.timeframes.items()
+            (tf_name, config.timeframes.get(tf_name), pair_name, symbol)
+            for tf_name in loaded
             for pair_name, symbol in config.assets.items()
         ]
 
         def _fetch(item):
-            _tf_name, tf_cfg, _pair_name, symbol = item
-            return fetch_data(symbol, tf_cfg["interval"], tf_cfg["period"])
+            tf_name, _tf_cfg, _pair_name, symbol = item
+            fn = _SPINE.get(tf_name)
+            if fn is not None:
+                return fn(symbol)
+            # 15-minute: the spine has no function for it yet, so go through the
+            # spine's own cache with the canonical TTL rather than
+            # data_provider. Adding `fifteen_min_ohlc` changes the spine's
+            # public surface and belongs in its own plan.
+            from src.db.market_cache import cached_ohlc
+            return cached_ohlc(symbol, period="5d", interval="15m",
+                               ttl=CANONICAL_TTL)
 
         def _on_result(item, df):
             tf_name, _tf_cfg, pair_name, _symbol = item
@@ -441,6 +476,40 @@ def render_kpis(daily_data: Dict) -> None:
                 st.metric(pair, fmt, f"{change:+.2f}%")
             else:
                 st.metric(pair, "N/A", "—")
+
+
+def render_what_changed(data_by_timeframe: Dict) -> None:
+    """Per-instrument change over four horizons, biggest mover first.
+
+    Sits above the tabs because it answers the question the page is opened
+    with. Every column is a resample of the same daily series, so the four
+    readings agree with each other and with every other page — which was not
+    true while this page fetched its own windows.
+    """
+    import streamlit as st
+    from src.core.horizons import HORIZONS, horizon_row, sort_by_mover
+
+    rows = [
+        horizon_row(pair, {timeframe: data_by_timeframe.get(timeframe, {}).get(pair)
+                           for _label, timeframe in HORIZONS})
+        for pair in config.assets
+    ]
+    frame = pd.DataFrame(sort_by_mover(rows))
+    if frame.empty:
+        st.info("No market data loaded yet.")
+        return
+
+    st.markdown("### What changed")
+    st.dataframe(
+        frame, width="stretch", hide_index=True,
+        column_config={label: st.column_config.NumberColumn(label, format="%+.2f%%")
+                       for label, _tf in HORIZONS},
+    )
+    st.caption("Each column is the latest completed period against the one "
+               "before it — 4-hourly, daily, weekly, monthly. All four are "
+               "resampled from the same daily series, so they agree with each "
+               "other and with every other page. Sorted by the biggest "
+               "absolute daily move.")
 
 
 def _fmt_price(price: float) -> str:
@@ -670,7 +739,9 @@ def _fetch_perfect_order_daily(symbol: str) -> pd.DataFrame:
 
     @st.cache_data(ttl=config.cache_ttl, show_spinner=False)
     def _fetch(sym: str) -> pd.DataFrame:
-        return fetch_data(sym, "1d", "2y")
+        # Widening through the spine's own `period` argument is the sanctioned
+        # way to ask for more history; reaching past the spine is not.
+        return daily_ohlc(sym, period="2y")
 
     return _fetch(symbol)
 

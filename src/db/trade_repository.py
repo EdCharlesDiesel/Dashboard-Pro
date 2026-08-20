@@ -45,7 +45,7 @@ class DBConfig:
 # performance* must filter to these sources, or the signal firehose drowns the
 # real record. A NULL source is the schema default 'checklist', i.e. a trade.
 # Single source of truth: the Trade Journal and the Martingale page both use it.
-EXECUTED_SOURCES = ("checklist", "mt4_import", "mt5_sync")
+EXECUTED_SOURCES = ("checklist", "mt4_import", "mt5_import")
 
 
 class TradeRepository:

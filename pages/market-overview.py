@@ -63,6 +63,11 @@ def main():
         mol.render_kpis(daily_data)
 
     st.divider()
+    # Four horizons before the single-timeframe detail: the first question is
+    # what moved, and over what span.
+    mol.render_what_changed(data_by_timeframe)
+
+    st.divider()
     mol.render_overview_tab(daily_data)
 
     st.caption(

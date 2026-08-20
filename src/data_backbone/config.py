@@ -15,14 +15,54 @@ import os
 
 
 # ── Postgres (SQLAlchemy URL) ────────────────────────────────────────────────
-# Mirrors the DB_* env vars docker-compose passes to the app service.
-DB_HOST = os.getenv("DB_HOST", os.getenv("POSTGRES_HOST", "localhost"))
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
-DB_NAME = os.getenv("DB_NAME", os.getenv("POSTGRES_DB", "trading"))
-DB_USER = os.getenv("DB_USER", os.getenv("POSTGRES_USER", "postgres"))
-DB_PASSWORD = os.getenv("DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "postgres"))
+# Resolved through `src.core.secrets.db_config()`, the same path the rest of the
+# app uses, so there is exactly one answer to "where is the database".
+#
+# This module used to read the DB_* env vars itself and default to
+# localhost:5432/trading. Inside Docker that was right -- compose passes
+# DB_HOST=db / DB_PORT=5432 and the container reaches the `db` service on its
+# internal port. On the *host* it was wrong twice over: a native Windows
+# PostgreSQL owns 5432, and no database called `trading` exists on either
+# server. Every macro read therefore failed authentication and fell back to the
+# FRED API -- silently, because `fred_data`'s fallback works, so the only
+# symptom was a log nobody read and a `fred_series` table that stayed empty.
+# Measured 2026-08-16.
+#
+# NOTE the precedence, which is not the obvious one: db_config() tries the
+# secrets.toml value BEFORE the env var. The container is safe only because
+# .dockerignore keeps secrets.toml out of the image, leaving the DB_* env vars
+# as the only source there. Mount a secrets.toml into a container and every
+# service will chase the host's 127.0.0.1:5433 from inside Docker.
+# `tests/test_data_backbone_config.py` guards that .dockerignore line.
+def _resolve_db() -> dict:
+    """Connection settings, or safe defaults if secrets cannot be read.
 
-DB_URL = os.getenv(
+    Importing a config module must never be what takes the app down, so a
+    failure here degrades to env vars rather than raising at import time.
+    """
+    try:
+        from src.core.secrets import db_config
+        return dict(db_config())
+    except Exception:                       # noqa: BLE001 — import must not fail
+        return {"host": os.getenv("DB_HOST", "localhost"),
+                "port": int(os.getenv("DB_PORT", "5432")),
+                # `postgres` always exists; `trading` never did on either
+                # server, so that default turned a misconfiguration into a
+                # confusing "database does not exist".
+                "dbname": os.getenv("DB_NAME", "postgres"),
+                "user": os.getenv("DB_USER", "postgres"),
+                "password": os.getenv("DB_PASSWORD", "")}
+
+
+_DB = _resolve_db()
+
+DB_HOST: str = str(_DB.get("host", "localhost"))
+DB_PORT: int = int(_DB.get("port", 5432))
+DB_NAME: str = str(_DB.get("dbname", "postgres"))
+DB_USER: str = str(_DB.get("user", "postgres"))
+DB_PASSWORD: str = str(_DB.get("password", ""))
+
+DB_URL: str = os.getenv(
     "DB_URL",
     f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
 )

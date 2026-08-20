@@ -115,6 +115,82 @@ def usd_pnl(pair: str, side: Any, lots: float, entry: float, exit_price: float,
     return quote_pnl * rate
 
 
+def book_projection(rows: Sequence[Dict[str, Any]],
+                    rates: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+    """What the open book is worth now, at every target, and at every stop.
+
+    Returns ``{floating, at_target, at_stop, converted, unconverted}``. All
+    three figures are in account currency when ``converted`` is True.
+
+    **Why this does not just call `usd_pnl`.** P&L accrues in the *quote*
+    currency, so a ZAR cross has to be converted or it overstates by about
+    16x. `usd_pnl` needs a rate table for that, and the Streamlit app runs in
+    a Linux container where MetaTrader cannot be reached and no quote can be
+    fetched. But the broker already did the conversion: every position carries
+    its floating P/L in account currency, measured at a price we also store.
+    Since P&L is linear in price, one division recovers the exact factor the
+    broker used:
+
+        factor   = profit_now / (price_now - entry)      [account ccy per price unit]
+        at_target= factor * (target - entry)
+
+    No contract sizes, no pip values, no quote lookup - and it agrees with the
+    contract arithmetic to within a fraction of a percent, because it *is* the
+    broker's own arithmetic run backwards.
+
+    Falls back to `usd_pnl` when the broker figures are absent or the position
+    is exactly at entry (where the factor is 0/0). If that fallback cannot
+    convert either, the pair is named in ``unconverted`` and ``converted`` goes
+    False - the caller must then not print a currency symbol on the number.
+    """
+    floating = at_target = at_stop = 0.0
+    unconverted: List[str] = []
+
+    for row in rows or []:
+        pair = str(row.get("pair") or "")
+        entry = row.get("entry_price")
+        target = row.get("take_profit")
+        stop = row.get("stop_loss")
+        profit = row.get("profit")
+        price_now = row.get("price_current")
+
+        if profit is not None:
+            floating += float(profit)
+
+        if entry is None:
+            continue
+        entry = float(entry)
+
+        span = (float(price_now) - entry) if price_now is not None else 0.0
+        if profit is not None and span:
+            factor = float(profit) / span
+            if target is not None:
+                at_target += factor * (float(target) - entry)
+            if stop is not None:
+                at_stop += factor * (float(stop) - entry)
+            continue
+
+        # Fallback: value it directly. usd_pnl reports unconverted rather than
+        # zero when it has no rate, so check whether a rate was actually known.
+        side = row.get("direction")
+        lots = row.get("lot_size")
+        quote = pair.split("/")[-1].strip().upper() if "/" in pair else ""
+        if quote and quote != "USD" and not (rates or {}).get(quote):
+            unconverted.append(pair)
+        if target is not None:
+            at_target += usd_pnl(pair, side, lots, entry, float(target), rates)
+        if stop is not None:
+            at_stop += usd_pnl(pair, side, lots, entry, float(stop), rates)
+
+    return {
+        "floating": floating,
+        "at_target": at_target,
+        "at_stop": at_stop,
+        "converted": not unconverted,
+        "unconverted": unconverted,
+    }
+
+
 def barrier_view(side: Any, spot: float, stop: float, target: float,
                  params: GBMParams, horizon_years: Optional[float] = None,
                  n_sims: int = 50_000) -> Dict[str, float]:

@@ -72,9 +72,24 @@ CHECK_EVERY = 120
 BACKOFF_START = 300
 BACKOFF_MAX = 3600
 
-# How long a successful sync may be absent before we say so. Not a restart
-# trigger - see the module docstring.
+# How long a successful sync may be absent before we say so. Not a *loop*
+# restart trigger - see the module docstring.
 WARN_NO_SYNC_AFTER = 1800
+
+# The terminal itself, for the one failure the loop cannot recover from.
+#
+# `mt5_link` re-initializes on every cycle, so a *closed* terminal needs no
+# help - the next cycle reconnects the moment it reopens. A *hung* one is
+# different: on 2026-08-18 it answered `IPC timeout (-10005)` for 33 straight
+# cycles over 3h16m, and no amount of reconnecting from this side would have
+# cleared it. Only bouncing the terminal does.
+#
+# Five consecutive failures (~25 min at a 300s loop) rather than one, because a
+# broker-side blip or a weekend gap must never bounce a healthy terminal.
+TERMINAL_EXE = os.environ.get(
+    "MT5_TERMINAL_EXE", r"C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe")
+TERMINAL_RESTART_AFTER_FAILS = 5
+TERMINAL_RESTART_COOLDOWN = 3600
 
 _LOGGING = False
 _LOCK_HANDLE = None
@@ -130,20 +145,42 @@ def heartbeat_age(now=None):
     return max(0.0, (now if now is not None else time.time()) - mtime)
 
 
-def last_ok_age(now=None):
-    """Seconds since the last *successful* sync line, or ``None`` if none found.
-
-    Diagnostic only. Reads the tail rather than the whole file: this log is
-    append-only and already ~90KB, and it is consulted every cycle forever.
-    """
+def _tail_text(window: int = 16384) -> str:
+    """The end of the sync log. Read the tail rather than the whole file: it is
+    append-only, already ~90KB, and consulted every cycle forever."""
     try:
         with open(SYNC_LOG, "rb") as fh:
             try:
-                fh.seek(-16384, os.SEEK_END)
+                fh.seek(-window, os.SEEK_END)
             except OSError:
                 fh.seek(0)                        # file shorter than the window
-            tail = fh.read().decode("utf-8", "replace")
+            return fh.read().decode("utf-8", "replace")
     except OSError:
+        return ""
+
+
+def failed_streak() -> int:
+    """How many sync cycles have failed back-to-back since the last success.
+
+    Only ``ok``/``NOT SYNCED`` lines count - the loop's own ``[loop] ...``
+    banners are not cycles and must not break or pad the streak.
+    """
+    streak = 0
+    for line in reversed(_tail_text().splitlines()):
+        if "] ok - " in line:
+            break
+        if "NOT SYNCED" in line:
+            streak += 1
+    return streak
+
+
+def last_ok_age(now=None):
+    """Seconds since the last *successful* sync line, or ``None`` if none found.
+
+    Diagnostic only.
+    """
+    tail = _tail_text()
+    if not tail:
         return None
 
     for line in reversed(tail.splitlines()):
@@ -226,26 +263,75 @@ def lock_is_free(sync, timeout: float = 15.0) -> bool:
         sync.LOCK = original
 
 
+def launch_argv():
+    """Argv that starts the loop *without* leaving it a child of this process.
+
+    On Windows the loop goes through ``cmd /c start``, which exits immediately
+    and leaves the loop orphaned. ``DETACHED_PROCESS`` alone is not enough:
+    it detaches the console but the parent link survives, so any
+    ``taskkill /T`` aimed at the watchdog walks straight down into the sync.
+
+    Learned the hard way on 2026-08-18 — restarting the watchdog to pick up new
+    code killed the loop it was supervising, so bouncing the supervisor caused
+    exactly the outage the supervisor exists to prevent.
+    """
+    tail = [PYTHONW, SYNC_PY, "--loop", str(LOOP_INTERVAL)]
+    if os.name == "nt":
+        # The empty "" is the window title `start` would otherwise steal from
+        # the first quoted argument - without it, PYTHONW becomes the title and
+        # nothing launches.
+        return ["cmd", "/c", "start", "", "/B"] + tail
+    return tail
+
+
 def start_loop() -> bool:
     """Launch a detached sync loop from the repo root."""
     if not os.path.exists(PYTHONW):
         emit("[{0}] cannot start: {1} missing".format(_stamp(), PYTHONW))
         return False
-    flags = 0
-    if os.name == "nt":
-        # Detached and window-less: the new loop must outlive this watchdog, and
-        # must not flash a console in the user's face every restart.
-        flags = 0x00000008 | 0x08000000           # DETACHED_PROCESS | CREATE_NO_WINDOW
+    flags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
     try:
         subprocess.Popen(
-            [PYTHONW, SYNC_PY, "--loop", str(LOOP_INTERVAL)],
-            cwd=_REPO, creationflags=flags, close_fds=True,
+            launch_argv(), cwd=_REPO, creationflags=flags, close_fds=True,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL)
         return True
     except Exception as exc:                      # noqa: BLE001
         emit("[{0}] launch failed: {1}".format(_stamp(), exc))
         return False
+
+
+def restart_terminal() -> bool:
+    """Bounce the MetaTrader terminal itself.
+
+    The heavier hammer, and deliberately rate-limited: this closes the app the
+    desk trades through. It is only reached when the terminal has refused a
+    read for `TERMINAL_RESTART_AFTER_FAILS` consecutive cycles, which means it
+    is already useless to us.
+
+    The relaunched terminal reconnects on its saved credentials; if it is set
+    to prompt instead, this gets it as far as the login dialog and the next
+    cycles keep logging NOT SYNCED, which is still louder than silence.
+    """
+    if not os.path.exists(TERMINAL_EXE):
+        emit("[{0}] cannot restart terminal: {1} not found (set MT5_TERMINAL_EXE)"
+             .format(_stamp(), TERMINAL_EXE))
+        return False
+
+    emit("[{0}] restarting MetaTrader: {1}".format(_stamp(), TERMINAL_EXE))
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/IM", os.path.basename(TERMINAL_EXE)],
+                           capture_output=True, text=True, timeout=30)
+        time.sleep(5)                             # let the process actually go
+        flags = 0x00000008 if os.name == "nt" else 0   # DETACHED_PROCESS
+        subprocess.Popen([TERMINAL_EXE], cwd=os.path.dirname(TERMINAL_EXE),
+                         creationflags=flags, close_fds=True)
+    except Exception as exc:                      # noqa: BLE001
+        emit("[{0}] terminal restart failed: {1}".format(_stamp(), exc))
+        return False
+    emit("[{0}] terminal relaunched - next sync cycle will retry".format(_stamp()))
+    return True
 
 
 def restart(sync, reason: str) -> bool:
@@ -280,8 +366,24 @@ def check(sync, state: dict) -> bool:
             emit("[{0}] healthy again - backoff reset".format(_stamp()))
         state["backoff"] = BACKOFF_START
 
-        # Alive but not actually syncing: almost always a closed terminal.
-        # Worth saying, never worth restarting.
+        # Alive but not actually syncing. Restarting the *loop* is still wrong
+        # here - it is doing its job - but the terminal it reads may be hung,
+        # and that the loop cannot fix from its side.
+        streak = failed_streak()
+        if streak >= TERMINAL_RESTART_AFTER_FAILS:
+            since = now - state.get("terminal_restarted_at", 0)
+            if since > TERMINAL_RESTART_COOLDOWN:
+                emit("[{0}] {1} consecutive failed cycles - terminal looks hung"
+                     .format(_stamp(), streak))
+                state["terminal_restarted_at"] = now
+                restart_terminal()
+            elif now - state.get("warned_at", 0) > WARN_NO_SYNC_AFTER:
+                state["warned_at"] = now
+                emit("[{0}] still failing ({1} cycles) but terminal was bounced "
+                     "{2:.0f} min ago - waiting out the cooldown"
+                     .format(_stamp(), streak, since / 60))
+            return False
+
         ok_age = last_ok_age(now)
         if ok_age is not None and ok_age > WARN_NO_SYNC_AFTER \
                 and now - state.get("warned_at", 0) > WARN_NO_SYNC_AFTER:
@@ -310,7 +412,8 @@ def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
 
     sync = load_sync()
-    state = {"backoff": BACKOFF_START, "next_try": 0.0, "warned_at": 0.0}
+    state = {"backoff": BACKOFF_START, "next_try": 0.0, "warned_at": 0.0,
+             "terminal_restarted_at": 0.0}
 
     if "--once" in argv or "--loop" not in argv:
         check(sync, state)

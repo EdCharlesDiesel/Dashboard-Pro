@@ -57,6 +57,12 @@ MIGRATING: set[str] = set()
 _DIRECT_FETCH_PREFIXES = (
     "yf.download", "yf.Ticker",
     "yfinance.download", "yfinance.Ticker",
+    # Reaches yfinance through src/core/data_provider.py, so it bypasses the
+    # spine exactly as a literal call does -- just one indirection further out,
+    # which is why this guard did not see it for months. `fetch_fred_series` is
+    # deliberately absent: FRED macro series are not OHLC and the spine does
+    # not model them.
+    "fetch_data",
 )
 
 
@@ -82,6 +88,19 @@ def _fetches_directly(tree: ast.AST) -> bool:
 
 def _offends(path: Path) -> bool:
     return _fetches_directly(ast.parse(path.read_text(encoding="utf-8")))
+
+
+def test_indirect_fetch_helpers_are_also_caught():
+    """``data_provider.fetch_data`` reaches yfinance too.
+
+    The guard detected only literal ``yf.download``/``yf.Ticker``, so a page
+    could bypass the spine through one indirection and stay invisible to it.
+    Measured 2026-08-15: ``market_overview_lib`` pulled 66 daily bars where the
+    spine serves 214 — and this file passed throughout.
+    """
+    assert "fetch_data" in _DIRECT_FETCH_PREFIXES, (
+        "the guard must keep detecting data_provider.fetch_data; "
+        "market_overview_lib bypassed the spine through it for months")
 
 
 def test_no_page_fetches_ohlc_outside_the_spine():

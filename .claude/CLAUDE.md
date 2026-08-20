@@ -30,6 +30,15 @@ this gets skipped.
    Goal, Architecture, Tech Stack, Spec, Global Constraints, a measured
    starting state, then numbered **Tasks** broken into checkbox **Steps** —
    a DevOps story with its acceptance criteria, not a paragraph of intent.
+
+   **Write it to that path first, before implementing — not afterwards.**
+   The plan-mode scratch file is not a record: the tooling assigns one file
+   per session and reuses it, so each new plan silently overwrites the
+   last. On 2026-08-20 that ate eight plans covering versions 1.10.20 to
+   1.10.28, one of which had already been committed. A plan that exists
+   only in a chat window did not happen.
+   `tests/test_plans_are_recorded.py` enforces this by asserting the
+   current `VERSION` is named by some plan in `docs/plans/`.
 2. **The plan takes its own version bump on creation.**
 3. **Every completed task bumps the version** —
    `python deploy/sync_version.py <next>` — then rebuild and
@@ -63,6 +72,75 @@ The version bump is not bookkeeping. `VERSION` is what the running container
 reports in its status bar, so an unbumped change is a change nobody can prove
 is deployed — which is exactly how the footer once read v1.1.0 while the image
 was 1.4.0.
+
+### Working principles
+
+Adapted from the Karpathy guidelines
+(`github.com/multica-ai/andrej-karpathy-skills`). The four principles are
+theirs; the carve-outs are this repository's, and the carve-outs are the point
+— imported verbatim, two of these rules would do damage here.
+
+**1 - Surface assumptions. Never guess silently.**
+
+- Write the assumption you are acting on into the plan, before acting on it.
+- Two readings of a request? Give both. Never pick one quietly.
+- Unclear? Stop and name what is unclear. A question costs minutes; building
+  the wrong thing costs the session.
+- If a simpler approach exists, say so — including when the harder one is what
+  was asked for.
+
+  On 2026-08-18 a structure diagram was read as content rather than as a
+  template, and 25 files of an unrelated domain were built before anyone said
+  so. The unstated assumption was "this diagram is the spec". Saying it out
+  loud would have ended it in one line.
+
+**2 - The smallest complete thing.**
+
+- Nothing that was not asked for: no speculative feature, no abstraction with
+  a single caller, no configurability nobody requested.
+- 200 lines that could be 50 get rewritten as 50.
+- A second way to do something is never a simplification.
+  `docs/plans/2026-08-16-data-backbone-db-target.md` deleted the duplicate
+  database resolver rather than patch its defaults.
+
+  **Not a licence to stub.** "Return complete implementations — no TODO
+  comments, no placeholder code" still stands above. *Simple* means build
+  less; *complete* means finish what you build.
+
+  **Not a licence to strip error handling.** The source rule says "no error
+  handling for impossible scenarios" — fair in general, but this codebase
+  wraps its I/O boundaries best-effort on purpose (`account_state`,
+  `open_positions`, `precomputed`, `score_history`, `alert_service`) so an
+  unreachable Postgres degrades a page instead of breaking a live session.
+  Those `try/except` blocks are the design, not clutter.
+
+**3 - Surgical by default.**
+
+- Every changed line traces to the request. If it does not, it belongs in a
+  different change.
+- Do not improve adjacent code, comments or formatting. Match the surrounding
+  style even where you would write it differently.
+- Unrelated dead code: mention it, do not delete it. `archive/` is never
+  touched.
+- Remove only the orphans your own change created.
+
+  **The standing exception:** "legacy hand-rolled charts migrate to ChartKit
+  opportunistically". That migration is sanctioned — but it is its own change,
+  with its own plan and its own version bump, never a passenger on an
+  unrelated one. Likewise, a cleanup the owner explicitly asks for — a review
+  or simplify pass — is not an unsolicited one, and the asking sets its scope.
+
+**4 - Define the finish line first.**
+
+- Turn the request into something checkable *before* starting, and put it in
+  the plan: "add validation" becomes "these inputs are rejected, these pass".
+- Each task names the command that proves it (`test-driven-development`).
+- **A command that errored is not a check that passed.** Read the output, not
+  the exit line. On 2026-08-18 `docker run ... ls /app | grep -c` printed `0`
+  — not because the thing was absent, but because Git Bash had rewritten
+  `/app` into a Windows path and `ls` never ran. Re-running with
+  `MSYS_NO_PATHCONV=1` is what actually proved it.
+- A test that passes alone and fails in the suite was testing the suite.
 
 ## Domain
 

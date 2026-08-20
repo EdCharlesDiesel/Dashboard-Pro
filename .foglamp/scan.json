@@ -6,7 +6,7 @@
     "tagline": "Forex & metals trading desk - signals, risk, live MT5",
     "date": "2026-08-12"
   },
-  "stats": { "agents": 4, "models": 2, "tools": 16, "integrations": 12 },
+  "stats": { "agents": 5, "models": 2, "tools": 16, "integrations": 12 },
   "topModels": [
     { "id": "opus", "label": "Claude Opus 4.8", "domain": "claude.ai" },
     { "id": "haiku", "label": "Claude Haiku 4.5", "domain": "claude.ai" }
@@ -47,7 +47,7 @@
       { "id": "bb-worker", "label": "Data backbone worker", "kind": "cron", "sub": "APScheduler, daily refresh", "sourceRef": "src/data_backbone/worker.py", "detail": "Warms the store on startup then upserts every watched ticker and FRED series once a day." },
       { "id": "sentry", "label": "Evening sentry", "kind": "cron", "sub": "17:00-20:00 SAST window", "sourceRef": "src/services/evening_sentry.py", "detail": "Runs the evening shift: scores the watchlist, journals to Postgres, pings Telegram only on state change. No auto-execution." },
       { "id": "mt5-sync", "label": "MT5 sync loop", "kind": "cron", "sub": "Startup item, desktop session", "sourceRef": "deploy/mt5_sync.py", "group": "Broker desk", "detail": "Session-resident loop pushing live balance and open positions into the DB. Task Scheduler cannot do this - mt5.initialize needs the interactive desktop." },
-      { "id": "mt5-watchdog", "label": "MT5 sync watchdog", "kind": "cron", "sub": "restarts a wedged sync loop", "sourceRef": "deploy/mt5_watchdog.py", "group": "Broker desk", "detail": "Never imports MetaTrader5 itself, so it cannot wedge the way its patient does." },
+      { "id": "mt5-watchdog", "label": "MT5 sync watchdog", "kind": "cron", "sub": "restarts the loop or terminal", "sourceRef": "deploy/mt5_watchdog.py", "group": "Broker desk", "detail": "Never imports MetaTrader5, so it cannot wedge like its patient. Judges liveness by the sync log growing, not the process existing. A quiet log restarts the loop; IPC timeouts bounce the terminal." },
 
       { "id": "claude-code", "label": "Claude Code (MCP)", "kind": "agent", "sub": "16 MT5 tools behind 4 gates", "domain": "claude.ai", "detail": "External agent driving the real terminal on explicit instruction; trade tools sit behind four independent guardrails." },
       { "id": "ranker-polish", "label": "Setup rationale polish", "kind": "agent", "sub": "Grade-A only, fails soft", "sourceRef": "src/pages_lib/setup_ranker.py:162", "group": "AI surfaces", "detail": "Rewrites the deterministic rationale facts into an analyst paragraph, preserving every number verbatim." },
@@ -95,7 +95,9 @@
       { "id": "anthropic-api", "label": "Anthropic API", "kind": "external", "sub": "optional, self-disabling", "domain": "anthropic.com" },
       { "id": "gmail", "label": "Gmail SMTP", "kind": "external", "sub": "app password", "domain": "gmail.com" },
       { "id": "telegram", "label": "Telegram", "kind": "external", "sub": "sentry state-change pings", "domain": "telegram.org" },
-      { "id": "healthchecks", "label": "healthchecks.io", "kind": "external", "sub": "dead-sentry alarm", "domain": "healthchecks.io" }
+      { "id": "healthchecks", "label": "healthchecks.io", "kind": "external", "sub": "dead-sentry alarm", "domain": "healthchecks.io" },
+      { "id": "session-subagents", "label": "Session subagents", "kind": "agent", "sub": "score, risk, plan, review", "domain": "claude.ai", "group": "AI surfaces", "detail": "Four read-only reviewers in .claude/agents, one per session step: setup scoring, risk audit, trade-plan writing, closed-trade review. None gets a trade tool - the gates are not delegable." },
+      { "id": "tool-audit-hook", "label": "Tool-call audit hook", "kind": "service", "sub": "PostToolUse -> jsonl, append-only", "group": "AI surfaces", "detail": "Fires on every tool call in a session and appends it to logs/mt5_tool_audit.jsonl. The only record of what actually reached the broker that the agent did not write itself." }
     ],
     "edges": [
       { "from": "cockpit", "to": "precomputed", "kind": "reads", "label": "already-scored board" },
@@ -152,6 +154,7 @@
       { "from": "mt5-sync", "to": "mt5-link", "kind": "calls" },
       { "from": "mt5-sync", "to": "pg", "kind": "writes", "label": "balance + open positions" },
       { "from": "mt5-watchdog", "to": "mt5-sync", "kind": "triggers", "label": "restarts if wedged" },
+      { "from": "mt5-watchdog", "to": "mt5-terminal", "kind": "triggers", "label": "bounces if hung" },
 
       { "from": "market-data", "to": "pg", "kind": "writes", "label": "read-through market_bars" },
       { "from": "market-data", "to": "yahoo", "kind": "reads", "label": "only on stale/miss" },
@@ -183,7 +186,10 @@
       { "from": "news", "to": "ff", "kind": "reads" },
       { "from": "alerts", "to": "gmail", "kind": "writes", "label": "HTML alert email" },
       { "from": "alerts", "to": "notify-cache", "kind": "writes", "label": "never send twice" },
-      { "from": "observability", "to": "pg", "kind": "writes", "label": "app_events" }
+      { "from": "observability", "to": "pg", "kind": "writes", "label": "app_events" },
+      { "from": "claude-code", "to": "session-subagents", "kind": "calls", "label": "one per session step" },
+      { "from": "session-subagents", "to": "mt5-read-tools", "kind": "calls", "label": "read-only, no trade" },
+      { "from": "claude-code", "to": "tool-audit-hook", "kind": "triggers", "label": "every tool call" }
     ]
   }
 }
