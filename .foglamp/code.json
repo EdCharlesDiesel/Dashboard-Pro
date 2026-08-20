@@ -41,8 +41,8 @@
  "pages": {
   "dir": {
    "path": "pages/",
-   "count": 56,
-   "loc": 22145,
+   "count": 57,
+   "loc": 22469,
    "sample": [
     {
      "path": "pages/15m-fib-entry.py",
@@ -817,7 +817,7 @@
  "sweeper": {
   "file": {
    "path": "src/services/signal_sweep.py",
-   "loc": 347,
+   "loc": 378,
    "doc": "Run every signal page headlessly so its own code persists its signals.",
    "classes": [],
    "functions": [
@@ -825,6 +825,12 @@
      "name": "_rr_use_free_proxy",
      "sig": "(at) -> None",
      "doc": "Switch Risk Reversals off its synthetic-demo default.",
+     "kind": "private"
+    },
+    {
+     "name": "_select_event",
+     "sig": "(label)",
+     "doc": "Point the Event Reaction Map at one of its four events.",
      "kind": "private"
     },
     {
@@ -1086,7 +1092,7 @@
  "mt5-watchdog": {
   "file": {
    "path": "deploy/mt5_watchdog.py",
-   "loc": 436,
+   "loc": 452,
    "doc": "Keep the MT5 sync loop alive, in the logged-on desktop session.",
    "classes": [],
    "functions": [
@@ -1148,6 +1154,12 @@
      "name": "lock_is_free",
      "sig": "(sync, timeout=…) -> bool",
      "doc": "Whether the sync lock can be taken, polling up to ``timeout``.",
+     "kind": "public"
+    },
+    {
+     "name": "launch_argv",
+     "sig": "()",
+     "doc": "Argv that starts the loop *without* leaving it a child of this process.",
      "kind": "public"
     },
     {

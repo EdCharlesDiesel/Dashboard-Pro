@@ -254,6 +254,7 @@ Visited when building or validating, not part of the routine.
 | [🧮 Quant Models Lab](../pages/quant_models_tab.py) | Engle-Granger cointegration, Kalman dynamic hedge ratio, OU mean-reversion, GARCH(1,1) vol regime, UIP/carry, GBM null test. |
 | [🔭 Forecast](../pages/forecast_tab.py) | GARCH(1,1) volatility cone + a transparent driver score + a narrative, journaled and self-scored against realized outcomes. |
 | [😲 Surprise Awareness](../pages/surprise_tab.py) | Economic surprise index, an event-proximity gate, and the gold~oil regime-inversion correlation. |
+| [🧾 Event Reaction Map](../pages/nfp_reaction.py) | NFP, CPI, PPI and FOMC, scored: a composite surprise pushed through that event's own regime-aware transmission chain into ranked instrument exposure, with a conviction score that collapses when the rate and growth channels disagree. One source tag per event. |
 
 ### 📖 Reference
 | Page | What it's for |

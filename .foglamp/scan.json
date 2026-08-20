@@ -43,7 +43,7 @@
       { "id": "mcp-server", "label": "MT5 MCP server", "kind": "entry", "sub": "python -m src.services.mt5_mcp", "sourceRef": "src/services/mt5_mcp.py", "group": "AI surfaces", "detail": "Standalone stdio process exposing the live terminal to an AI client. Never imported by a page - it holds the MT5 handle open." },
 
       { "id": "scanner", "label": "Background scanner", "kind": "cron", "sub": "every 300s, compose service", "sourceRef": "src/services/background_scanner.py", "group": "Signal engine", "detail": "The signal engine: ingest bars, score the whole universe, store the board, alert on fresh Grade-A setups - whether or not anyone is watching." },
-      { "id": "sweeper", "label": "Signal sweeper", "kind": "cron", "sub": "27 pages under AppTest, ~7min", "sourceRef": "src/services/signal_sweep.py", "group": "Signal engine", "detail": "A scheduler, not a second implementation: runs each real page headlessly so its own persist_signals call fires." },
+      { "id": "sweeper", "label": "Signal sweeper", "kind": "cron", "sub": "31 pages under AppTest, ~7min", "sourceRef": "src/services/signal_sweep.py", "group": "Signal engine", "detail": "A scheduler, not a second implementation: runs each real page headlessly so its own persist_signals call fires." },
       { "id": "bb-worker", "label": "Data backbone worker", "kind": "cron", "sub": "APScheduler, daily refresh", "sourceRef": "src/data_backbone/worker.py", "detail": "Warms the store on startup then upserts every watched ticker and FRED series once a day." },
       { "id": "sentry", "label": "Evening sentry", "kind": "cron", "sub": "17:00-20:00 SAST window", "sourceRef": "src/services/evening_sentry.py", "detail": "Runs the evening shift: scores the watchlist, journals to Postgres, pings Telegram only on state change. No auto-execution." },
       { "id": "mt5-sync", "label": "MT5 sync loop", "kind": "cron", "sub": "Startup item, desktop session", "sourceRef": "deploy/mt5_sync.py", "group": "Broker desk", "detail": "Session-resident loop pushing live balance and open positions into the DB. Task Scheduler cannot do this - mt5.initialize needs the interactive desktop." },
@@ -138,7 +138,7 @@
       { "from": "scanner", "to": "precomputed", "kind": "writes", "label": "one JSONB board row" },
       { "from": "scanner", "to": "signal-store", "kind": "writes" },
       { "from": "scanner", "to": "alerts", "kind": "triggers", "label": "Grade-A only" },
-      { "from": "sweeper", "to": "pages", "kind": "triggers", "label": "27 pages under AppTest" },
+      { "from": "sweeper", "to": "pages", "kind": "triggers", "label": "31 pages under AppTest" },
       { "from": "sweeper", "to": "mt5-link", "kind": "calls", "label": "sync broker state first" },
       { "from": "bb-worker", "to": "yahoo", "kind": "reads" },
       { "from": "bb-worker", "to": "fred", "kind": "reads" },

@@ -1,14 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <!-- Port 5433, NOT 5432. A native Windows PostgreSQL owns 5432 on both
-         loopbacks, so a 5432 URL silently reaches that server instead of the
-         Docker container this project actually uses - the two databases then
-         drift apart with no error anywhere. See the ports note in
-         docker-compose.yml. Database renamed OrionMacroEconomicsDb ->
-         DashboardproDBv1 on 2026-08-10; this entry also previously named
-         "dashboardprov1", which has never existed on either server. -->
-    <data-source source="LOCAL" name="DashboardproDBv1@localhost" uuid="58d2a3cf-1182-4ba9-a771-d5283d2b3a35">
+    <data-source source="LOCAL" name="dashboardprov1@localhost" uuid="58d2a3cf-1182-4ba9-a771-d5283d2b3a35">
       <driver-ref>postgresql</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.postgresql.Driver</jdbc-driver>
