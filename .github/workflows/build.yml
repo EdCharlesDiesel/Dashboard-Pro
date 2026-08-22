@@ -40,12 +40,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          # Both files, or the cache key misses the pytest pin and a dev-dep
+          # change is served a stale wheel set.
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
+        # requirements-dev.txt, not requirements.txt: it starts with
+        # `-r requirements.txt` and adds pytest. Installing only the runtime
+        # deps is why the "Test suite" step below failed with
+        # "No module named pytest" from the moment it was added — the step ran,
+        # but the tool it invokes was never installed.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Test suite
         # Only py_compile ran here until 2026-08-22, so two tests stayed broken

@@ -116,6 +116,13 @@ class TestRepoIsInSync:
 
     def test_version_and_env_agree(self):
         sync = _load_sync()
+        # .env is gitignored, so it does not exist on a CI runner or in a fresh
+        # clone. This check is about a *local* mistake — bumping VERSION and
+        # forgetting to run sync_version.py — so with no .env there is nothing
+        # to disagree with. Asserting anyway made CI red for a condition the
+        # runner cannot satisfy.
+        if sync.env_version() is None:
+            pytest.skip(".env absent (gitignored) — nothing to compare against")
         assert sync.env_version() == sync.read_version(), (
             "VERSION and .env disagree — run: python deploy/sync_version.py")
 
