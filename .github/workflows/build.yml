@@ -128,3 +128,59 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway up --detach
+
+  release:
+    name: Publish GitHub Release
+    # Behind the deploy, never beside it: a release advertising a version that
+    # never reached Railway is worse than a stale Releases page.
+    needs: deploy
+    if: github.ref == 'refs/heads/Production' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      # The default GITHUB_TOKEN is read-only for contents; creating a tag
+      # needs this, or the job 403s on a production merge.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # --generate-notes diffs against the previous release, so the job
+          # needs history rather than the default shallow clone.
+          fetch-depth: 0
+
+      - name: Read the version
+        id: v
+        # VERSION is the single source of truth that sync_version.py propagates.
+        # Never type a version here - a hand-maintained copy is exactly the drift
+        # this repo already fixed once for the footer and the image tag.
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          # Same grammar as deploy/sync_version.py's _SEMVER, prerelease suffix
+          # included. A stricter rule here would reject a version the repo's own
+          # validator accepts, breaking the pipeline on a legitimate bump.
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'; then
+            echo "::error::VERSION is not semantic: '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=ProductionV$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          VERSION: ${{ steps.v.outputs.version }}
+        # Skip rather than fail when the tag exists: re-running a green workflow
+        # and merging without a version bump both land here legitimately, and
+        # neither is worth turning the pipeline red for.
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists - VERSION was not bumped, nothing to publish."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "Production V$VERSION" \
+            --target "$GITHUB_SHA" \
+            --generate-notes
+          echo "::notice::Published $TAG"
