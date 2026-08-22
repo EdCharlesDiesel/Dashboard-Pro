@@ -230,7 +230,11 @@ if __name__ == "__main__":
     from datetime import datetime, timedelta
 
     from src.pages_lib.navigation import render_sidebar_nav
-    from src.services.cot_fetcher import INSTRUMENTS as _COT_INSTRUMENTS, get_instrument_series
+    from src.services.cot_fetcher import (
+        INSTRUMENTS as _COT_INSTRUMENTS,
+        get_instrument_series,
+        normalize_datetime64,
+    )
     from src.ui.theme import BloombergTheme
 
     st.set_page_config(
@@ -337,6 +341,8 @@ if __name__ == "__main__":
             st.warning(f"Couldn't load price data for {instrument} — the backtest needs both series.")
             st.stop()
 
+        series = series.assign(date=normalize_datetime64(series["date"]))
+        price_df = price_df.assign(date=normalize_datetime64(price_df["date"]))
         combined = pd.merge_asof(
             series[["date", "net_spec", "open_interest"]].sort_values("date"),
             price_df.sort_values("date"),

@@ -232,7 +232,7 @@ if __name__ == "__main__":
 
     from src.pages_lib.navigation import render_sidebar_nav
     from src.services.alert_service import NotifyCache
-    from src.services.cot_fetcher import INSTRUMENTS, get_instrument_series
+    from src.services.cot_fetcher import INSTRUMENTS, get_instrument_series, normalize_datetime64
     from src.services.tool_log import log_tool_usage
     from src.ui.theme import BloombergTheme
 
@@ -338,6 +338,8 @@ if __name__ == "__main__":
         st.warning(f"Couldn't load price data for {instrument} — divergence detection needs both series.")
         st.stop()
 
+    series = series.assign(date=normalize_datetime64(series["date"]))
+    price_df = price_df.assign(date=normalize_datetime64(price_df["date"]))
     merged = pd.merge_asof(
         series[["date", "net_spec"]].sort_values("date"),
         price_df.sort_values("date"),

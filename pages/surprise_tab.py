@@ -433,5 +433,12 @@ def _sentry_store():
 if __name__ == "__main__":
     st.set_page_config(page_title="Surprise Awareness", layout="wide")
     T.apply()
+    if not st.session_state.get("db_ok"):
+        st.info(
+            "🔌 No database connection. Check the `[database]` credentials in "
+            "`.streamlit/secrets.toml` (or `DATABASE_URL` on the host), then "
+            "use **Reconnect** in the sidebar."
+        )
+        st.stop()
     with _sentry_store().engine.connect() as _conn:
         render(_conn)
