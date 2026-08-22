@@ -19,10 +19,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Pinned to 3.12 to match runtime.txt and the pinned numpy/pandas/scipy
-        # stack (see requirements.txt) — those versions predate 3.13+ wheel
-        # support and a newer combo segfaulted on Streamlit Cloud under 3.13.
-        python-version: ["3.12"]
+        # Both real deploy targets, so neither becomes a blind spot:
+        #   3.12 -> runtime.txt (Streamlit Community Cloud)
+        #   3.14 -> Dockerfile (the containers, since 1.10.33)
+        # Testing only one of them is how the containers sat on 3.11 while every
+        # plan document claimed 3.14. See requirements.txt for why pandas stops
+        # at 2.3.3 rather than moving to 3.x.
+        python-version: ["3.12", "3.14"]
 
     env:
       # Pages print ◇/emoji glyphs; force UTF-8 so stdout never crashes on CI.
@@ -37,12 +40,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          # Both files, or the cache key misses the pytest pin and a dev-dep
+          # change is served a stale wheel set.
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
+        # requirements-dev.txt, not requirements.txt: it starts with
+        # `-r requirements.txt` and adds pytest. Installing only the runtime
+        # deps is why the "Test suite" step below failed with
+        # "No module named pytest" from the moment it was added — the step ran,
+        # but the tool it invokes was never installed.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Test suite
         # Only py_compile ran here until 2026-08-22, so two tests stayed broken

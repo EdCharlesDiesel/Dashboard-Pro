@@ -1,5 +1,8 @@
-# Use official Python slim image
-FROM python:3.11-slim
+# Use official Python slim image.
+# 3.14 since 1.10.33. The five scientific pins in requirements.txt are what gate
+# this version: numpy/pandas/scipy/statsmodels/arch had no cp314 wheels at their
+# previous pins, so the base image and those pins must move together.
+FROM python:3.14-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

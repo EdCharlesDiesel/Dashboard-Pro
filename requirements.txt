@@ -1,16 +1,27 @@
-# pandas/numpy/scipy/statsmodels/arch pinned to the stable pre-3.0/2.x combo
-# (not the latest available) — see runtime.txt: Streamlit Community Cloud's
-# container segfaulted on Python 3.13 + pandas 3.0.2 + numpy 2.4.4 (a native
-# C-extension crash, not a Python exception). This is the combo the quant
-# ecosystem (scipy/statsmodels/arch) is actually tested against.
+# pandas/numpy/scipy/statsmodels/arch: the versions here are chosen by TWO
+# constraints at once, and moving any of them needs both checked.
+#
+# 1. Python 3.14 (Dockerfile, since 1.10.33). The previous pins — numpy 1.26.4,
+#    pandas 2.2.3, scipy 1.13.1, statsmodels 0.14.2, arch 7.2.0 — have NO cp314
+#    wheels, so the containers could not build on 3.14 at all until these moved.
+#
+# 2. The segfault. Streamlit Community Cloud's container segfaulted on Python
+#    3.13 + pandas 3.0.2 + numpy 2.4.4 — a native C-extension crash, not a
+#    Python exception. So pandas deliberately stops at 2.3.3: it is the LAST
+#    2.x release carrying cp314 wheels, which reaches 3.14 while staying on the
+#    2.x API and avoiding the pandas-3 half of that combo. Do not "upgrade"
+#    pandas to 3.x here without re-testing that deploy.
+#
+# runtime.txt still pins 3.12 for Streamlit Community Cloud, so every version
+# here must also install on 3.12 — they all do.
 plotly==6.7.0
 streamlit-autorefresh==1.0.1
 # TradingView lightweight-charts pilot — currently only the Leading Indicators
 # page, behind an opt-in engine toggle. Optional: the page degrades to Plotly
 # (src/ui/tv_charts.available()) if this is absent, so it's safe to drop.
 streamlit-lightweight-charts==0.7.20
-pandas==2.2.3
-numpy==1.26.4
+pandas==2.3.3
+numpy==2.4.4
 yfinance==1.3.0
 ta==0.11.0
 fredapi==0.5.2
@@ -18,12 +29,12 @@ matplotlib==3.10.9
 requests==2.33.1
 tenacity==9.1.4
 streamlit==1.58.0
-scipy==1.13.1
+scipy==1.18.1
 pytz==2026.2
 psycopg2-binary==2.9.12
 pandas_datareader==0.10.0
-statsmodels==0.14.2
-arch==7.2.0  # GARCH vol forecasting (src/core/quant_models.py); optional, lazy-imported
+statsmodels==0.14.6
+arch==8.0.0  # GARCH vol forecasting (src/core/quant_models.py); optional, lazy-imported
 cot_reports==0.1.3  # CFTC Commitment of Traders reports (src/services/cot_fetcher.py)
 # data_backbone pipeline (src/data_backbone): SQLAlchemy store, APScheduler
 # worker. psycopg2-binary is already pinned above.
