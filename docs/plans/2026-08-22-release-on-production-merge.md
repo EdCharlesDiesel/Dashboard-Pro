@@ -141,3 +141,13 @@ the previous release.
 **Not yet proven:** this cannot run until a real merge to Production. The first
 such merge will create `ProductionV<version>`; if it fails, the deploy has
 already happened by then — the release job is last on purpose.
+
+## Follow-up: the first real run produced a DRAFT
+
+The 1.10.34 merge ran green and the Releases page showed *Production V1.10.34*,
+but the release was a **draft** — and a draft creates no tag, so the remote still
+carried only `ProductionV1.0.1`. The drift this plan set out to end was still
+there, now behind a green check.
+
+Fixed in `2026-08-22-release-job-publishes-not-drafts.md` (1.10.35), which also
+records three guard tests here that were passing for the wrong reason.

@@ -179,8 +179,32 @@ jobs:
             echo "::notice::Release $TAG already exists - VERSION was not bumped, nothing to publish."
             exit 0
           fi
+          # --draft=false explicitly: the 1.10.34 run produced a DRAFT, and a
+          # draft creates no tag, so the Releases page showed the new version
+          # while `git ls-remote --tags` still had only ProductionV1.0.1 - the
+          # exact drift this job exists to end, but now behind a green check.
           gh release create "$TAG" \
             --title "Production V$VERSION" \
             --target "$GITHUB_SHA" \
+            --draft=false \
             --generate-notes
-          echo "::notice::Published $TAG"
+
+      - name: Confirm it actually published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        # The create step above can report success and still leave nothing
+        # usable: a draft carries no tag. Assert the end state rather than
+        # trusting the exit code - a green job that published nothing is worse
+        # than a red one, because it looks handled.
+        run: |
+          STATE="$(gh release view "$TAG" --json isDraft,tagName --jq '.isDraft')"
+          if [ "$STATE" != "false" ]; then
+            echo "::error::$TAG exists but is a DRAFT - no tag was created. Publish it, or the Releases page will drift from VERSION again."
+            exit 1
+          fi
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::$TAG reports published but the tag is not on the remote."
+            exit 1
+          fi
+          echo "::notice::Published $TAG (tag confirmed on origin)"
