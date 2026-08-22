@@ -535,6 +535,17 @@ EVENTS: Dict[str, EventSpec] = {
             ("NAS100", -0.75,  1.10,  140.0, "pts",       0),
             ("US10Y",   1.00,  0.20,    0.06, "%",        3),
             ("BTCUSD", -0.65,  0.55,  900.0, "USD",       0),
+            # Oil is a demand-driven, growth-cyclical commodity, not a
+            # monetary/safe-haven one like gold — its growth beta tracks the
+            # equity indices' sign (positive here), not XAUUSD's (-0.25), and
+            # is the dominant channel: NFP's demand read-through matters far
+            # more to crude than the secondary dollar-strength drag from the
+            # (small, still-negative) rate channel. A rate beta close in
+            # magnitude to growth would cancel it out near-completely under
+            # "Balanced" weights — genuinely two-sided is honest for DXY,
+            # which has no registry pair to protect; it would silence oil's
+            # otherwise-real NFP signal instead.
+            ("WTIUSD",  -0.20,  0.90,    0.35, "USD",      2),
         ]),
     ),
 
@@ -579,6 +590,7 @@ EVENTS: Dict[str, EventSpec] = {
             ("NAS100", -1.05, -0.65,  175.0, "pts",       0),
             ("US10Y",   1.15,  0.10,    0.08, "%",        3),
             ("BTCUSD", -0.90, -0.40, 1100.0, "USD",       0),
+            ("WTIUSD",  -0.85, -0.50,    0.42, "USD",      2),
         ]),
     ),
 
@@ -614,6 +626,7 @@ EVENTS: Dict[str, EventSpec] = {
             ("NAS100", -0.80, -0.50,  100.0, "pts",       0),
             ("US10Y",   0.90,  0.10,    0.04, "%",        3),
             ("BTCUSD", -0.70, -0.30,  650.0, "USD",       0),
+            ("WTIUSD",  -0.65, -0.40,    0.28, "USD",      2),
         ]),
     ),
 
@@ -664,6 +677,7 @@ EVENTS: Dict[str, EventSpec] = {
             ("NAS100", -1.20, -0.70,  230.0, "pts",       0),
             ("US10Y",   1.30,  0.10,    0.11, "%",        3),
             ("BTCUSD", -1.00, -0.45, 1500.0, "USD",       0),
+            ("WTIUSD",  -1.05, -0.70,    0.55, "USD",      2),
         ]),
     ),
 }

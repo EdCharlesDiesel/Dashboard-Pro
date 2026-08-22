@@ -191,9 +191,16 @@ class TestBoardToSignals:
     def test_only_registry_resolvable_symbols_are_persisted(self):
         pairs = {s["pair"] for s in self._signals(2.0)}
         assert pairs <= {"XAU/USD", "XAG/USD", "EUR/USD", "GBP/USD",
-                         "USD/JPY", "AUD/USD", "USD/ZAR"}
+                         "USD/JPY", "AUD/USD", "USD/ZAR", "WTI/USD"}
         # These have no tradable registry pair and must never reach trade_setups.
         assert not pairs & {"DXY", "US500", "NAS100", "US10Y", "BTCUSD"}
+
+    def test_oil_is_on_the_board_and_persists(self):
+        """WTIUSD -> WTI/USD is registry-resolvable, unlike the index/rate/
+        crypto rows, and must actually reach the store like the other FX and
+        metals exposures do."""
+        pairs = {s["pair"] for s in self._signals(2.0)}
+        assert "WTI/USD" in pairs
 
     def test_bias_follows_the_sign_of_the_score(self):
         board = score_instruments(NFP, 2.0, BALANCED)
@@ -405,7 +412,7 @@ class TestPerEventExposures:
 
     def test_every_event_covers_the_same_symbol_universe(self):
         universe = {e.symbol for e in NFP.exposures}
-        assert len(universe) == 12
+        assert len(universe) == 13
         for spec in EVENTS.values():
             assert {e.symbol for e in spec.exposures} == universe
 

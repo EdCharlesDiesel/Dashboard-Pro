@@ -76,11 +76,16 @@ def _fmt(price, pair: str) -> str:
     return f"{price:.5f}" if abs(price) < 100 else f"{price:.2f}"
 
 
-def _week_label(week_key: str) -> str:
+def _week_monday(week_key: str) -> date:
     today = date.today()
     monday = today - timedelta(days=today.weekday())
     if week_key == "nextweek":
         monday = monday + timedelta(days=7)
+    return monday
+
+
+def _week_label(week_key: str) -> str:
+    monday = _week_monday(week_key)
     return f"{monday:%d %b} – {monday + timedelta(days=4):%d %b %Y}"
 
 
@@ -273,7 +278,8 @@ def render_week_ahead_tab() -> None:
         "one thesis serves both pages."
     )
     t_pair = st.selectbox("Instrument", pairs, key="wa_thesis_pair")
-    existing = sp.load_thesis(t_pair) or {}
+    t_week = _week_monday(week_key)
+    existing = sp.load_thesis(t_pair, week_start_override=t_week) or {}
     with st.form("wa_thesis"):
         c1, c2 = st.columns([1, 3])
         with c1:
@@ -291,7 +297,7 @@ def render_week_ahead_tab() -> None:
             if not inval.strip():
                 st.error("An invalidation is required — a thesis you can't be "
                          "wrong about isn't a thesis.")
-            elif sp.save_thesis(t_pair, bias, inval.strip()):
+            elif sp.save_thesis(t_pair, bias, inval.strip(), week_start_override=t_week):
                 st.success(f"Saved {t_pair}: {bias} — invalidated by {inval.strip()}")
             else:
                 st.warning("Database not configured — thesis not saved.")
