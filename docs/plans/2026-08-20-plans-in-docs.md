@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Never commit.** The owner reviews and commits.
-- `VERSION` reads **1.10.28**, so this plan takes **1.10.29** — and this plan is itself saved to `docs/plans/` as its own first step, not last.
+- `VERSION` reads **1.10.28**, so this plan takes **1.10.31** — and this plan is itself saved to `docs/plans/` as its own first step, not last.
 - Branch `DEV-04/Market-Overview`.
 - **The CLAUDE.md edit is purely additive** — zero deletions, proven by `git diff --numstat`, as with the working-principles section.
 - **Reconstructions are labelled.** Every backfilled plan carries a header saying it was reconstructed on 2026-08-20 from the session transcript. None is presented as contemporaneous.
@@ -163,17 +163,17 @@ Evidence before claims.
 
 3. **Every bumped version now has a plan:**
    ```bash
-   for v in 1.10.20 1.10.21 1.10.22 1.10.23 1.10.24 1.10.25 1.10.26 1.10.27 1.10.28 1.10.29; do
+   for v in 1.10.20 1.10.21 1.10.22 1.10.23 1.10.24 1.10.25 1.10.26 1.10.27 1.10.28 1.10.30; do
      printf "%s: %s\n" "$v" "$(grep -rl "$v" docs/plans/ | head -1)"
    done
    ```
-   Expected: a file named for each, including this plan's own 1.10.29.
+   Expected: a file named for each, including this plan's own 1.10.30.
 
 4. **The directory reads chronologically:** `ls docs/plans/` — 20 files, sorting cleanly from 2026-08-14 to 2026-08-20.
 
 5. **Full suite:** `PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -m pytest -q`
    Expected: coverage ≥ 80%, the 4 known pre-existing failures, no fifth.
 
-6. **Deploy:** `.venv/Scripts/python.exe deploy/sync_version.py 1.10.29`, rebuild, `deploy/verify_deploy.py` → 1.10.29, four containers in sync. Docs-only, but the rule is once per plan and this plan does not get an exemption from itself.
+6. **Deploy:** `.venv/Scripts/python.exe deploy/sync_version.py 1.10.30`, rebuild, `deploy/verify_deploy.py` → 1.10.30, four containers in sync. Docs-only, but the rule is once per plan and this plan does not get an exemption from itself.
 
 7. Show the owner the diff. **Never commit.**

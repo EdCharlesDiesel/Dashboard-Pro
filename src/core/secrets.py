@@ -37,6 +37,7 @@ Canonical schema::
     recipient    = "alerts@example.com"
 """
 from __future__ import annotations
+import time
 
 import os
 from typing import Any, Dict, Mapping, Optional
@@ -156,26 +157,76 @@ def telegram_config() -> Dict[str, str]:
     }
 
 
-def send_telegram_message(text: str) -> tuple[bool, str]:
-    """Send ``text`` via the configured Telegram bot. Returns ``(ok, detail)``.
+TELEGRAM_ATTEMPTS = 3          # bounded: an alert must not stall a scan cycle
+TELEGRAM_BACKOFF_S = 1.0
 
-    Never raises — a missing/invalid config or a network failure is reported
-    in the returned message, not thrown, so callers can surface it with
-    ``st.error``/``st.caption`` without their own try/except.
+
+def redact(text: str) -> str:
+    """Replace the configured bot token with ``<REDACTED>``.
+
+    Telegram puts the token in the URL and ``requests`` puts the URL in its
+    error string, so any naive ``str(exc)`` prints the credential. That
+    happened twice on 2026-08-20 - once to a screen, once through the detail
+    string ``background_scanner`` writes to its log on a failed alert.
+
+    Exported so other modules can scrub their own logging.
+    """
+    token = (telegram_config() or {}).get("bot_token")
+    return str(text).replace(token, "<REDACTED>") if token else str(text)
+
+
+def send_telegram_message(text: str,
+                          parse_mode: str | None = None) -> tuple[bool, str]:
+    """Send ``text`` via the configured bot. Returns ``(ok, detail)``.
+
+    Never raises, and never returns the token. On an HTTP error it reports
+    Telegram's own ``description`` ("chat not found"), which is what an
+    operator needs; the URL is noise that happens to be a secret.
+
+    Connection and timeout failures are retried, HTTP status errors are not:
+    a 400 will never succeed on attempt two, and retrying it only delays the
+    scan cycle. The retry exists because a momentary DNS failure in the
+    scanner container destroyed an entry alert outright - and a confluence
+    signal is rare enough that losing one to a two-second fault matters.
+
+    ``parse_mode`` is omitted unless given: the confluence body contains
+    ``ENTRY_FIRED``, whose lone underscore makes Telegram reject the whole
+    message under Markdown.
     """
     cfg = telegram_config()
     if not cfg["bot_token"] or not cfg["chat_id"]:
-        return False, "Telegram not configured — add [telegram] bot_token/chat_id to secrets.toml"
+        return False, "Telegram not configured - add [telegram] bot_token/chat_id to secrets.toml"
+
     import requests
-    try:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage",
-            json={"chat_id": cfg["chat_id"], "text": text}, timeout=10,
-        )
-        resp.raise_for_status()
-        return True, "sent"
-    except Exception as exc:  # noqa: BLE001
-        return False, str(exc)
+
+    payload = {"chat_id": cfg["chat_id"], "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    url = f"https://api.telegram.org/bot{cfg['bot_token']}/sendMessage"
+
+    last = "no attempt made"
+    for attempt in range(TELEGRAM_ATTEMPTS):
+        try:
+            resp = requests.post(url, json=payload, timeout=10)
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last = redact(str(exc))          # transient - worth another go
+            if attempt < TELEGRAM_ATTEMPTS - 1:
+                time.sleep(TELEGRAM_BACKOFF_S)
+            continue
+        except Exception as exc:             # noqa: BLE001 - never raise at a caller
+            return False, redact(str(exc))
+
+        if 200 <= getattr(resp, "status_code", 0) < 300:
+            return True, "sent"
+
+        # A status error is final. Prefer Telegram's description.
+        try:
+            detail = str((resp.json() or {}).get("description") or "")
+        except Exception:                    # noqa: BLE001 - body may not be JSON
+            detail = ""
+        return False, redact(detail or f"HTTP {resp.status_code}")
+
+    return False, last
 
 
 def email_config() -> Dict[str, Any]:
