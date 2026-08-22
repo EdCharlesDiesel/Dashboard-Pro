@@ -7,6 +7,8 @@ fast and deterministic:
 
     pytest --runslow tests/test_pages_smoke.py --no-cov
 
+All 56 pages are swept, discovered from pages/ rather than listed by hand.
+
 Notes:
 - `st.page_link` raises KeyError('url_pathname') under AppTest (no multipage
   registry); the shared nav renderer swallows it, so pages still run.
@@ -23,15 +25,21 @@ from streamlit.testing.v1 import AppTest
 
 _ROOT = Path(__file__).resolve().parents[1]
 
-# A representative slice: the root entry (framework checklist) plus framework and
-# legacy pages that share src/core. Kept small so the gated run stays bounded.
-_PAGES = [
-    "app.py",
-    "pages/setup-ranker.py",
-    "pages/correlations.py",
-    "pages/market-overview.py",
-    "pages/daily_cockpit_tab.py",
-]
+
+def _discover_pages() -> list[str]:
+    """Every page in the app, found rather than listed.
+
+    This was a hand-written slice of 5 pages out of 56, which meant 51 pages had
+    no end-to-end coverage at all and a newly added page joined them silently.
+    Discovery is the point: a page cannot escape the sweep by not being added to
+    a list somebody has to remember to edit.
+    """
+    pages = sorted(p.name for p in (_ROOT / "pages").glob("*.py")
+                   if not p.name.startswith("_"))
+    return ["app.py"] + [f"pages/{name}" for name in pages]
+
+
+_PAGES = _discover_pages()
 
 
 @pytest.mark.slow
