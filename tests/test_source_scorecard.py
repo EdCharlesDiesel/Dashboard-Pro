@@ -16,8 +16,10 @@ from src.services.source_scorecard import (
     WIN,
     build_scorecard,
     evaluate_row,
+    profit_factor,
     quality_passed,
     row_horizon,
+    sortino_ratio,
 )
 
 
@@ -245,3 +247,137 @@ class TestQualityPassedRead:
         # None means "this page never told us", which is different from a
         # recorded failure — conflating them would bias any segmentation.
         assert quality_passed({"checks_detail": "{}"}) is None
+
+
+# ===========================================================================
+# Distribution-shape statistics
+# ===========================================================================
+# Expectancy is a mean, and a mean hides how it was earned. These two say
+# something a mean cannot. Both are borrowed from nautilus_trader's
+# crates/analysis/src/statistics, adapted to a per-signal R series.
+
+class TestProfitFactor:
+    def test_gross_win_over_gross_loss(self):
+        assert profit_factor([2.0, -1.0, 1.0, -1.0]) == pytest.approx(1.5)
+
+    def test_all_winners_is_undefined_not_infinite(self):
+        """No losses means the ratio has no denominator. Printing infinity
+        would claim a certainty the sample does not support; the wins/losses
+        columns already show why the cell is blank."""
+        assert profit_factor([1.0, 2.0]) is None
+
+    def test_all_losers_is_zero(self):
+        assert profit_factor([-1.0, -2.0]) == pytest.approx(0.0)
+
+    def test_empty_is_none(self):
+        assert profit_factor([]) is None
+
+    def test_break_even_is_one(self):
+        assert profit_factor([1.0, -1.0]) == pytest.approx(1.0)
+
+    def test_zero_r_rows_count_as_neither(self):
+        """A marked-to-close row can land exactly flat. It is not a win and
+        not a loss, so it must not move the ratio in either direction."""
+        assert profit_factor([2.0, -1.0, 0.0]) == pytest.approx(2.0)
+
+    def test_non_finite_values_are_ignored(self):
+        assert profit_factor([2.0, -1.0, float("nan")]) == pytest.approx(2.0)
+
+
+class TestSortinoRatio:
+    def test_a_symmetric_series_scores_zero(self):
+        assert sortino_ratio([1.0, -1.0, 1.0, -1.0]) == pytest.approx(0.0)
+
+    def test_downside_deviation_uses_all_observations(self):
+        """Sortino & Price divide the squared downside by the FULL count, not
+        the count of losers. r = [2, -1, 2, -1]: mean 0.5,
+        dd = sqrt((0 + 1 + 0 + 1) / 4) = 0.7071 -> 0.7071."""
+        assert sortino_ratio([2.0, -1.0, 2.0, -1.0]) == pytest.approx(
+            0.5 / (0.5 ** 0.5), rel=1e-6)
+
+    def test_no_downside_is_undefined(self):
+        assert sortino_ratio([1.0, 2.0, 3.0]) is None
+
+    def test_fewer_than_two_observations_is_none(self):
+        assert sortino_ratio([1.0]) is None
+        assert sortino_ratio([]) is None
+
+    def test_a_nonzero_mar_shifts_the_threshold(self):
+        # Against a 1R hurdle, [1, 1] has no excess and no downside.
+        assert sortino_ratio([1.0, 1.0], mar=1.0) is None
+
+    def test_a_nonzero_mar_creates_downside(self):
+        # Against a 1R hurdle, a +0.5R signal is a shortfall.
+        assert sortino_ratio([1.5, 0.5], mar=1.0) == pytest.approx(0.0)
+
+    def test_upside_outliers_do_not_penalise(self):
+        """The whole reason to prefer Sortino over Sharpe here: replacing a
+        win with a much bigger win must never lower the ratio."""
+        base = sortino_ratio([1.0, -1.0, 1.0, -1.0, 1.0])
+        spiky = sortino_ratio([1.0, -1.0, 1.0, -1.0, 9.0])
+        assert base is not None and spiky is not None and spiky > base
+
+    def test_deeper_losses_lower_the_ratio(self):
+        shallow = sortino_ratio([2.0, -0.5, 2.0, -0.5])
+        deep = sortino_ratio([2.0, -2.0, 2.0, -2.0])
+        assert shallow is not None and deep is not None and shallow > deep
+
+    def test_it_is_not_annualised(self):
+        """A per-signal ratio, deliberately. If this ever grows a sqrt(252)
+        it is asserting a time basis these irregularly-spaced R-multiples do
+        not have — different sources are already marked on different horizons.
+        [2, -1, 2, -1] annualised would be ~11.2, not ~0.71."""
+        assert sortino_ratio([2.0, -1.0, 2.0, -1.0]) < 1.0
+
+    def test_non_finite_values_are_ignored(self):
+        clean = sortino_ratio([2.0, -1.0, 2.0, -1.0])
+        dirty = sortino_ratio([2.0, -1.0, 2.0, -1.0, float("inf")])
+        assert dirty == pytest.approx(clean)
+
+
+class TestScorecardCarriesTheNewColumns:
+    def test_columns_are_present_and_populated(self):
+        rows = [
+            _row(source="mixed", is_open=False, r_multiple=2.0),
+            _row(source="mixed", is_open=False, r_multiple=-1.0),
+            _row(source="mixed", is_open=False, r_multiple=1.0),
+            _row(source="mixed", is_open=False, r_multiple=-1.0),
+        ]
+        df = build_scorecard(rows, {})
+        assert df.loc["mixed", "profit_factor"] == pytest.approx(1.5)
+        assert not pd.isna(df.loc["mixed", "sortino"])
+
+    def test_a_source_with_no_losses_reports_neither(self):
+        rows = [_row(source="clean", is_open=False, r_multiple=1.0),
+                _row(source="clean", is_open=False, r_multiple=2.0)]
+        df = build_scorecard(rows, {})
+        assert pd.isna(df.loc["clean", "profit_factor"])
+        assert pd.isna(df.loc["clean", "sortino"])
+
+    def test_an_unresolved_source_reports_neither(self):
+        df = build_scorecard([_row(source="quiet", direction="Neutral")], {})
+        assert pd.isna(df.loc["quiet", "profit_factor"])
+        assert pd.isna(df.loc["quiet", "sortino"])
+
+    def test_the_ranking_metric_is_unchanged(self):
+        """New columns, not a new sort — re-ranking the board was not asked
+        for and is a separate decision."""
+        rows = [_row(source="a", is_open=False, r_multiple=3.0),
+                _row(source="b", is_open=False, r_multiple=0.5)]
+        df = build_scorecard(rows, {})
+        assert list(df.index) == ["a", "b"]
+
+    def test_profit_factor_separates_two_sources_on_the_same_expectancy(self):
+        """The reason these columns exist. Both sources average +0.25R; one
+        grinds it out, the other is carried by a single outlier."""
+        # Both series sum to +2.0R over 8 signals, so expectancy is identical
+        # at +0.25R and only the shape differs.
+        grind = [_row(source="grind", is_open=False, r_multiple=r)
+                 for r in (1.0, -0.5, 1.0, -0.5, 1.0, -0.5, 1.0, -0.5)]
+        spike = [_row(source="spike", is_open=False, r_multiple=r)
+                 for r in (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 9.0)]
+        df = build_scorecard(grind + spike, {})
+        assert df.loc["grind", "expectancy_r"] == pytest.approx(
+            df.loc["spike", "expectancy_r"])
+        assert df.loc["grind", "profit_factor"] > df.loc["spike", "profit_factor"]
+        assert df.loc["grind", "sortino"] > df.loc["spike", "sortino"]

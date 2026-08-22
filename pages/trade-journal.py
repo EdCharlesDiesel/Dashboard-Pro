@@ -1340,6 +1340,17 @@ with tab_src:
         "Neutral or data-less rows stay unresolved. Judge a source only once "
         "its resolved count is meaningful (≥20 is a reasonable floor)."
     )
+    st.caption(
+        "**Expectancy is a mean, and a mean hides how it was earned.** Two "
+        "sources at +0.25R are not the same source if one grinds and the other "
+        "is carried by a single outlier — **profit factor** (gross wins ÷ gross "
+        "losses) and **Sortino** (mean R ÷ downside deviation only, so big wins "
+        "are not punished) are what separate them. The Sortino here is **per "
+        "signal, not annualised**: these R-multiples are irregularly spaced and "
+        "each source is marked on its own horizon, so there is no fixed period "
+        "to annualise against. Small samples move both sharply — profit factor "
+        "especially, where one more loss can halve it."
+    )
 
     from src.services.market_data import daily_ohlc
     from src.services.source_scorecard import build_scorecard
@@ -1383,6 +1394,18 @@ with tab_src:
                 "expectancy_r": st.column_config.NumberColumn(
                     "Expectancy (R)", format="%.2f",
                     help="Mean R per resolved signal — the ranking metric"),
+                "profit_factor": st.column_config.NumberColumn(
+                    "Profit factor", format="%.2f",
+                    help="Gross winning R / gross losing R. 1.00 is break-even. "
+                         "Blank when a source has no losses yet — the ratio has "
+                         "no denominator, and infinity would overstate it."),
+                "sortino": st.column_config.NumberColumn(
+                    "Sortino (per signal)", format="%.2f",
+                    help="Mean R over DOWNSIDE deviation, so a source is not "
+                         "penalised for large wins the way a Sharpe ratio would "
+                         "penalise it. Per signal and NOT annualised: these "
+                         "R-multiples are irregularly spaced and different "
+                         "sources are marked on different horizons."),
                 "dir_calls":    st.column_config.NumberColumn(
                     "Dir calls", help="Level-less signals scored as hit/miss at 10 bars"),
                 "dir_hit_rate": st.column_config.NumberColumn("Dir hit %", format="%.1f"),
