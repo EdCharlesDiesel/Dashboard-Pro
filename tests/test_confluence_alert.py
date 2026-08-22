@@ -141,3 +141,47 @@ class TestEmail:
                        "tp1": 4100.0, "tp2": 4150.0, "rr1": 2.0})
         html, _ = ca.build_email([c])
         assert "4040.25" in html and "4040.25000" not in html
+
+
+def _confluence(pair="EUR/USD", direction="LONG", status="ENTRY_FIRED"):
+    return ca.Confluence(pair=pair, direction=direction, ranker_pct=88.0,
+                         ranker_grade="A", house_direction="BULLISH",
+                         house_score=0.9, fib_status=status, entry=1.10,
+                         sl=1.095, tp1=1.11, tp2=1.12, rr1=2.0)
+
+
+class TestBuildTelegram:
+    """The entry alert as a Telegram push.
+
+    Reuses the plain-text half of `build_email` rather than adding a third
+    formatter. Safe verbatim because `secrets.send_telegram_message` posts with
+    no `parse_mode`: under Markdown the lone underscore in `ENTRY_FIRED` would
+    open an italic span and the unmatched one would make Telegram reject the
+    whole message with a 400.
+    """
+
+    def test_it_leads_with_the_subject_so_the_push_preview_is_readable(self):
+        item = _confluence()
+        assert ca.build_telegram([item]).startswith(ca.subject_for([item]))
+
+    def test_it_carries_the_levels_a_trader_needs(self):
+        msg = ca.build_telegram([_confluence()])
+        for token in ("EUR/USD", "LONG", "ENTRY FIRED", "entry", "stop", "tp1"):
+            assert token in msg, f"{token!r} missing from the alert"
+
+    def test_it_names_all_three_agreeing_legs(self):
+        msg = ca.build_telegram([_confluence()])
+        assert "ranker" in msg and "house" in msg and "fib" in msg
+
+    def test_it_stays_inside_telegrams_hard_limit(self):
+        # 4096 is enforced by the API: over it the send fails outright, so a
+        # busy scan would lose the entire alert rather than the tail of it.
+        msg = ca.build_telegram([_confluence(pair=f"EUR/US{i}") for i in range(60)])
+        assert len(msg) <= 4096
+        assert msg.rstrip().endswith("truncated")
+
+    def test_a_short_alert_is_not_marked_truncated(self):
+        assert not ca.build_telegram([_confluence()]).rstrip().endswith("truncated")
+
+    def test_no_items_is_an_empty_string(self):
+        assert ca.build_telegram([]) == ""

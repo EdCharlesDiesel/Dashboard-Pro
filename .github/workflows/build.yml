@@ -44,8 +44,75 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Test suite
+        # Only py_compile ran here until 2026-08-22, so two tests stayed broken
+        # for days without CI noticing. --no-cov because the coverage gate is a
+        # local check against the full source tree, not a CI signal.
+        run: python -m pytest -q --no-cov
+
       - name: Syntax-check (py_compile)
         run: |
           python -m py_compile app.py
           python -m py_compile pages/*.py
           find src -name '*.py' -print0 | xargs -0 python -m py_compile
+
+  deploy:
+    name: Deploy to Railway (production)
+    needs: build
+    if: github.ref == 'refs/heads/Production' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # The `production` environment already exists in repo settings. Naming it
+    # here is what exposes its secrets to this job - and lets a required
+    # reviewer be added, so a merge cannot deploy unattended.
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write runtime secrets
+        # Written on the runner only. .gitignore covers .streamlit/secrets*.toml,
+        # so this file can never be committed, and .dockerignore keeps it out of
+        # any image layer. The values live in GitHub, never in the repo.
+        run: |
+          mkdir -p .streamlit
+          cat > .streamlit/secrets.toml <<'TOML'
+          [database]
+          url = "${{ secrets.DATABASE_URL }}"
+
+          [api]
+          FRED_API_KEY = "${{ secrets.FRED_API_KEY }}"
+          FMP_API_KEY = "${{ secrets.FMP_API_KEY }}"
+          FINNHUB_API_KEY = "${{ secrets.FINNHUB_API_KEY }}"
+
+          [gmail]
+          sender = "${{ secrets.GMAIL_SENDER }}"
+          app_password = "${{ secrets.GMAIL_APP_PASSWORD }}"
+          recipient = "${{ secrets.GMAIL_RECIPIENT }}"
+
+          [telegram]
+          bot_token = "${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          chat_id = "${{ secrets.TELEGRAM_CHAT_ID }}"
+          TOML
+
+      - name: Sanity-check the written config
+        # Fails the deploy if a secret is missing, rather than shipping an app
+        # that silently falls back to localhost:5432/trading. Prints booleans
+        # only - never a value.
+        run: |
+          python -c "
+          import tomllib, sys
+          cfg = tomllib.load(open('.streamlit/secrets.toml','rb'))
+          url = cfg.get('database', {}).get('url', '')
+          print('database.url present:', bool(url))
+          print('telegram configured :', bool(cfg.get('telegram', {}).get('bot_token')))
+          sys.exit(0 if url else 'DATABASE_URL secret is empty - refusing to deploy')
+          "
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --detach

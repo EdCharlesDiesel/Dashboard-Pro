@@ -427,3 +427,79 @@ class TestVerdict:
     def test_no_unresolved_note_when_the_trade_resolves(self):
         out = pr.verdict(self._risk(0.60, 0.50, 1.0, unresolved=0.01))
         assert "resolve inside" not in out["reason"]
+
+
+# ── book_projection ───────────────────────────────────────────────────────────
+# Real rows from the live book on 2026-08-20, so the arithmetic is checkable
+# against the terminal rather than against invented numbers.
+GOLD = {"pair": "XAU/USD", "direction": "LONG", "lot_size": 0.2,
+        "entry_price": 4522.388, "price_current": 4512.602,
+        "take_profit": 4674.013, "stop_loss": 4385.483, "profit": -195.72}
+
+ZAR = {"pair": "USD/ZAR", "direction": "SHORT", "lot_size": 0.2,
+       "entry_price": 16.12873, "price_current": 16.13732,
+       "take_profit": 15.903, "stop_loss": 16.34195, "profit": -10.65}
+
+
+class TestBookProjection:
+    """What the open book is worth if every target hits, or every stop does."""
+
+    def test_usd_quoted_target_matches_the_contract_arithmetic(self):
+        from src.services.position_risk import book_projection
+        # 0.2 lots x 100oz = 20oz; (4674.013 - 4522.388) x 20 = $3032.50
+        out = book_projection([GOLD])
+        assert out["at_target"] == pytest.approx(3032.5, abs=1.0)
+
+    def test_zar_cross_is_converted_without_any_quote_lookup(self):
+        """The case the container cannot solve by quoting.
+
+        Short 0.2 USD/ZAR from 16.12873 to 15.903 earns 4514.6 ZAR, about
+        $279.7 at 16.14. Scaling the broker's own -10.65 by the price ratio
+        lands on the same number - and reporting the raw 4514.6 as dollars
+        would overstate it about 16x, which is the whole reason this exists.
+        """
+        from src.services.position_risk import book_projection
+        out = book_projection([ZAR])
+        assert out["at_target"] == pytest.approx(279.7, rel=0.02)
+        assert out["converted"] is True
+
+    def test_stop_uses_the_same_factor_and_is_negative(self):
+        from src.services.position_risk import book_projection
+        out = book_projection([GOLD])
+        # (4385.483 - 4522.388) x 20 = -$2738.10
+        assert out["at_stop"] == pytest.approx(-2738.1, abs=1.0)
+
+    def test_floating_is_the_sum_of_what_the_broker_reports(self):
+        from src.services.position_risk import book_projection
+        assert book_projection([GOLD, ZAR])["floating"] == pytest.approx(-206.37)
+
+    def test_a_whole_book_adds_up(self):
+        from src.services.position_risk import book_projection
+        out = book_projection([GOLD, ZAR])
+        assert out["at_target"] == pytest.approx(3032.5 + 279.7, rel=0.02)
+
+    def test_price_equal_to_entry_does_not_divide_by_zero(self):
+        from src.services.position_risk import book_projection
+        row = dict(GOLD, price_current=GOLD["entry_price"], profit=0.0)
+        out = book_projection([row])          # must not raise
+        assert out["at_target"] is not None
+
+    def test_position_without_a_target_contributes_nothing_to_at_target(self):
+        # Real case: one EUR/ZAR leg on 2026-08-20 carried no TP at all.
+        from src.services.position_risk import book_projection
+        row = dict(ZAR, take_profit=None)
+        assert book_projection([row])["at_target"] == pytest.approx(0.0)
+        assert book_projection([row])["at_stop"] != pytest.approx(0.0)
+
+    def test_unconvertible_row_is_named_rather_than_reported_as_dollars(self):
+        from src.services.position_risk import book_projection
+        row = {k: v for k, v in ZAR.items() if k not in ("profit", "price_current")}
+        out = book_projection([row])
+        assert out["converted"] is False
+        assert "USD/ZAR" in out["unconverted"]
+
+    def test_empty_book_is_zeroes_not_an_error(self):
+        from src.services.position_risk import book_projection
+        out = book_projection([])
+        assert out["floating"] == 0.0 and out["at_target"] == 0.0
+        assert out["converted"] is True

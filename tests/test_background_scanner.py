@@ -218,3 +218,70 @@ class TestScanOnce:
         stats = bg.scan_once()
         assert stats["scored"] == 2            # EUR/USD both directions survived
         assert stats["grade_a"] == 0
+
+
+class TestConfluenceChannels:
+    """Email and Telegram are independent delivery channels.
+
+    Until 2026-08-20 the whole alert block sat behind
+    `alert_service.email_configured()`, so an owner with Telegram configured
+    and no SMTP received nothing at all — the entry signal was suppressed by a
+    check about a different delivery mechanism.
+    """
+
+    @staticmethod
+    def _wire(monkeypatch, *, email_ok=None, tg_ok=True):
+        """Stub both channels and capture what each was asked to do."""
+        from src.core import secrets as core_secrets
+        from src.services import alert_service
+
+        calls = {"email": [], "telegram": [], "marked": []}
+
+        monkeypatch.setattr(bg, "_find_confluences",
+                            lambda grade_a, board: [_confluence()])
+        monkeypatch.setattr(alert_service, "email_configured",
+                            lambda: email_ok is not None)
+        monkeypatch.setattr(
+            alert_service, "send_email",
+            lambda *a, **k: (calls["email"].append(a) or (bool(email_ok), "x")))
+        monkeypatch.setattr(
+            core_secrets, "send_telegram_message",
+            lambda text: (calls["telegram"].append(text) or (tg_ok, "x")))
+        monkeypatch.setattr(alert_service.NotifyCache, "load", lambda self: set())
+        monkeypatch.setattr(alert_service.NotifyCache, "filter_new",
+                            lambda self, keys: calls["marked"].extend(keys) or list(keys))
+        return calls
+
+    def test_telegram_is_sent_even_when_email_is_unconfigured(
+            self, quiet_universe, monkeypatch):
+        calls = self._wire(monkeypatch, email_ok=None)
+        bg.scan_once()
+        assert calls["telegram"], "no Telegram sent with email unconfigured"
+        assert calls["email"] == []
+
+    def test_both_channels_fire_when_both_are_configured(
+            self, quiet_universe, monkeypatch):
+        calls = self._wire(monkeypatch, email_ok=True)
+        bg.scan_once()
+        assert calls["email"] and calls["telegram"]
+
+    def test_delivery_by_telegram_alone_still_dedupes(
+            self, quiet_universe, monkeypatch):
+        # filter_new() records keys as seen. Marking only on email success
+        # would re-alert the same setup on every cycle, forever.
+        calls = self._wire(monkeypatch, email_ok=False, tg_ok=True)
+        bg.scan_once()
+        assert calls["marked"], "delivered but never marked seen"
+
+    def test_nothing_is_marked_seen_when_every_channel_fails(
+            self, quiet_universe, monkeypatch):
+        # The opposite error: silently swallowing an alert nobody received.
+        calls = self._wire(monkeypatch, email_ok=False, tg_ok=False)
+        bg.scan_once()
+        assert calls["marked"] == []
+
+    def test_the_message_carries_the_pair_and_direction(
+            self, quiet_universe, monkeypatch):
+        calls = self._wire(monkeypatch, email_ok=None)
+        bg.scan_once()
+        assert "EUR/USD" in calls["telegram"][0] and "LONG" in calls["telegram"][0]

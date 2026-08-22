@@ -30,7 +30,7 @@ services:
       # is ever recreated from empty; the healthcheck below reads it for real,
       # so a stale name there leaves db permanently unhealthy and blocks all
       # four dependent services from starting.
-      POSTGRES_PASSWORD: "$$ta99Ath0"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: DashboardproDBv1
     volumes:
       # postgres:18+ stores data under /var/lib/postgresql (version subdir),
@@ -71,15 +71,15 @@ services:
       DB_PORT: 5432
       DB_NAME: DashboardproDBv1
       DB_USER: postgres
-      DB_PASSWORD: "$$ta99Ath0"
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       # API keys — real values, optional (app degrades gracefully without them).
-      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
-      FMP_API_KEY: "BDIqvTLAhhi04dVyNeGG9xzSGQc5yDLQ"
-      FINNHUB_API_KEY: "d7nieg9r01qppri50290d7nieg9r01qppri5029g"
-      ANTHROPIC_API_KEY: ""
+      FRED_API_KEY: ${FRED_API_KEY:-}
+      FMP_API_KEY: ${FMP_API_KEY:-}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Gmail SMTP (AMD scanner / market-overview alerts) — optional, unset.
       GMAIL_SENDER: "Ckhotso@gmail.com"
-      GMAIL_APP_PASSWORD: "dsqf gaoj gdfw pjvg"
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
       GMAIL_RECIPIENT: "Ckhotso@gmail.com"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
@@ -103,8 +103,8 @@ services:
       DB_PORT: 5432
       DB_NAME: DashboardproDBv1
       DB_USER: postgres
-      DB_PASSWORD: "$$ta99Ath0"
-      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      FRED_API_KEY: ${FRED_API_KEY:-}
     # The image bakes a Streamlit HTTP healthcheck; this service serves
     # no HTTP, so the check can only ever fail. Disable rather than
     # leave it permanently red and teach everyone to ignore it.
@@ -132,11 +132,18 @@ services:
       DB_PORT: 5432
       DB_NAME: DashboardproDBv1
       DB_USER: postgres
-      DB_PASSWORD: "$$ta99Ath0"
-      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      FRED_API_KEY: ${FRED_API_KEY:-}
       GMAIL_SENDER: "Ckhotso@gmail.com"
-      GMAIL_APP_PASSWORD: "dsqf gaoj gdfw pjvg"
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
       GMAIL_RECIPIENT: "Ckhotso@gmail.com"
+      # Telegram entry alerts. Values are interpolated from the gitignored
+      # .env at `up` time and are deliberately NOT written into this tracked
+      # file. Empty is safe: send_telegram_message reports "not configured"
+      # and the email channel is unaffected.
+
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     # The image bakes a Streamlit HTTP healthcheck; this service serves
     # no HTTP, so the check can only ever fail. Disable rather than
     # leave it permanently red and teach everyone to ignore it.
@@ -167,8 +174,8 @@ services:
       DB_PORT: 5432
       DB_NAME: DashboardproDBv1
       DB_USER: postgres
-      DB_PASSWORD: "$$ta99Ath0"
-      FRED_API_KEY: "b95428dde387943cd19ecac1cf71d38f"
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      FRED_API_KEY: ${FRED_API_KEY:-}
       SIGNAL_SWEEP_NO_EMAIL: "1"
     # The image bakes a Streamlit HTTP healthcheck; this service serves
     # no HTTP, so the check can only ever fail. Disable rather than

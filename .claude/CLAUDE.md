@@ -30,6 +30,15 @@ this gets skipped.
    Goal, Architecture, Tech Stack, Spec, Global Constraints, a measured
    starting state, then numbered **Tasks** broken into checkbox **Steps** —
    a DevOps story with its acceptance criteria, not a paragraph of intent.
+
+   **Write it to that path first, before implementing — not afterwards.**
+   The plan-mode scratch file is not a record: the tooling assigns one file
+   per session and reuses it, so each new plan silently overwrites the
+   last. On 2026-08-20 that ate eight plans covering versions 1.10.20 to
+   1.10.28, one of which had already been committed. A plan that exists
+   only in a chat window did not happen.
+   `tests/test_plans_are_recorded.py` enforces this by asserting the
+   current `VERSION` is named by some plan in `docs/plans/`.
 2. **The plan takes its own version bump on creation.**
 3. **Every completed task bumps the version** —
    `python deploy/sync_version.py <next>` — then rebuild and

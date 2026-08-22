@@ -6,11 +6,15 @@ prove the save path persists all data.
 """
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 
 import pytest
 
 from src.db.trade_repository import DBConfig, TradeRepository
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ── fakes ─────────────────────────────────────────────────────────────────────
@@ -527,3 +531,44 @@ class TestDBConfig:
         cfg = DBConfig(host="h", port=1, dbname="d", user="u", password="p")
         assert cfg.as_kwargs() == {"host": "h", "port": 1, "dbname": "d",
                                    "user": "u", "password": "p"}
+
+
+class TestExecutedSourcesMatchesReality:
+    """EXECUTED_SOURCES is the single source of truth for "trades you took" —
+    the Trade Journal and the Martingale page both filter on it. A name in it
+    that nothing writes silently deletes real trades from every performance
+    view, with no error anywhere.
+
+    Found 2026-08-20: it listed 'mt5_sync', which appears nowhere else in the
+    codebase, while the importer writes 'mt5_import'. 31 real MT5 trades
+    carrying $795.01 of realised profit were being filtered out.
+    """
+
+    @staticmethod
+    def _writers_of(name: str) -> list:
+        """Files that contain the source name as a string *literal*.
+
+        Literals, not bare substrings: a docstring mentioning
+        `deploy/mt5_sync.py` is not a thing that writes that source, and an
+        earlier version of this test passed on exactly that false match.
+        """
+        root = Path(_REPO_ROOT)
+        files = list(root.glob("src/**/*.py")) + list(root.glob("pages/**/*.py"))
+        return [p for p in files
+                if p.name != "trade_repository.py"
+                and (f'"{name}"' in p.read_text(encoding="utf-8")
+                     or f"'{name}'" in p.read_text(encoding="utf-8"))]
+
+    def test_the_mt5_importers_source_is_treated_as_an_executed_trade(self):
+        from src.db.trade_repository import EXECUTED_SOURCES
+        from src.services.mt5_trade_import import SOURCE
+        assert SOURCE in EXECUTED_SOURCES, (
+            f"{SOURCE!r} is what the importer writes, but EXECUTED_SOURCES is "
+            f"{EXECUTED_SOURCES!r} - every MT5 trade is being filtered out")
+
+    def test_every_name_in_executed_sources_is_written_somewhere(self):
+        from src.db.trade_repository import EXECUTED_SOURCES
+        orphans = [n for n in EXECUTED_SOURCES if not self._writers_of(n)]
+        assert not orphans, (
+            f"no code writes {orphans} - a source nothing produces filters "
+            f"trades out for free, which is how 'mt5_sync' hid 31 trades")

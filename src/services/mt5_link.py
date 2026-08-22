@@ -165,6 +165,8 @@ def positions_to_rows(positions, symbol_map: Dict[str, Optional[str]]
             take_profit=getattr(p, "tp", None),
             opened_at=opened_iso,
             label="MT5 #{0}".format(getattr(p, "ticket", "?")),
+            profit=getattr(p, "profit", None),
+            price_current=getattr(p, "price_current", None),
         ))
 
     return rows, skipped

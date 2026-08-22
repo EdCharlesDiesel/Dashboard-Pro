@@ -68,9 +68,44 @@ def env_version(path: str | None = None) -> str | None:
 
 
 def write_env(version: str, path: str | None = None) -> None:
+    """Set ``APP_VERSION``, preserving every other line already in the file.
+
+    This opened the file with ``"w"`` and wrote nothing but the header and
+    ``APP_VERSION`` until 2026-08-20, which silently deleted anything else in
+    it. That matters because ``.env`` is the only place the Docker containers
+    can be handed a secret - ``.streamlit/secrets.toml`` is excluded from the
+    image by design - and there were six version bumps in one working day,
+    each of which would have eaten a ``TELEGRAM_BOT_TOKEN`` line.
+    """
     path = path or ENV_FILE
+    line = "APP_VERSION={0}\n".format(version)
+
+    try:
+        with open(path, encoding="utf-8") as handle:
+            existing = handle.read()
+    except OSError:
+        existing = ""
+
+    if not existing:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(_HEADER + line)
+        return
+
+    out, replaced = [], False
+    for raw in existing.splitlines(keepends=True):
+        if raw.strip().startswith("APP_VERSION="):
+            if not replaced:            # keep exactly one, in its place
+                out.append(line)
+                replaced = True
+            continue
+        out.append(raw)
+    if not replaced:
+        if out and not out[-1].endswith("\n"):
+            out[-1] += "\n"
+        out.append(line)
+
     with open(path, "w", encoding="utf-8") as handle:
-        handle.write(_HEADER + "APP_VERSION={0}\n".format(version))
+        handle.write("".join(out))
 
 
 def main(argv: list[str] | None = None) -> int:

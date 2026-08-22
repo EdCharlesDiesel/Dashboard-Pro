@@ -48,6 +48,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 import requests
+
+from src.core import secrets as _secrets
 import sqlalchemy as sa
 
 log = logging.getLogger("evening_sentry")
@@ -244,7 +246,7 @@ class Telegram:
                 json={"chat_id": self.chat, "text": text}, timeout=10,
             ).raise_for_status()
         except Exception as e:
-            log.error("telegram send failed: %s", e)
+            log.error("telegram send failed: %s", _secrets.redact(str(e)))  # the raw error embeds the bot token
 
 
 class Heartbeat:                                    # [1]

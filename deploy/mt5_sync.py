@@ -159,6 +159,13 @@ def emit(line: str) -> None:
         pass
 
 
+def _import_closed(days: int = 7) -> dict:
+    """Pull closed MT5 deals into the journal. Separate function so the loop's
+    test can stub it, and so its failures stay out of the sync's return code."""
+    from src.services.mt5_trade_import import import_closed_trades
+    return import_closed_trades(days=days)
+
+
 def sync_once() -> int:
     """One sync. Returns 0 on success, 1 if the terminal could not be read."""
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -182,6 +189,24 @@ def sync_once() -> int:
     emit("[{0}] ok - balance={1} equity={2} positions={3} | {4}".format(
         stamp, account.get("balance"), account.get("equity"),
         res.get("saved"), res.get("message")))
+
+    # The journal, second and strictly optional. Closed deals used to arrive
+    # only when somebody ran deploy/mt5_trade_import.py by hand, so the journal
+    # ran days behind the account. Importing here keeps it current.
+    #
+    # Its failures never reach the return code: the book and the balance are
+    # what size the next trade, and a database hiccup on the journal must not
+    # make the watchdog think the sync is dead and start bouncing it.
+    # days=7 with ticket-level dedupe makes every run idempotent and lets a
+    # week-long outage heal itself on the next pass.
+    try:
+        imported = _import_closed(days=7)
+        if imported.get("imported"):
+            emit("[{0}] journal +{1} closed trade(s)".format(
+                stamp, imported["imported"]))
+    except Exception as exc:                      # noqa: BLE001 - a bonus, never the job
+        emit("[{0}] journal import failed (sync itself is fine): {1}".format(stamp, exc))
+
     return 0
 
 
