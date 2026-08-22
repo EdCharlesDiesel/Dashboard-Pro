@@ -18,7 +18,11 @@ forex_notify_cache.json
 account_state.json
 worker_board.json
 setup_ranker_score_history.json
-.streamlit/secrets.toml
+# Every secrets variant, not one exact name: secrets.production.toml was
+# added 2026-08-22 and reached the git index because this line named only
+# secrets.toml. The example templates stay tracked - a new machine needs them.
+.streamlit/secrets*.toml
+!.streamlit/secrets.toml.example
 
 # DB dumps — contain real data, never commit
 backups/

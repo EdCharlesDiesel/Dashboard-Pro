@@ -69,8 +69,21 @@ class TestItUsesTheSharedResolver:
         assert cfg.DB_PORT != 5432, "5432 is the native server, not the container"
         assert cfg.DB_NAME != "trading", "no such database exists on either server"
 
+    @pytest.mark.live_secrets
     def test_the_host_really_resolves_to_the_container_database(self):
-        # No mocking: the actual secrets.toml on this machine.
+        """This developer's own secrets.toml, not a fixture.
+
+        Marked `live_secrets` so the autouse `_no_live_db` stub steps aside -
+        stubbing the resolver made this assert against the fixture instead of
+        the resolver, which is why it failed for a whole session.
+
+        Skipped where there is no [database] section: CI has no secrets.toml,
+        and a test that cannot pass there would break the build the day the
+        suite is added to it.
+        """
+        from src.core.secrets import _section
+        if not (_section("database") or {}).get("port"):
+            pytest.skip("no local [database] in secrets.toml")
         import src.data_backbone.config as config
         importlib.reload(config)
         assert config.DB_PORT == 5433

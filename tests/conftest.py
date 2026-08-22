@@ -25,6 +25,11 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: slow test that hits the network (live yfinance)"
     )
+    config.addinivalue_line(
+        "markers",
+        "live_secrets: reads this machine's real secrets.toml; exempt from "
+        "the _no_live_db stub and skipped where there is none"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
@@ -47,14 +52,38 @@ def pytest_collection_modifyitems(config, items):
 # exercise the real app on purpose.
 @pytest.fixture(autouse=True)
 def _no_live_db(request, monkeypatch):
-    if "slow" in request.keywords:
+    if "slow" in request.keywords or "live_secrets" in request.keywords:
         yield
         return
     from src.core import secrets as _secrets
-    monkeypatch.setattr(_secrets, "db_config", lambda: {
-        "host": "localhost", "port": 5432, "dbname": "trading",
-        "user": "postgres", "password": "",
-    })
+
+    # Stub `_section`, not `db_config`. Replacing the resolver itself also
+    # defeated the two tests that exist to verify the resolver - they ended up
+    # asserting against this fixture and failed for a whole session
+    # (2026-08-20 to 2026-08-22) looking like a real resolution bug.
+    #
+    # Emptying the [database] section gives the identical guarantee: no
+    # secrets.toml -> env vars -> localhost:5432/trading with an empty password
+    # -> _resolve_cfg() returns None, i.e. unconfigured. It also models the
+    # container exactly, where .dockerignore keeps secrets.toml out of the image.
+    _real_section = _secrets._section
+    # Telegram is neutralised the same way, and for the same reason. Since the
+    # scanner gained a Telegram channel (1.10.28) the confluence alert path
+    # calls send_telegram_message for real, so the fast suite was making live
+    # API calls - and on a machine with working credentials it delivered an
+    # actual alert to the owner's phone during `pytest`.
+    #
+    # Stubbed at the *config*, not the function: stubbing
+    # send_telegram_message itself would make tests/test_secrets_telegram.py
+    # assert against this fixture instead of the real sender - exactly the
+    # mistake that broke the two data_backbone tests. Emptying the config makes
+    # the real function return "not configured" before it touches the network,
+    # and a test that wants the sender simply patches telegram_config itself.
+    monkeypatch.setattr(_secrets, "telegram_config",
+                        lambda: {"bot_token": "", "chat_id": ""})
+    monkeypatch.setattr(
+        _secrets, "_section",
+        lambda name: {} if name == "database" else _real_section(name))
     # Neutralize the worker's precomputed board for the same reason: a developer
     # machine may carry a real worker_board.json (from a live scan), and its
     # JSON fallback would otherwise shadow the live house-view compute that

@@ -22,6 +22,7 @@ import os
 
 import requests
 
+from src.core import secrets
 from src.core import threat_core as tc
 from src.services import open_positions
 
@@ -32,16 +33,21 @@ ESCALATION_ORDER = {"green": 0, "amber": 1, "red": 2}
 
 
 def _send_telegram(msg: str) -> None:
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat = os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat:
-        print("[threat] Telegram env vars missing; alert not sent:\n" + msg)
-        return
-    requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
-        json={"chat_id": chat, "text": msg, "parse_mode": "Markdown"},
-        timeout=10,
-    )
+    """Send through the canonical sender in `src.core.secrets`.
+
+    This used to post for itself with no try/except and no
+    ``raise_for_status``, which meant two faults at once: a network error
+    propagated with the bot token inside the URL, and an HTTP 400 was
+    silently treated as delivered. Delegating fixes both and inherits the
+    bounded retry.
+
+    ``parse_mode`` stays Markdown - this module's alert text uses *bold*
+    deliberately, unlike the confluence body.
+    """
+    ok, detail = secrets.send_telegram_message(msg, parse_mode="Markdown")
+    if not ok:
+        # `detail` is already redacted by the sender.
+        print("[threat] telegram send failed: {0}".format(detail))
 
 
 def _format_alert(prev: str | None, rep: tc.ThreatReport) -> str:
