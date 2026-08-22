@@ -16,7 +16,7 @@ missing/unconfigured DB is a silent no-op, never an exception.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -246,21 +246,27 @@ def _repo():
     return pooled_repository(cfg)
 
 
-def save_thesis(instrument: str, bias: str, invalidation: str) -> bool:
-    """Upsert this week's thesis for ``instrument``. Returns whether it was
-    saved (``False`` when the DB isn't configured)."""
+def save_thesis(instrument: str, bias: str, invalidation: str,
+                week_start_override: Optional[date] = None) -> bool:
+    """Upsert the thesis for ``instrument`` against ``week_start_override``
+    (defaults to today's Monday). The override exists for callers — Week
+    Ahead's "next week" pre-flight — that plan a week other than the current
+    one; Swing Playbook has no such toggle and keeps omitting it. Returns
+    whether it was saved (``False`` when the DB isn't configured)."""
     repo = _repo()
     if repo is None:
         return False
-    repo.save_swing_thesis(instrument, week_start(), bias, invalidation)
+    repo.save_swing_thesis(instrument, week_start_override or week_start(),
+                           bias, invalidation)
     return True
 
 
-def load_thesis(instrument: str) -> Optional[Dict[str, Any]]:
+def load_thesis(instrument: str,
+                week_start_override: Optional[date] = None) -> Optional[Dict[str, Any]]:
     repo = _repo()
     if repo is None:
         return None
-    return repo.load_swing_thesis(instrument, week_start())
+    return repo.load_swing_thesis(instrument, week_start_override or week_start())
 
 
 # ---------------------------------------------------------------------------
