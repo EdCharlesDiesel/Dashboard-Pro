@@ -105,3 +105,39 @@ only discovered on a production merge, which is the worst time to find out.
   dashboard.
 - If you would rather have `v1.10.34`-style tags, that is a one-line change; the
   existing convention was kept deliberately.
+
+## What actually happened
+
+Implemented at 1.10.34. Job graph is now `build → deploy → release`; five guard
+tests in `tests/test_release_workflow.py`.
+
+**Task order was inverted deliberately.** The plan listed the job first and the
+guard second, which would have meant writing tests against code that already
+worked — not a TDD cycle. The tests were written first and **all five failed**
+for the right reason (no `release` job), then passed once the job was added.
+
+**The guard was mutation-tested rather than merely run.** Deleting
+`needs: deploy` from the workflow made exactly one test fail
+(`test_release_runs_only_after_a_successful_deploy`) and the other four pass,
+which is what proves the assertion is load-bearing instead of incidentally true.
+The file was restored and re-verified green.
+
+**One real defect found in verification.** The first version regex was
+`^[0-9]+\.[0-9]+\.[0-9]+$`, which rejects `1.10.34-rc1` — a version
+`deploy/sync_version.py` *accepts*, since its `_SEMVER` allows a prerelease
+suffix. A prerelease bump would therefore have passed the repo's own validator
+and then failed the production pipeline. The job now uses the same grammar;
+both were checked against seven inputs and agree on all of them.
+
+The job's shell logic was simulated against the real `VERSION` rather than
+assumed: it derives `ProductionV1.10.34` / *Production V1.10.34*, matching the
+existing `ProductionV1.0.1` convention; the existing-tag branch prints a notice
+and exits 0; and empty, `1.10`, `v1.10.34` and `1.10.34.5` all fail loudly.
+
+`--target "$GITHUB_SHA"` tags the exact merged commit rather than the branch
+name, and `fetch-depth: 0` is required for `--generate-notes` to diff against
+the previous release.
+
+**Not yet proven:** this cannot run until a real merge to Production. The first
+such merge will create `ProductionV<version>`; if it fails, the deploy has
+already happened by then — the release job is last on purpose.
