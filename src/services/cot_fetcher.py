@@ -68,6 +68,20 @@ MARKET_COL_CANDIDATES = ["Market_and_Exchange_Names", "Market and Exchange Names
 OI_COL_CANDIDATES = ["Open_Interest_All", "Open Interest (All)"]
 
 
+def normalize_datetime64(s: pd.Series, unit: str = "ns") -> pd.Series:
+    """Coerce a datetime64 Series to a fixed resolution.
+
+    pandas 2.x infers datetime64 resolution from the source: CFTC's date-only
+    strings parsed via ``pd.to_datetime`` land on ``[us]``, while a
+    ``DatetimeIndex`` read back through the Postgres-backed OHLC cache lands on
+    ``[s]``. Two genuinely-datetime64 columns at different resolutions make
+    ``pd.merge_asof``'s ``on=`` column raise "incompatible merge keys ... must
+    be the same type" even though a plain ``merge`` would tolerate it. Call this
+    on both sides of a merge_asof to make the resolution explicit.
+    """
+    return s.astype(f"datetime64[{unit}]")
+
+
 def _first_matching_column(df: pd.DataFrame, candidates: list[str]) -> str:
     for c in candidates:
         if c in df.columns:

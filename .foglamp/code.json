@@ -42,7 +42,7 @@
   "dir": {
    "path": "pages/",
    "count": 57,
-   "loc": 22492,
+   "loc": 22758,
    "sample": [
     {
      "path": "pages/15m-fib-entry.py",
@@ -383,7 +383,7 @@
  "journal": {
   "file": {
    "path": "pages/trade-journal.py",
-   "loc": 1566,
+   "loc": 1683,
    "doc": "",
    "classes": [],
    "functions": [
@@ -517,6 +517,8 @@
     "src.pages_lib.navigation",
     "src.services",
     "src.services.market_data",
+    "src.services.mt5_trade_import",
+    "src.services.position_risk",
     "src.services.source_scorecard",
     "src.ui.theme"
    ]
@@ -733,7 +735,7 @@
  "scanner": {
   "file": {
    "path": "src/services/background_scanner.py",
-   "loc": 309,
+   "loc": 337,
    "doc": "Unattended ingest + score daemon — the app's data streams in day & night.",
    "classes": [],
    "functions": [
@@ -781,6 +783,7 @@
     }
    ],
    "imports": [
+    "src.core",
     "src.core.bias",
     "src.core.observability",
     "src.instruments",
@@ -809,7 +812,9 @@
      "FRED_API_KEY",
      "GMAIL_SENDER",
      "GMAIL_APP_PASSWORD",
-     "GMAIL_RECIPIENT"
+     "GMAIL_RECIPIENT",
+     "TELEGRAM_BOT_TOKEN",
+     "TELEGRAM_CHAT_ID"
     ]
    }
   }
@@ -961,7 +966,7 @@
  "sentry": {
   "file": {
    "path": "src/services/evening_sentry.py",
-   "loc": 422,
+   "loc": 424,
    "doc": "evening_sentry.py  (v2)",
    "classes": [
     {
@@ -1039,13 +1044,15 @@
      "kind": "public"
     }
    ],
-   "imports": []
+   "imports": [
+    "src.core"
+   ]
   }
  },
  "mt5-sync": {
   "file": {
    "path": "deploy/mt5_sync.py",
-   "loc": 224,
+   "loc": 249,
    "doc": "Push the live MT5 terminal's balance and open positions into the database.",
    "classes": [],
    "functions": [
@@ -1068,6 +1075,12 @@
      "kind": "public"
     },
     {
+     "name": "_import_closed",
+     "sig": "(days=…) -> dict",
+     "doc": "Pull closed MT5 deals into the journal. Separate function so the loop's",
+     "kind": "private"
+    },
+    {
      "name": "sync_once",
      "sig": "() -> int",
      "doc": "One sync. Returns 0 on success, 1 if the terminal could not be read.",
@@ -1081,7 +1094,8 @@
     }
    ],
    "imports": [
-    "src.services"
+    "src.services",
+    "src.services.mt5_trade_import"
    ]
   },
   "ops": {
@@ -2347,7 +2361,7 @@
  "threat": {
   "file": {
    "path": "src/core/threat_core.py",
-   "loc": 369,
+   "loc": 468,
    "doc": "threat_core.py — pure logic for the Threat Board.",
    "classes": [
     {
@@ -2368,9 +2382,15 @@
    ],
    "functions": [
     {
+     "name": "_instrument",
+     "sig": "(pair)",
+     "doc": "The registry entry for a broker-style pair like ``XAUUSD``, or ``None``.",
+     "kind": "private"
+    },
+    {
      "name": "pip_size",
      "sig": "(pair) -> float",
-     "doc": "",
+     "doc": "Pip size from the registry, falling back to the FX rule of thumb.",
      "kind": "public"
     },
     {
@@ -2383,6 +2403,12 @@
      "name": "stop_risk_usd",
      "sig": "(pos, usdjpy) -> float",
      "doc": "",
+     "kind": "public"
+    },
+    {
+     "name": "positions_from_book",
+     "sig": "(rows) -> tuple[list[Position], list[dict]]",
+     "doc": "Stored MT5 book rows -> ``(positions, unstopped_rows)``.",
      "kind": "public"
     },
     {
@@ -2464,6 +2490,12 @@
      "kind": "public"
     },
     {
+     "name": "overall_state",
+     "sig": "(total, comps) -> str",
+     "doc": "The headline state: never greener than the worst single component.",
+     "kind": "public"
+    },
+    {
      "name": "build_report",
      "sig": "(positions, equity, zone=…) -> ThreatReport",
      "doc": "",
@@ -2494,16 +2526,24 @@
      "kind": "public"
     }
    ],
-   "imports": []
+   "imports": [
+    "src.instruments.registry"
+   ]
   }
  },
  "cot": {
   "file": {
    "path": "src/services/cot_fetcher.py",
-   "loc": 239,
+   "loc": 253,
    "doc": "cot_fetcher.py",
    "classes": [],
    "functions": [
+    {
+     "name": "normalize_datetime64",
+     "sig": "(s, unit=…) -> pd.Series",
+     "doc": "Coerce a datetime64 Series to a fixed resolution.",
+     "kind": "public"
+    },
     {
      "name": "_first_matching_column",
      "sig": "(df, candidates) -> str",
@@ -2728,7 +2768,7 @@
  "mt5-link": {
   "file": {
    "path": "src/services/mt5_link.py",
-   "loc": 430,
+   "loc": 432,
    "doc": "Live MetaTrader 5 terminal link — read the real book, not a saved file.",
    "classes": [
     {
