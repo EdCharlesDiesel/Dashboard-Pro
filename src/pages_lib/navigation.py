@@ -117,6 +117,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("STOC", "Stochastic Calculus",  "🎓", "pages/stochastic_tab.py"),
         NavEntry("FCST", "Forecast",              "🔭", "pages/forecast_tab.py"),
         NavEntry("SURP", "Surprise Awareness",    "😲", "pages/surprise_tab.py"),
+        NavEntry("EVNT", "Event Reaction Map",    "🧾", "pages/nfp_reaction.py"),
         NavEntry("SEAS", "Seasonality",           "📅", "pages/seasonality.py"),
         NavEntry("RSKR", "Risk Reversals",        "🎭", "pages/risk_reversal_tab.py"),
         NavEntry("SMRT", "Smart Money",           "🕵️", "pages/smart_money_tab.py"),

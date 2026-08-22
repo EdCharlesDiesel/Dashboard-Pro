@@ -93,6 +93,17 @@ PAGES: Tuple[Tuple[str, str], ...] = (
     ("smart_money", "pages/smart_money_tab.py"),
     # The desk's own chart stack (mt5/FiboRibbon.mq5) scored in Python.
     ("fibo_ribbon", "pages/fibo-ribbon.py"),
+    # Four tags, one page: the Event Reaction Map scores NFP, CPI, PPI and
+    # FOMC, each under its own tag so the Source Scorecard grades each
+    # event's betas separately. Every one renders at consensus-matching
+    # defaults, so a sweep pass scores an in-line print and persists
+    # nothing -- correct, since the inputs are a hand-typed release and no
+    # PREPARE hook may fabricate one. The hooks below only pick the event,
+    # which makes the pass smoke coverage of four code paths, not a scan.
+    ("nfp_reaction", "pages/nfp_reaction.py"),
+    ("cpi_reaction", "pages/nfp_reaction.py"),
+    ("ppi_reaction", "pages/nfp_reaction.py"),
+    ("fomc_reaction", "pages/nfp_reaction.py"),
     # FX Bootcamp pivot zones, ported from the BiasedPivots.mq5 on the charts.
     ("biased_pivots", "pages/biased-pivots.py"),
 )
@@ -126,8 +137,28 @@ AUDIT_ONLY = frozenset({"confluence_zone_4h", "confluence_checker"})
 # source -> callable(AppTest) run after the first render, for pages whose default
 # widget state can't produce a signal. Keep these to *selecting a data source or
 # mode*; anything that changes what the page concludes belongs in the page.
+def _select_event(label: str):
+    """Point the Event Reaction Map at one of its four events.
+
+    Selects on the *label* because the page uses the labels as the
+    selectbox options directly rather than keys behind a format_func --
+    the widget value and the displayed text are the same string.
+    """
+    def prepare(at) -> None:
+        for box in at.selectbox:
+            if (box.label or "") == "Event":
+                box.select(label)
+                at.run()
+                return
+    return prepare
+
+
 PREPARE = {
     "risk_reversal": _rr_use_free_proxy,
+    "nfp_reaction": _select_event("Nonfarm Payrolls"),
+    "cpi_reaction": _select_event("US CPI"),
+    "ppi_reaction": _select_event("US PPI"),
+    "fomc_reaction": _select_event("FOMC Decision"),
 }
 
 

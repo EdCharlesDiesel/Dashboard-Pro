@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import pandas as pd
 
@@ -209,6 +209,76 @@ def evaluate_row(
     return RowResult(source, HIT if moved > 0 else MISS, hit=moved > 0)
 
 
+def _finite(r_values: Sequence[float]) -> List[float]:
+    """The usable observations. A NaN R would poison every sum below it."""
+    out = []
+    for v in r_values:
+        f = _as_float(v)
+        if f is not None:
+            out.append(f)
+    return out
+
+
+def profit_factor(r_values: Sequence[float]) -> Optional[float]:
+    """Gross winning R divided by gross losing R.
+
+    Expectancy is a mean, and a mean cannot tell a source that grinds from one
+    carried by a single outlier. This can: 1.0 is break-even, and the distance
+    from it says how much work the winners are doing. Exactly-zero R values
+    (a horizon mark landing flat) are neither, and move it in no direction.
+
+    ``None`` when there are no losses at all — the ratio has no denominator,
+    and printing infinity would assert a certainty two winning signals do not
+    support. The wins/losses columns already show why the cell is blank.
+    """
+    vals = _finite(r_values)
+    if not vals:
+        return None
+    gross_win = sum(v for v in vals if v > 0)
+    gross_loss = -sum(v for v in vals if v < 0)
+    if gross_loss <= 0:
+        return None
+    return gross_win / gross_loss
+
+
+def sortino_ratio(r_values: Sequence[float], mar: float = 0.0) -> Optional[float]:
+    """Mean excess R over downside deviation. **Per signal, not annualised.**
+
+    Downside deviation is ``sqrt(mean(min(r - mar, 0) ** 2))`` taken over *all*
+    observations rather than only the losing ones — the Sortino & Price
+    convention. Dividing by the count of losers instead would make a source
+    with few but deep losses look safer than one with many shallow ones, which
+    is backwards.
+
+    Preferred over a Sharpe ratio here because Sharpe divides by total
+    deviation, so it penalises a source for its *wins*. A page that
+    occasionally catches a large move should not score worse for it.
+
+    **Deliberately not annualised.** The conventional ``sqrt(252)`` assumes
+    periodic returns at a fixed frequency; this is a series of per-signal
+    R-multiples, irregularly spaced, and :func:`row_horizon` already marks a
+    15-minute fib trigger and a weekly-swing read on different clocks.
+    Multiplying by a time factor the data does not have would be inventing
+    precision.
+
+    ``None`` below two observations, or when nothing falls under the MAR —
+    zero downside deviation is an undefined ratio, not an infinite one.
+    """
+    vals = _finite(r_values)
+    if len(vals) < 2:
+        return None
+    excess = [v - mar for v in vals]
+    downside = sum(min(e, 0.0) ** 2 for e in excess) / len(excess)
+    if downside <= 0:
+        return None
+    return (sum(excess) / len(excess)) / math.sqrt(downside)
+
+
+def _round_opt(value: Optional[float], places: int) -> Optional[float]:
+    """``round`` that tolerates ``None`` — both statistics above return it."""
+    return None if value is None else round(value, places)
+
+
 def build_scorecard(
     rows: List[Mapping[str, Any]],
     bars_by_ticker: Mapping[str, pd.DataFrame],
@@ -218,9 +288,12 @@ def build_scorecard(
 
     ``signals`` (rows seen), ``resolved`` (WIN+LOSS+MARKED), ``wins``,
     ``losses``, ``win_rate`` (wins vs losses, %), ``avg_r`` / ``total_r`` /
-    ``expectancy_r`` (mean R over resolved rows), ``dir_hit_rate`` (% of
-    horizon directional calls that went the right way), ``open`` and
-    ``unresolved`` counts — sorted by expectancy, best first.
+    ``expectancy_r`` (mean R over resolved rows), ``profit_factor`` and
+    ``sortino`` (the shape of that R distribution — see their own
+    docstrings; the Sortino is per-signal and NOT annualised),
+    ``dir_hit_rate`` (% of horizon directional calls that went the right
+    way), ``open`` and ``unresolved`` counts — sorted by expectancy,
+    best first. The ranking metric is unchanged by the two additions.
     """
     per_source: Dict[str, Dict[str, Any]] = {}
     for row in rows:
@@ -259,6 +332,8 @@ def build_scorecard(
             "avg_r": round(sum(r_vals) / resolved, 2) if resolved else None,
             "total_r": round(sum(r_vals), 2) if resolved else None,
             "expectancy_r": round(sum(r_vals) / resolved, 2) if resolved else None,
+            "profit_factor": _round_opt(profit_factor(r_vals), 2),
+            "sortino": _round_opt(sortino_ratio(r_vals), 2),
             "dir_calls": agg["dir_calls"],
             "dir_hit_rate": (round(agg["dir_hits"] / agg["dir_calls"] * 100, 1)
                              if agg["dir_calls"] else None),

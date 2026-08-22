@@ -41,8 +41,8 @@
  "pages": {
   "dir": {
    "path": "pages/",
-   "count": 56,
-   "loc": 22145,
+   "count": 57,
+   "loc": 22492,
    "sample": [
     {
      "path": "pages/15m-fib-entry.py",
@@ -383,7 +383,7 @@
  "journal": {
   "file": {
    "path": "pages/trade-journal.py",
-   "loc": 1543,
+   "loc": 1566,
    "doc": "",
    "classes": [],
    "functions": [
@@ -817,7 +817,7 @@
  "sweeper": {
   "file": {
    "path": "src/services/signal_sweep.py",
-   "loc": 347,
+   "loc": 378,
    "doc": "Run every signal page headlessly so its own code persists its signals.",
    "classes": [],
    "functions": [
@@ -825,6 +825,12 @@
      "name": "_rr_use_free_proxy",
      "sig": "(at) -> None",
      "doc": "Switch Risk Reversals off its synthetic-demo default.",
+     "kind": "private"
+    },
+    {
+     "name": "_select_event",
+     "sig": "(label)",
+     "doc": "Point the Event Reaction Map at one of its four events.",
      "kind": "private"
     },
     {
@@ -1910,7 +1916,7 @@
  "scorecard": {
   "file": {
    "path": "src/services/source_scorecard.py",
-   "loc": 275,
+   "loc": 350,
    "doc": "Source scorecard — which signal sources actually predict winners?",
    "classes": [
     {
@@ -1962,6 +1968,30 @@
      "sig": "(row, bars, horizon=…) -> RowResult",
      "doc": "Resolve one ``trade_setups`` row into a :class:`RowResult`.",
      "kind": "public"
+    },
+    {
+     "name": "_finite",
+     "sig": "(r_values) -> List[float]",
+     "doc": "The usable observations. A NaN R would poison every sum below it.",
+     "kind": "private"
+    },
+    {
+     "name": "profit_factor",
+     "sig": "(r_values) -> Optional[float]",
+     "doc": "Gross winning R divided by gross losing R.",
+     "kind": "public"
+    },
+    {
+     "name": "sortino_ratio",
+     "sig": "(r_values, mar=…) -> Optional[float]",
+     "doc": "Mean excess R over downside deviation. **Per signal, not annualised.**",
+     "kind": "public"
+    },
+    {
+     "name": "_round_opt",
+     "sig": "(value, places) -> Optional[float]",
+     "doc": "``round`` that tolerates ``None`` — both statistics above return it.",
+     "kind": "private"
     },
     {
      "name": "build_scorecard",
