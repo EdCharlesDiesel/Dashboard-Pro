@@ -44,6 +44,12 @@ omit = [
     "src/services/news_fetcher.py",     # standalone cron job: live network fetch, SQLAlchemy upsert
     "src/services/mt5_mcp.py",          # standalone MCP entrypoint: live terminal I/O, Windows-only dep
     "src/services/signal_sweep.py",     # standalone cron job: drives real pages under AppTest (live yfinance + DB)
+    "src/execution/queue.py",           # Postgres-backed signal queue
+    "src/execution/mt5_executor.py",    # standalone worker: live terminal I/O, Windows-only dep
+    # NOT omitted, deliberately: src/execution/gate.py and src/core/platinum.py
+    # are pure functions of their arguments -- no DB, no terminal, no network.
+    # The gate is the last check between a malformed signal and a real order, so
+    # it is the one module here that must stay measured.
 ]
 
 [tool.coverage.report]
