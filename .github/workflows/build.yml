@@ -109,17 +109,50 @@ jobs:
 
       - name: Sanity-check the written config
         # Fails the deploy if a secret is missing, rather than shipping an app
-        # that silently falls back to localhost:5432/trading. Prints booleans
-        # only - never a value.
+        # that silently falls back to localhost:5432/trading.
+        #
+        # Reports EVERY secret, not just the first failure. The earlier version
+        # printed two booleans and exited, so a run said only "DATABASE_URL is
+        # empty" — which cannot distinguish one missing secret from the
+        # environment not being wired up at all. Those need opposite fixes, and
+        # the log is the only place to tell them apart.
+        #
+        # Presence only: True/False, never a value, never a length.
         run: |
-          python -c "
+          python - <<'PY'
           import tomllib, sys
-          cfg = tomllib.load(open('.streamlit/secrets.toml','rb'))
-          url = cfg.get('database', {}).get('url', '')
-          print('database.url present:', bool(url))
-          print('telegram configured :', bool(cfg.get('telegram', {}).get('bot_token')))
-          sys.exit(0 if url else 'DATABASE_URL secret is empty - refusing to deploy')
-          "
+
+          cfg = tomllib.load(open('.streamlit/secrets.toml', 'rb'))
+          checks = [
+              ("DATABASE_URL",       cfg.get("database", {}).get("url", ""),        True),
+              ("FRED_API_KEY",       cfg.get("api", {}).get("FRED_API_KEY", ""),     False),
+              ("FMP_API_KEY",        cfg.get("api", {}).get("FMP_API_KEY", ""),      False),
+              ("FINNHUB_API_KEY",    cfg.get("api", {}).get("FINNHUB_API_KEY", ""),  False),
+              ("GMAIL_SENDER",       cfg.get("gmail", {}).get("sender", ""),         False),
+              ("GMAIL_APP_PASSWORD", cfg.get("gmail", {}).get("app_password", ""),   False),
+              ("GMAIL_RECIPIENT",    cfg.get("gmail", {}).get("recipient", ""),      False),
+              ("TELEGRAM_BOT_TOKEN", cfg.get("telegram", {}).get("bot_token", ""),   False),
+              ("TELEGRAM_CHAT_ID",   str(cfg.get("telegram", {}).get("chat_id", "")), False),
+          ]
+
+          print("secret               present  required")
+          print("-" * 42)
+          for name, value, required in checks:
+              print(f"{name:<20} {str(bool(value)):<8} {'yes' if required else 'no'}")
+
+          present = sum(1 for _, v, _ in checks if v)
+          missing_required = [n for n, v, r in checks if r and not v]
+          print(f"\n{present}/{len(checks)} secrets present")
+
+          if present == 0:
+              sys.exit(
+                  "\nEVERY secret is empty. That is not nine missing values - it is the "
+                  "environment not reaching this job. Check Settings > Environments > "
+                  "'production': the name must match `environment: production` exactly, "
+                  "and its deployment-branch rule must allow Production.")
+          if missing_required:
+              sys.exit(f"\nrequired secret(s) empty: {missing_required} - refusing to deploy")
+          PY
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
