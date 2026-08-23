@@ -285,3 +285,123 @@ class TestConfluenceChannels:
         calls = self._wire(monkeypatch, email_ok=None)
         bg.scan_once()
         assert "EUR/USD" in calls["telegram"][0] and "LONG" in calls["telegram"][0]
+
+
+class TestEnqueueForExecution:
+    """The producer half of the execution pipeline.
+
+    Until 1.10.43 nothing called `enqueue_signal()` — `grep` matched only the
+    queue module itself — so a triple confluence woke the owner's phone and
+    queued nothing. These tests pin the two properties that matter more than the
+    happy path: the flag defaults to off, and a queue failure must never cost an
+    alert. Alerting has worked for weeks; the queue is new, and the new thing
+    does not get to break the old one.
+    """
+
+    def _wire(self, monkeypatch, enqueue_impl, flag="1"):
+        from src.services import alert_service
+        from src.core import secrets as core_secrets
+        from src.execution import queue as exec_queue
+
+        monkeypatch.setenv("EXECUTOR_ENQUEUE", flag)
+        monkeypatch.setattr(alert_service, "email_configured", lambda: False)
+        sent = []
+        monkeypatch.setattr(core_secrets, "send_telegram_message",
+                            lambda text, **k: (sent.append(text) or (True, "sent")))
+        monkeypatch.setattr(exec_queue, "enqueue_signal", enqueue_impl)
+        monkeypatch.setattr(bg, "_execution_engine", lambda: object(), raising=False)
+        cache = _FakeCache()
+        monkeypatch.setattr(alert_service, "NotifyCache", lambda ns: cache)
+        c = _confluence()
+        monkeypatch.setattr(bg, "_find_confluences", lambda grade_a, board: [c])
+        return sent, c
+
+    def test_a_confluence_is_enqueued_once(self, monkeypatch, quiet_universe):
+        queued = []
+        sent, c = self._wire(
+            monkeypatch,
+            lambda engine, **kw: (queued.append(kw) or True))
+
+        bg.scan_once()
+
+        assert len(queued) == 1, f"expected one enqueue, got {queued}"
+        assert queued[0]["symbol"].replace("/", "") == c.pair.replace("/", "")
+        assert queued[0]["entry"] == c.entry and queued[0]["stop"] == c.sl
+        # LONG -> buy. The gate compares against lowercase, so an uppercased or
+        # inverted direction is read as the opposite side and the account takes
+        # the wrong trade -- silently, with a valid-looking stop and target.
+        assert queued[0]["direction"] == "buy", (
+            f'LONG must map to "buy", got {queued[0]["direction"]!r}')
+
+    def test_nothing_is_enqueued_when_the_flag_is_unset(
+            self, monkeypatch, quiet_universe):
+        # Fails closed: automation must be switched on deliberately, never
+        # inherited by deploying a build that happens to contain the code.
+        queued = []
+        self._wire(monkeypatch,
+                   lambda engine, **kw: (queued.append(kw) or True), flag="0")
+
+        bg.scan_once()
+
+        assert queued == []
+
+    def test_a_queue_failure_does_not_cost_the_alert(
+            self, monkeypatch, quiet_universe):
+        def boom(engine, **kw):
+            raise RuntimeError("postgres is down")
+
+        from src.services import alert_service
+
+        sent, c = self._wire(monkeypatch, boom)
+        cache = _FakeCache()
+        monkeypatch.setattr(alert_service, "NotifyCache", lambda ns: cache)
+
+        stats = bg.scan_once()
+
+        assert stats["telegrammed"] == 1, "the alert must survive a queue outage"
+        assert sent and "ENTRY FIRED" in sent[0]
+        # The subtler half: if the enqueue error escapes to the outer handler it
+        # skips filter_new(), the signal is never marked seen, and the same
+        # alert fires every cycle forever. Delivery succeeded, so it must be
+        # marked -- a queue outage may cost the queue and nothing else.
+        assert cache.marked == [c.dedupe_key()], (
+            "a queue failure must not strand the dedupe ledger")
+
+    def test_an_already_alerted_confluence_is_not_requeued(
+            self, monkeypatch, quiet_universe):
+        from src.services import alert_service
+        queued = []
+        sent, c = self._wire(
+            monkeypatch, lambda engine, **kw: (queued.append(kw) or True))
+        monkeypatch.setattr(alert_service, "NotifyCache",
+                            lambda ns: _FakeCache(seen=[c.dedupe_key()]))
+
+        bg.scan_once()
+
+        assert queued == [], "a signal already alerted must not re-enter the queue"
+
+    def test_only_the_fresh_signal_in_a_mixed_batch_is_queued(
+            self, monkeypatch, quiet_universe):
+        """The single-confluence case cannot catch `fresh` vs `confluences`.
+
+        With one already-alerted signal the whole block is skipped, so either
+        variable behaves identically and a mutation swapping them passes. A
+        mixed batch is the only shape that discriminates — and getting it wrong
+        would re-queue a stale signal on every scan, for as long as one fresh
+        signal keeps the branch alive.
+        """
+        from src.services import alert_service
+
+        stale = _confluence(pair="GBP/USD")
+        fresh = _confluence(pair="EUR/USD")
+        queued = []
+        self._wire(monkeypatch, lambda engine, **kw: (queued.append(kw) or True))
+        monkeypatch.setattr(alert_service, "NotifyCache",
+                            lambda ns: _FakeCache(seen=[stale.dedupe_key()]))
+        monkeypatch.setattr(bg, "_find_confluences",
+                            lambda grade_a, board: [stale, fresh])
+
+        bg.scan_once()
+
+        assert [q["symbol"] for q in queued] == ["EURUSD"], (
+            f"only the fresh signal may be queued, got {[q['symbol'] for q in queued]}")
