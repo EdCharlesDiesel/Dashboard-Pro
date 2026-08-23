@@ -1,0 +1,336 @@
+<div class="dashboard">
+
+  <!-- ── Header ───────────────────────────────────────────────────────────── -->
+  <div class="dashboard-header">
+    <div class="header-left">
+      <h1 class="title">Trade Plans</h1>
+      <span class="subtitle">Orion Macro Economics · Weekly Signals</span>
+    </div>
+    <div class="header-right">
+      <button mat-stroked-button (click)="loadPlans()" [disabled]="loading">
+        <mat-icon>refresh</mat-icon>
+        Refresh
+      </button>
+      <button mat-flat-button color="primary"
+              (click)="generate()" [disabled]="generating">
+        <mat-icon>auto_awesome</mat-icon>
+        {{ generating ? 'Generating…' : 'Generate Plans' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Loading bar ──────────────────────────────────────────────────────── -->
+  <mat-progress-bar *ngIf="loading || generating"
+                    mode="indeterminate" class="progress-bar">
+  </mat-progress-bar>
+
+  <!-- ── Summary chips ────────────────────────────────────────────────────── -->
+  <div class="summary-chips" *ngIf="plans.length > 0">
+    <mat-chip-listbox>
+      <mat-chip [ngStyle]="{ background: '#22c55e20', color: '#16a34a' }">
+        {{ plans | countDirection:'Long' }} Long
+      </mat-chip>
+      <mat-chip [ngStyle]="{ background: '#ef444420', color: '#dc2626' }">
+        {{ plans | countDirection:'Short' }} Short
+      </mat-chip>
+      <mat-chip [ngStyle]="{ background: '#f59e0b20', color: '#d97706' }">
+        {{ plans.length }} Pending
+      </mat-chip>
+    </mat-chip-listbox>
+  </div>
+
+  <!-- ── Empty state ──────────────────────────────────────────────────────── -->
+  <div class="empty-state" *ngIf="!loading && plans.length === 0">
+    <mat-icon class="empty-icon">candlestick_chart</mat-icon>
+    <h3>No pending trade plans</h3>
+    <p>Click <strong>Generate Plans</strong> to analyse the latest candle data</p>
+    <button mat-flat-button color="primary" (click)="generate()">
+      Generate Plans
+    </button>
+  </div>
+
+  <!-- ── Main layout ──────────────────────────────────────────────────────── -->
+  <div class="main-layout" *ngIf="plans.length > 0">
+
+    <!-- Plans table -->
+    <mat-card class="table-card">
+      <mat-card-header>
+        <mat-card-title>Pending Setups</mat-card-title>
+        <mat-card-subtitle>Click a row to inspect indicators</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <div class="table-wrapper">
+          <table mat-table [dataSource]="plans" class="plans-table">
+
+            <!-- Pair -->
+            <ng-container matColumnDef="pair">
+              <th mat-header-cell *matHeaderCellDef>Pair</th>
+              <td mat-cell *matCellDef="let p">
+                <span class="pair-label">{{ p.pair }}</span>
+                <span class="timeframe-badge">{{ p.timeframe }}</span>
+              </td>
+            </ng-container>
+
+            <!-- Direction -->
+            <ng-container matColumnDef="direction">
+              <th mat-header-cell *matHeaderCellDef>Dir</th>
+              <td mat-cell *matCellDef="let p">
+                <span class="direction-badge"
+                      [class.long]="p.direction === 'Long'"
+                      [class.short]="p.direction === 'Short'">
+                  {{ p.direction === 'Long' ? '▲' : '▼' }} {{ p.direction }}
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- Timeframe -->
+            <ng-container matColumnDef="timeframe">
+              <th mat-header-cell *matHeaderCellDef>TF</th>
+              <td mat-cell *matCellDef="let p">{{ p.timeframe }}</td>
+            </ng-container>
+
+            <!-- Entry -->
+            <ng-container matColumnDef="entryPrice">
+              <th mat-header-cell *matHeaderCellDef>Entry</th>
+              <td mat-cell *matCellDef="let p" class="mono">
+                {{ p.entryPrice | number:'1.3-3' }}
+              </td>
+            </ng-container>
+
+            <!-- Stop Loss -->
+            <ng-container matColumnDef="stopLoss">
+              <th mat-header-cell *matHeaderCellDef>SL</th>
+              <td mat-cell *matCellDef="let p" class="mono danger">
+                {{ p.stopLoss | number:'1.3-3' }}
+              </td>
+            </ng-container>
+
+            <!-- TP1 -->
+            <ng-container matColumnDef="takeProfit1">
+              <th mat-header-cell *matHeaderCellDef>TP1</th>
+              <td mat-cell *matCellDef="let p" class="mono success">
+                {{ p.takeProfit1 | number:'1.3-3' }}
+              </td>
+            </ng-container>
+
+            <!-- TP2 -->
+            <ng-container matColumnDef="takeProfit2">
+              <th mat-header-cell *matHeaderCellDef>TP2</th>
+              <td mat-cell *matCellDef="let p" class="mono success">
+                {{ p.takeProfit2 | number:'1.3-3' }}
+              </td>
+            </ng-container>
+
+            <!-- R:R -->
+            <ng-container matColumnDef="riskReward">
+              <th mat-header-cell *matHeaderCellDef>R:R</th>
+              <td mat-cell *matCellDef="let p">
+                <span class="rr-badge" [class]="rrClass(p.riskReward)">
+                  {{ p.riskReward | number:'1.1-1' }}
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- RSI -->
+            <ng-container matColumnDef="rsi">
+              <th mat-header-cell *matHeaderCellDef>RSI</th>
+              <td mat-cell *matCellDef="let p">
+                <span class="rsi-badge"
+                      [ngStyle]="{ color: rsiColor(p.rsi) }">
+                  {{ p.rsi | number:'1.0-0' }}
+                  <small>{{ rsiLabel(p.rsi) }}</small>
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- Status -->
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let p">
+                <span class="status-dot"
+                      [ngStyle]="{ background: statusColor(p.status) }">
+                </span>
+                {{ p.status }}
+              </td>
+            </ng-container>
+
+            <!-- Actions -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let p">
+                <button mat-icon-button color="warn"
+                        matTooltip="Close position"
+                        (click)="openClose(p, $event)">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+                class="plan-row"
+                [class.selected]="selected?.id === row.id"
+                (click)="select(row)">
+            </tr>
+          </table>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Detail panel -->
+    <div class="detail-panel" *ngIf="selected">
+      <mat-card class="detail-card">
+        <mat-card-header>
+          <mat-card-title>
+            {{ selected.pair }}
+            <span class="direction-badge"
+                  [class.long]="selected.direction === 'Long'"
+                  [class.short]="selected.direction === 'Short'">
+              {{ selected.direction }}
+            </span>
+          </mat-card-title>
+          <mat-card-subtitle>{{ selected.timeframe }} · {{ selected.openedAt | date:'medium' }}</mat-card-subtitle>
+        </mat-card-header>
+
+        <mat-card-content>
+
+          <!-- Price levels -->
+          <h4 class="section-label">Price Levels</h4>
+          <div class="levels-visual">
+            <div class="level resistance">
+              <span class="level-label">Resistance</span>
+              <span class="level-value">{{ selected.resistance | number:'1.3-3' }}</span>
+              <span class="level-dist">+{{ resistanceDistancePct(selected) | number:'1.2-2' }}%</span>
+            </div>
+            <div class="level tp2">
+              <span class="level-label">TP2</span>
+              <span class="level-value success">{{ selected.takeProfit2 | number:'1.3-3' }}</span>
+            </div>
+            <div class="level tp1">
+              <span class="level-label">TP1</span>
+              <span class="level-value success">{{ selected.takeProfit1 | number:'1.3-3' }}</span>
+            </div>
+            <div class="level entry current">
+              <span class="level-label">Entry / Close</span>
+              <span class="level-value current-val">{{ selected.entryPrice | number:'1.3-3' }}</span>
+            </div>
+            <div class="level sl">
+              <span class="level-label">Stop Loss</span>
+              <span class="level-value danger">{{ selected.stopLoss | number:'1.3-3' }}</span>
+            </div>
+            <div class="level support">
+              <span class="level-label">Support</span>
+              <span class="level-value">{{ selected.support | number:'1.3-3' }}</span>
+              <span class="level-dist">-{{ supportDistancePct(selected) | number:'1.2-2' }}%</span>
+            </div>
+          </div>
+
+          <mat-divider class="divider"></mat-divider>
+
+          <!-- Indicators -->
+          <h4 class="section-label">Indicators</h4>
+          <div class="indicators-grid">
+
+            <div class="indicator-card">
+              <span class="ind-label">EMA 20</span>
+              <span class="ind-value">{{ selected.ema20 | number:'1.3-3' }}</span>
+              <span class="ind-signal"
+                    [class.success]="selected.entryPrice > selected.ema20"
+                    [class.danger]="selected.entryPrice < selected.ema20">
+                {{ selected.entryPrice > selected.ema20 ? 'Price above ↑' : 'Price below ↓' }}
+              </span>
+            </div>
+
+            <div class="indicator-card">
+              <span class="ind-label">EMA 50</span>
+              <span class="ind-value">{{ selected.ema50 | number:'1.3-3' }}</span>
+              <span class="ind-signal"
+                    [class.success]="selected.ema20 > selected.ema50"
+                    [class.danger]="selected.ema20 < selected.ema50">
+                {{ trendSignal(selected) }}
+              </span>
+            </div>
+
+            <div class="indicator-card">
+              <span class="ind-label">RSI (14)</span>
+              <span class="ind-value" [ngStyle]="{ color: rsiColor(selected.rsi) }">
+                {{ selected.rsi | number:'1.1-1' }}
+              </span>
+              <span class="ind-signal" [ngStyle]="{ color: rsiColor(selected.rsi) }">
+                {{ rsiLabel(selected.rsi) }}
+              </span>
+            </div>
+
+            <div class="indicator-card">
+              <span class="ind-label">ATR (14)</span>
+              <span class="ind-value">{{ selected.atr | number:'1.4-4' }}</span>
+              <span class="ind-signal neutral">Weekly volatility</span>
+            </div>
+
+            <div class="indicator-card">
+              <span class="ind-label">Support</span>
+              <span class="ind-value">{{ selected.support | number:'1.3-3' }}</span>
+              <span class="ind-signal neutral">
+                -{{ supportDistancePct(selected) | number:'1.2-2' }}% away
+              </span>
+            </div>
+
+            <div class="indicator-card">
+              <span class="ind-label">Resistance</span>
+              <span class="ind-value">{{ selected.resistance | number:'1.3-3' }}</span>
+              <span class="ind-signal neutral">
+                +{{ resistanceDistancePct(selected) | number:'1.2-2' }}% away
+              </span>
+            </div>
+
+          </div>
+
+          <mat-divider class="divider"></mat-divider>
+
+          <!-- R:R summary -->
+          <h4 class="section-label">Risk Summary</h4>
+          <div class="rr-summary">
+            <div class="rr-item">
+              <span class="rr-label">Risk : Reward</span>
+              <span class="rr-value" [class]="rrClass(selected.riskReward)">
+                1 : {{ selected.riskReward | number:'1.1-1' }}
+              </span>
+            </div>
+            <div class="rr-item">
+              <span class="rr-label">Stop Distance</span>
+              <span class="rr-value">
+                {{ (selected.entryPrice - selected.stopLoss) | number:'1.3-3' }}
+              </span>
+            </div>
+            <div class="rr-item">
+              <span class="rr-label">TP1 Distance</span>
+              <span class="rr-value success">
+                {{ (selected.takeProfit1 - selected.entryPrice) | number:'1.3-3' }}
+              </span>
+            </div>
+          </div>
+
+          <mat-divider class="divider"></mat-divider>
+
+          <!-- Reasoning -->
+          <h4 class="section-label">Analysis</h4>
+          <p class="reasoning">{{ selected.reasoning }}</p>
+
+        </mat-card-content>
+
+        <mat-card-actions>
+          <button mat-stroked-button (click)="selected = null">
+            Dismiss
+          </button>
+          <button mat-flat-button color="warn"
+                  (click)="openClose(selected, $event)">
+            <mat-icon>close</mat-icon>
+            Close Position
+          </button>
+        </mat-card-actions>
+      </mat-card>
+    </div>
+
+  </div>
+</div>
