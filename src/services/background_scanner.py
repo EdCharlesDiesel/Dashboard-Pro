@@ -173,6 +173,67 @@ def _setup_summary(r: dict) -> dict:
     }
 
 
+_EXEC_ENGINE = None
+
+
+def _execution_engine():
+    """SQLAlchemy engine for the execution queue, or ``None`` if unavailable.
+
+    Built from ``db_config()`` rather than ``DATABASE_URL`` directly: that is the
+    repo's single resolver, so this works unchanged in the container (DB_* env)
+    and on the host (secrets.toml), instead of silently falling back to
+    localhost the way a raw env read would.
+    """
+    global _EXEC_ENGINE
+    if _EXEC_ENGINE is None:
+        from sqlalchemy import create_engine
+
+        from src.core.secrets import db_config
+
+        cfg = db_config()
+        _EXEC_ENGINE = create_engine(
+            f"postgresql+psycopg2://{cfg['user']}:{cfg['password']}"
+            f"@{cfg['host']}:{cfg['port']}/{cfg['dbname']}",
+            pool_pre_ping=True)
+    return _EXEC_ENGINE
+
+
+def _enqueue_for_execution(fresh: List) -> int:
+    """Put fresh confluences on the execution queue. Returns how many landed.
+
+    Two conversions the executor depends on, both silent if wrong:
+    `EUR/USD` -> `EURUSD` (the gate parses the quote currency positionally) and
+    `LONG` -> `buy` (it compares against lowercase, so an uppercased direction
+    would be read as the opposite side).
+
+    Nothing here decides whether to trade — `gate.run_gate()` does that on the
+    executor side, against the live book and market. This only offers.
+    """
+    from src.execution import queue as exec_queue
+
+    engine = _execution_engine()
+    if engine is None:
+        return 0
+
+    placed = 0
+    for c in fresh:
+        symbol = c.pair.replace("/", "")
+        side = "buy" if c.direction.upper() == "LONG" else "sell"
+        signal_id = exec_queue.make_signal_id(
+            symbol, side, c.entry, c.sl, datetime.now(), source="bg_scanner")
+        ok = exec_queue.enqueue_signal(
+            engine, signal_id=signal_id, symbol=symbol, direction=side,
+            entry=c.entry, stop=c.sl, tp1=c.tp1, tp2=c.tp2,
+            source="bg_scanner",
+            meta={"ranker_pct": c.ranker_pct, "ranker_grade": c.ranker_grade,
+                  "house_direction": c.house_direction,
+                  "house_score": c.house_score, "fib_status": c.fib_status,
+                  "rr1": c.rr1, "pair": c.pair})
+        if ok:
+            placed += 1
+    return placed
+
+
 def scan_once() -> dict:
     """One full cycle: ingest → score → store board → persist/email Grade A.
 
@@ -287,6 +348,26 @@ def scan_once() -> dict:
                     telegrammed = len(fresh)
                 else:
                     logger.warning("[bg-scanner] confluence telegram failed: %s", msg_tg)
+
+                # Execution queue — opt-in, and in its own try/except.
+                #
+                # Behind EXECUTOR_ENQUEUE because deploying a build that
+                # happens to contain this code must never start queueing
+                # orders: automation is switched on deliberately or not at all.
+                #
+                # Isolated because alerting predates it and must not regress.
+                # A Postgres outage may cost the queue; it may not cost the
+                # message that wakes someone at 3am. That is also why this sits
+                # after both channels rather than before them.
+                if os.environ.get("EXECUTOR_ENQUEUE") == "1":
+                    try:
+                        queued = _enqueue_for_execution(fresh)
+                        if queued:
+                            logger.info("[bg-scanner] queued %d signal(s) for "
+                                        "execution", queued)
+                    except Exception as exc:
+                        logger.warning("[bg-scanner] execution enqueue failed "
+                                       "(alert already sent): %s", exc)
 
                 # filter_new() records keys as seen, so it runs once and only
                 # if something actually arrived. Marking on email alone would
