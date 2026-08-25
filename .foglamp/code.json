@@ -41,8 +41,8 @@
  "pages": {
   "dir": {
    "path": "pages/",
-   "count": 57,
-   "loc": 22758,
+   "count": 60,
+   "loc": 23176,
    "sample": [
     {
      "path": "pages/15m-fib-entry.py",
@@ -735,7 +735,7 @@
  "scanner": {
   "file": {
    "path": "src/services/background_scanner.py",
-   "loc": 337,
+   "loc": 418,
    "doc": "Unattended ingest + score daemon — the app's data streams in day & night.",
    "classes": [],
    "functions": [
@@ -770,6 +770,18 @@
      "kind": "private"
     },
     {
+     "name": "_execution_engine",
+     "sig": "()",
+     "doc": "SQLAlchemy engine for the execution queue, or ``None`` if unavailable.",
+     "kind": "private"
+    },
+    {
+     "name": "_enqueue_for_execution",
+     "sig": "(fresh) -> int",
+     "doc": "Put fresh confluences on the execution queue. Returns how many landed.",
+     "kind": "private"
+    },
+    {
      "name": "scan_once",
      "sig": "() -> dict",
      "doc": "One full cycle: ingest → score → store board → persist/email Grade A.",
@@ -786,6 +798,8 @@
     "src.core",
     "src.core.bias",
     "src.core.observability",
+    "src.core.secrets",
+    "src.execution",
     "src.instruments",
     "src.pages_lib.fib_entry",
     "src.pages_lib.setup_ranker",
