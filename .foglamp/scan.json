@@ -38,7 +38,7 @@
   "graph": {
     "nodes": [
       { "id": "cockpit", "label": "Daily Trading cockpit", "kind": "entry", "sub": "app.py -> DailyTradingPage", "sourceRef": "app.py", "detail": "Bloomberg-style terminal entry point; reads the worker's precomputed board instead of scoring live." },
-      { "id": "pages", "label": "57 signal & tool pages", "kind": "entry", "sub": "pages/*.py", "sourceRef": "pages/", "detail": "One Streamlit page per method (trend, confluence, COT, seasonality, fib, smart money...); each persists its own signals." },
+      { "id": "pages", "label": "58 signal & tool pages", "kind": "entry", "sub": "pages/*.py", "sourceRef": "pages/", "detail": "One Streamlit page per method (trend, confluence, COT, seasonality, fib, smart money...); each persists its own signals." },
       { "id": "journal", "label": "Trade Journal page", "kind": "entry", "sub": "pages/trade-journal.py", "sourceRef": "pages/trade-journal.py", "detail": "Closes the loop: imports broker statements and grades every signal source on realised outcomes." },
       { "id": "mcp-server", "label": "MT5 MCP server", "kind": "entry", "sub": "python -m src.services.mt5_mcp", "sourceRef": "src/services/mt5_mcp.py", "group": "AI surfaces", "detail": "Standalone stdio process exposing the live terminal to an AI client. Never imported by a page - it holds the MT5 handle open." },
 

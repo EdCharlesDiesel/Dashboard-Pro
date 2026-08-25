@@ -103,6 +103,7 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("VWAP", "VWAP-EMA Gold",         "🟡", "pages/vwap-ema-gold.py"),
         NavEntry("PRDX", "Instrument Predictor",  "🔮", "pages/instrument-predictor.py"),
         NavEntry("DXAU", "DXY vs Gold",           "💵", "pages/dxy-gold.py"),
+        NavEntry("CIDX", "Currency Strength Index", "📈", "pages/currency_strength_index.py"),
         NavEntry("XPTU", "Platinum Monitor",      "⚪", "pages/platinum_tab.py"),
         NavEntry("IDXC", "Indices Correlation",   "🇺🇸", "pages/indices-correlation.py"),
         NavEntry("DTRN", "Daily Trend",           "📈", "pages/daily-trend.py"),
