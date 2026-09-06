@@ -67,6 +67,7 @@ NAV_SECTIONS: List[tuple] = [
     ]),
     ("📋 PRE-SESSION", [
         NavEntry("TDAY", "Today's Trades",     "🎯", "pages/todays-trades.py"),
+        NavEntry("WEEK", "This Week's Trades", "📆", "pages/weeks-trades.py"),
         NavEntry("RANK", "Setup Ranker",       "🎰", "pages/setup-ranker.py"),
         NavEntry("TSIG", "Trend Signals",      "📡", "pages/trend-signals.py"),
         NavEntry("CCYS", "Currency Strength",  "💪", "pages/currency-strength.py"),
@@ -94,38 +95,46 @@ NAV_SECTIONS: List[tuple] = [
         NavEntry("COTX", "COT Composite Signal",    "🧩", "pages/cot_composite_trade_signal.py"),
         NavEntry("COTB", "COT Composite Backtest",  "🧪", "pages/cot_trade_signal_walk_forward_backtest_harness.py"),
     ]),
-    ("🔬 RESEARCH LAB — on demand, never mid-session", [
-        NavEntry("AMD",  "AMD Scanner",           "📊", "pages/amd-scanner.py"),
-        NavEntry("LEAD", "Leading Indicators",    "🧲", "pages/leading-indicators.py"),
-        NavEntry("20DB", "20-Day Breakout",       "🚀", "pages/twenty_day_breakout_tab.py"),
-        NavEntry("CMEF", "CME FX Futures",        "📦", "pages/cme-futures-volume.py"),
-        NavEntry("PRED", "Predictive Analytics",  "💱", "pages/predictive.py"),
-        NavEntry("VWAP", "VWAP-EMA Gold",         "🟡", "pages/vwap-ema-gold.py"),
-        NavEntry("PRDX", "Instrument Predictor",  "🔮", "pages/instrument-predictor.py"),
+    ("🔗 CROSS-ASSET & MACRO — what is moving what", [
         NavEntry("DXAU", "DXY vs Gold",           "💵", "pages/dxy-gold.py"),
         NavEntry("CIDX", "Currency Strength Index", "📈", "pages/currency_strength_index.py"),
         NavEntry("XPTU", "Platinum Monitor",      "⚪", "pages/platinum_tab.py"),
         NavEntry("IDXC", "Indices Correlation",   "🇺🇸", "pages/indices-correlation.py"),
-        NavEntry("DTRN", "Daily Trend",           "📈", "pages/daily-trend.py"),
-        NavEntry("DMCD", "Daily MACD",            "📊", "pages/daily-macd.py"),
+        NavEntry("DISC", "Disconnect Monitor",    "🔌", "pages/disconnect_monitor_tab.py"),
+        NavEntry("CMEF", "CME FX Futures",        "📦", "pages/cme-futures-volume.py"),
+        NavEntry("SMRT", "Smart Money",           "🕵️", "pages/smart_money_tab.py"),
+        NavEntry("RSKR", "Risk Reversals",        "🎭", "pages/risk_reversal_tab.py"),
+    ]),
+    ("📐 STRUCTURE & SETUPS — where is the level", [
         NavEntry("STRC", "Market Structure",      "🏗️", "pages/market-structure.py"),
         NavEntry("4HCZ", "4H Confluence Zone",    "🎯", "pages/4H-confluence-zone.py"),
-        NavEntry("EWKV", "Busy-Week Anatomy",     "📅", "pages/event_week_vol_tab.py"),
-        NavEntry("DISC", "Disconnect Monitor",    "🔌", "pages/disconnect_monitor_tab.py"),
-        NavEntry("LQHT", "Liquidity Hunt Lab",    "🎣", "pages/liquidity_hunt_tab.py"),
-        NavEntry("ONDR", "Overnight Drift",       "🌙", "pages/overnight_drift_tab.py"),
-        NavEntry("HOLD", "Optimal Holding Period","⏱️", "pages/holding_period_tab.py"),
-        NavEntry("QNTM", "Quant Models Lab",      "🧮", "pages/quant_models_tab.py"),
-        NavEntry("MTGL", "Martingale Diagnostics","🎲", "pages/martingale_tab.py"),
-        NavEntry("STOC", "Stochastic Calculus",  "🎓", "pages/stochastic_tab.py"),
-        NavEntry("FCST", "Forecast",              "🔭", "pages/forecast_tab.py"),
-        NavEntry("SURP", "Surprise Awareness",    "😲", "pages/surprise_tab.py"),
-        NavEntry("EVNT", "Event Reaction Map",    "🧾", "pages/nfp_reaction.py"),
-        NavEntry("SEAS", "Seasonality",           "📅", "pages/seasonality.py"),
-        NavEntry("RSKR", "Risk Reversals",        "🎭", "pages/risk_reversal_tab.py"),
-        NavEntry("SMRT", "Smart Money",           "🕵️", "pages/smart_money_tab.py"),
         NavEntry("RIBN", "Fibo Ribbon",           "🎗️", "pages/fibo-ribbon.py"),
         NavEntry("PIVB", "Biased Pivots",         "🧿", "pages/biased-pivots.py"),
+        NavEntry("LQHT", "Liquidity Hunt Lab",    "🎣", "pages/liquidity_hunt_tab.py"),
+        NavEntry("20DB", "20-Day Breakout",       "🚀", "pages/twenty_day_breakout_tab.py"),
+        NavEntry("AMD",  "AMD Scanner",           "📊", "pages/amd-scanner.py"),
+        NavEntry("VWAP", "VWAP-EMA Gold",         "🟡", "pages/vwap-ema-gold.py"),
+    ]),
+    ("📈 TREND & MOMENTUM — which way, how strong", [
+        NavEntry("DTRN", "Daily Trend",           "📈", "pages/daily-trend.py"),
+        NavEntry("DMCD", "Daily MACD",            "📊", "pages/daily-macd.py"),
+        NavEntry("LEAD", "Leading Indicators",    "🧲", "pages/leading-indicators.py"),
+    ]),
+    ("🧮 QUANT & MODELS — what the maths says", [
+        NavEntry("QNTM", "Quant Models Lab",      "🧮", "pages/quant_models_tab.py"),
+        NavEntry("STOC", "Stochastic Calculus",  "🎓", "pages/stochastic_tab.py"),
+        NavEntry("FCST", "Forecast",              "🔭", "pages/forecast_tab.py"),
+        NavEntry("PRED", "Predictive Analytics",  "💱", "pages/predictive.py"),
+        NavEntry("PRDX", "Instrument Predictor",  "🔮", "pages/instrument-predictor.py"),
+        NavEntry("MTGL", "Martingale Diagnostics","🎲", "pages/martingale_tab.py"),
+        NavEntry("HOLD", "Optimal Holding Period","⏱️", "pages/holding_period_tab.py"),
+        NavEntry("ONDR", "Overnight Drift",       "🌙", "pages/overnight_drift_tab.py"),
+    ]),
+    ("🗓️ EVENTS & SEASONALITY — what the calendar says", [
+        NavEntry("EVNT", "Event Reaction Map",    "🧾", "pages/nfp_reaction.py"),
+        NavEntry("SURP", "Surprise Awareness",    "😲", "pages/surprise_tab.py"),
+        NavEntry("EWKV", "Busy-Week Anatomy",     "📅", "pages/event_week_vol_tab.py"),
+        NavEntry("SEAS", "Seasonality",           "📅", "pages/seasonality.py"),
     ]),
     ("📖 REFERENCE", [
         NavEntry("CHCK", "Daily Checklist (18-point)", "📋", "app.py"),
@@ -153,6 +162,26 @@ NAV_SECTIONS: List[tuple] = [
 NAV_ENTRIES: List[NavEntry] = [e for _, entries in NAV_SECTIONS for e in entries]
 
 
+#: Sections that start expanded, matched on the stable ASCII part of the title —
+#: the emoji prefix and the em-dash suffix are decoration and do change.
+#:
+#: This is the daily path, and the choice is the one this module's header
+#: already argues: it is "walked in order, <=8 touches", while Weekend and the
+#: research sections are "visited on demand". Everything else starts closed, so
+#: adding a section cannot quietly lengthen the sidebar again.
+_OPEN_BY_DEFAULT = ("MORNING BRIEF", "PRE-SESSION", "SESSION")
+
+
+def section_opens_by_default(title: str) -> bool:
+    """True when a sidebar section should render expanded.
+
+    Kept separate from rendering so it can be tested: `src/pages_lib/*` is
+    omitted from coverage, and a decision buried inside a Streamlit call would
+    have no test at all.
+    """
+    return any(key in title for key in _OPEN_BY_DEFAULT)
+
+
 def render_sidebar_nav() -> None:
     """Render the uniform sidebar navigation (call inside `with st.sidebar:`).
 
@@ -170,16 +199,24 @@ def render_sidebar_nav() -> None:
         logger.warning("[nav] background scanner failed to start: %s", exc)
 
     for section, entries in NAV_SECTIONS:
-        st.caption(section)
-        for e in entries:
-            try:
-                st.page_link(e.path, label=e.label, icon=e.icon)
-            except Exception as exc:
-                # st.page_link needs the multipage registry (absent in bare/test
-                # runs) and raises if a page file was renamed/missing — skip the
-                # entry rather than crash the whole page, but log it: a silent
-                # `continue` here previously made a bad entry indistinguishable
-                # from "the dev server just needs a restart."
-                logger.warning("[nav] page_link failed for %s (%s): %s",
-                               e.code, e.path, exc)
-                continue
+        # One expander per section. 62 links in 10 sections is well organised but
+        # no shorter when every one is always drawn — reaching REFERENCE meant
+        # scrolling past everything.
+        with st.expander(section, expanded=section_opens_by_default(section)):
+            _render_entries(entries)
+
+
+def _render_entries(entries: List[NavEntry]) -> None:
+    """Draw one section's links, skipping any that will not resolve."""
+    for e in entries:
+        try:
+            st.page_link(e.path, label=e.label, icon=e.icon)
+        except Exception as exc:
+            # st.page_link needs the multipage registry (absent in bare/test
+            # runs) and raises if a page file was renamed/missing — skip the
+            # entry rather than crash the whole page, but log it: a silent
+            # `continue` here previously made a bad entry indistinguishable
+            # from "the dev server just needs a restart."
+            logger.warning("[nav] page_link failed for %s (%s): %s",
+                           e.code, e.path, exc)
+            continue
