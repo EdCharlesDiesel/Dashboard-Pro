@@ -84,6 +84,22 @@ def _no_live_db(request, monkeypatch):
     monkeypatch.setattr(
         _secrets, "_section",
         lambda name: {} if name == "database" else _real_section(name))
+    # Emptying [database] is only half the guarantee. `db_config()` falls back to
+    # DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD and DATABASE_URL, and in the
+    # containers those ARE set — so the comment above was exactly backwards: the
+    # secrets stub does not "model the container", it is defeated there.
+    #
+    # Measured 2026-09-06: 18 tests failed inside the container that pass on the
+    # host, with shapes like `assert {'a', 'b'} == set()` — a NotifyCache that
+    # found real rows because its Postgres mirror was live. They read as
+    # breakage; they were a real database leaking into tests that assume none.
+    #
+    # Removing the vars, not blanking them: an empty DB_HOST would still be a
+    # "set" value for anything reading os.environ directly, whereas absent is
+    # what a developer machine actually looks like.
+    for _var in ("DATABASE_URL", "DB_HOST", "DB_PORT", "DB_NAME",
+                 "DB_USER", "DB_PASSWORD"):
+        monkeypatch.delenv(_var, raising=False)
     # Neutralize the worker's precomputed board for the same reason: a developer
     # machine may carry a real worker_board.json (from a live scan), and its
     # JSON fallback would otherwise shadow the live house-view compute that
