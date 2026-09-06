@@ -59,14 +59,40 @@ def _release_job() -> dict:
     return jobs["release"]
 
 
-def test_release_runs_only_after_a_successful_deploy():
-    """A release advertising a version that never reached Railway is worse
-    than a stale one, so the job chains behind `deploy` rather than beside it."""
-    needs = _release_job().get("needs")
-    needs = [needs] if isinstance(needs, str) else (needs or [])
-    assert "deploy" in needs, (
-        f"release.needs is {needs!r} - it must include `deploy`, or a release "
-        f"can be published for a deploy that failed")
+def test_release_survives_a_failed_deploy():
+    """A deploy failure must not erase a version from the Releases page.
+
+    This reverses the original rule, deliberately. The release job used to
+    chain behind `deploy`, on the argument that a release advertising a
+    version that never reached Railway is worse than a stale Releases page.
+
+    Measured 2026-09-06, that trade went the wrong way: every Production push
+    since 2026-08-25 failed at the deploy's secrets sanity-check, so the
+    Releases page sat three months behind at V1.0.1 while VERSION read
+    1.10.67 - and ProductionV1.10.35 existed as a tag with no release. A page
+    that is three months wrong is not 'stale', it is misleading.
+
+    The honesty the old rule protected is kept by
+    `test_the_notes_record_the_deploy_outcome` below: the release still says
+    whether it reached Railway.
+    """
+    job = _release_job()
+    needs = job.get("needs", [])
+    assert "build" in needs, "release must still require a green build"
+    guard = str(job.get("if", ""))
+    assert "always()" in guard, (
+        "release must run even when an earlier job failed, or a deploy "
+        "problem silently skips it - see this test's docstring")
+    assert "needs.build.result" in guard, (
+        "always() alone would release on a RED build; the guard must still "
+        "require build to have succeeded")
+
+
+def test_the_notes_record_the_deploy_outcome():
+    """Decoupling is only safe if the release cannot misrepresent itself."""
+    body = _executable_text(_release_job())
+    assert "needs.deploy.result" in body, (
+        "the release notes must state whether the Railway deploy succeeded")
 
 
 def test_release_can_write_tags():
@@ -152,3 +178,57 @@ def test_a_rerun_does_not_fail_the_pipeline():
     assert "release view" in body, (
         "the job must check whether the release already exists (gh release "
         "view) and skip, or a re-run fails on the existing tag")
+
+
+def test_a_production_pr_must_bump_the_version():
+    """A merge that forgets the bump produces no release and no error.
+
+    The release step exits 0 with a notice when the tag already exists, which
+    is right for a re-run and wrong for a forgotten bump - the two are
+    indistinguishable after the fact. This check moves the failure to the pull
+    request, where it can still be fixed.
+    """
+    jobs = _workflow()["jobs"]
+    assert "version-bump" in jobs, (
+        "no job enforces that VERSION increases on a Production PR")
+    guard = str(jobs["version-bump"].get("if", ""))
+    assert "pull_request" in guard, (
+        "the check must run on pull requests, not only after the merge - "
+        "after the merge it is too late to fix")
+    assert "Production" in guard, (
+        "the check must be scoped to PRs targeting Production")
+
+
+def test_the_bump_check_compares_against_the_published_tags():
+    """Comparing against anything else re-introduces a hand-maintained copy."""
+    body = _executable_text(_workflow()["jobs"]["version-bump"])
+    assert "ProductionV" in body, (
+        "the check must compare VERSION against the existing ProductionV tags")
+    assert "VERSION" in body, "the check never reads the VERSION file"
+
+
+import subprocess
+import sys
+
+
+def _compare(new: str, old: str) -> int:
+    """Run the same comparison the workflow runs."""
+    script = (
+        "import sys\n"
+        "def parts(v):\n"
+        "    core = v.split('-')[0].split('+')[0]\n"
+        "    return tuple(int(x) for x in core.split('.'))\n"
+        "new, old = sys.argv[1], sys.argv[2]\n"
+        "sys.exit(0 if parts(new) > parts(old) else 1)\n"
+    )
+    return subprocess.run([sys.executable, "-c", script, new, old]).returncode
+
+
+def test_the_version_comparison_is_numeric_not_lexical():
+    """'1.10.67' vs '1.9.0' is the case a string compare gets wrong."""
+    assert _compare("1.10.67", "1.9.0") == 0
+    assert _compare("1.9.0", "1.10.67") == 1
+
+
+def test_an_equal_version_is_rejected():
+    assert _compare("1.10.67", "1.10.67") == 1
