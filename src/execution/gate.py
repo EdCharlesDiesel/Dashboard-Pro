@@ -70,6 +70,11 @@ class MarketSnapshot:
     trade_allowed: bool = True
     stops_level_points: float = 0.0     # broker minimum stop distance
     margin_per_lot: float = 0.0
+    #: ATR14 on D1 in *price* units, or 0.0 when unknown. Supplied by the
+    #: caller - gate.py is pure and computes no indicators. Limits expressed
+    #: as ATR multiples mean the same thing on a $1.16 pair and a $4,430 one;
+    #: absolute point counts do not.
+    atr: float = 0.0
 
     @property
     def spread_points(self) -> float:
@@ -98,19 +103,36 @@ class GateConfig:
     symbol_whitelist: tuple[str, ...] = ("XAUUSD", "XAGUSD")
 
     # --- sanity on the levels themselves -----------------------------------
-    # The 1.10000 / 1.09500 / 1.11000 stub would fail on both of these.
-    max_entry_deviation_points: float = 300.0   # entry vs current market
+    # 300 points is $0.30 on gold, so every pullback limit entry read as a
+    # stub. 1x ATR passes a $10 gold pullback (0.096 ATR) and still rejects
+    # the 1.10000-vs-1.16279 stub (14.9 ATR).
+    max_entry_deviation_atr_mult: float = 1.0
+    max_entry_deviation_points: float = 300.0   # fallback when atr <= 0
     reject_suspicious_round: bool = True
 
     # --- risk shape ---------------------------------------------------------
     min_stop_points: float = 50.0
+    # 3x ATR is a wide-but-sane ceiling on every instrument: $313 on gold,
+    # $7.66 on silver, 126 pips on EUR/USD. Used whenever snap.atr > 0.
+    max_stop_atr_mult: float = 3.0
+    # Fallback only, for snap.atr <= 0. Absolute points are wrong across
+    # instruments (5000 = 4.61% of EUR/USD but 0.113% of gold), so this is
+    # deliberately *not* the primary test.
     max_stop_points: float = 5000.0
     min_rr_tp1: float = 1.0
     default_risk_pct: float = 0.5
     max_risk_pct: float = 2.0
 
     # --- execution conditions ----------------------------------------------
-    max_spread_points: float = 40.0
+    # An absolute point count means something different on every instrument:
+    # 40 points is 6.7x EUR/USD's typical spread but a quarter of gold's
+    # ordinary 182, so this limit blocked every gold trade while passing
+    # silver. What matters is how much of the trade's own risk the spread
+    # consumes, which is scale-free.
+    max_spread_frac_of_stop: float = 0.10
+    # Kept as a backstop for a genuinely broken quote, not as the primary
+    # test. Raised so it cannot fire on a normal metals spread.
+    max_spread_points: float = 100_000.0
 
     # --- exposure limits ----------------------------------------------------
     max_concurrent_positions: int = 3
@@ -148,33 +170,40 @@ def looks_synthetic(sig: Signal, snap: MarketSnapshot) -> bool:
     2.00R. Real fib legs do not land on grid points like that.
 
     Flags when the entry AND stop are both round to a suspiciously coarse grid
-    relative to the instrument's precision. Deliberately conservative: it is
-    far cheaper to hand-check a false positive than to auto-execute a stub.
+    derived from the entry's own order of magnitude — XAU/USD near 4600 gives
+    a $10 grid, EUR/USD near 1.16 gives a $0.01 grid — rather than the
+    broker's digit convention. Deliberately conservative: it is far cheaper
+    to hand-check a false positive than to auto-execute a stub.
     """
-    if snap.point <= 0:
+    # A stub is a level a human typed into a config, and the tell is that it
+    # is round at a coarseness a *measured* level would essentially never hit.
+    # The old grid was `snap.point * 1000`, whose docstring assumed gold quotes
+    # at 2 digits; this broker quotes it at 3, so the grid came out $1.00
+    # instead of $10 and rejected real entries (4482, 4649 and 4626.5 all
+    # appear in trade_setups). Anchoring to the entry's order of magnitude
+    # makes "round" mean the same thing on a $1.16 pair and a $4,600 one:
+    #
+    #     EUR/USD 1.16  -> grid 0.01   half 0.005   (identical to before)
+    #     XAG/USD 66    -> grid 0.1    half 0.05
+    #     XAU/USD 4604  -> grid 10     half 5
+    if sig.entry == 0 or sig.stop_distance <= 0:
         return False
-
-    # A "coarse grid" = 1000 points. For a 5-digit FX pair that is 100 pips;
-    # for gold at 0.01 point it is $10.
-    grid = snap.point * 1000.0
+    grid = 10.0 ** (math.floor(math.log10(abs(sig.entry))) - 2)
 
     def on_grid(x: float, g: float) -> bool:
         return abs(x / g - round(x / g)) < 1e-6
 
     half_grid = grid / 2.0
-    entry_round = on_grid(sig.entry, half_grid)
-    stop_round = on_grid(sig.stop, half_grid)
-    if not (entry_round and stop_round):
+    if not (on_grid(sig.entry, half_grid) and on_grid(sig.stop, half_grid)):
         return False
 
-    # Both round AND the R-multiple to tp1 is a clean integer -> almost
-    # certainly generated, not measured.
-    if sig.tp1 is not None and sig.stop_distance > 0:
-        rr = abs(sig.tp1 - sig.entry) / sig.stop_distance
-        if abs(rr - round(rr)) < 1e-6:
-            return True
-
-    return True
+    # BOTH conditions, which is what the docstring has always claimed. The
+    # previous version fell through to a bare `return True`, so the R test
+    # never affected the answer and roundness alone was enough.
+    if sig.tp1 is None:
+        return False
+    rr = abs(sig.tp1 - sig.entry) / sig.stop_distance
+    return abs(rr - round(rr)) < 1e-6
 
 
 def classify_order_type(sig: Signal, snap: MarketSnapshot,
@@ -238,8 +267,14 @@ def run_gate(sig: Signal, snap: MarketSnapshot, acct: AccountState,
         stop_pts = sig.stop_distance / snap.point
         if stop_pts < cfg.min_stop_points:
             res.block(f"stop {stop_pts:.0f}pts below minimum {cfg.min_stop_points:.0f}")
-        if stop_pts > cfg.max_stop_points:
-            res.block(f"stop {stop_pts:.0f}pts above maximum {cfg.max_stop_points:.0f}")
+        if snap.atr > 0:
+            mult = sig.stop_distance / snap.atr
+            if mult > cfg.max_stop_atr_mult:
+                res.block(f"stop {mult:.2f}x ATR above maximum "
+                          f"{cfg.max_stop_atr_mult:.1f}x")
+        elif stop_pts > cfg.max_stop_points:
+            res.block(f"stop {stop_pts:.0f}pts above maximum "
+                      f"{cfg.max_stop_points:.0f}")
         if snap.stops_level_points and stop_pts < snap.stops_level_points:
             res.block(f"stop {stop_pts:.0f}pts inside broker stops level "
                       f"{snap.stops_level_points:.0f}")
@@ -247,16 +282,31 @@ def run_gate(sig: Signal, snap: MarketSnapshot, acct: AccountState,
     # --- is this signal anywhere near the actual market? --------------------
     if snap.point > 0:
         ref = snap.ask if sig.is_buy else snap.bid
-        dev = abs(sig.entry - ref) / snap.point
-        if dev > cfg.max_entry_deviation_points:
-            res.block(f"entry {dev:.0f}pts from market "
-                      f"(max {cfg.max_entry_deviation_points:.0f}) — stale or stub")
+        dev_price = abs(sig.entry - ref)
+        if snap.atr > 0:
+            dev_atr = dev_price / snap.atr
+            if dev_atr > cfg.max_entry_deviation_atr_mult:
+                res.block(f"entry {dev_atr:.2f}x ATR from market "
+                          f"(max {cfg.max_entry_deviation_atr_mult:.1f}x) "
+                          f"— stale or stub")
+        else:
+            dev = dev_price / snap.point
+            if dev > cfg.max_entry_deviation_points:
+                res.block(f"entry {dev:.0f}pts from market "
+                          f"(max {cfg.max_entry_deviation_points:.0f}) — "
+                          f"stale or stub")
 
     if cfg.reject_suspicious_round and looks_synthetic(sig, snap):
         res.block("levels look synthetic (round grid + integer R) — "
                   "suspected placeholder, not a measured fib leg")
 
     # --- execution conditions ----------------------------------------------
+    if sig.stop_distance > 0 and snap.point > 0:
+        spread_price = snap.ask - snap.bid
+        frac = spread_price / sig.stop_distance
+        if frac > cfg.max_spread_frac_of_stop:
+            res.block(f"spread {snap.spread_points:.0f}pts is {frac:.1%} of the "
+                      f"stop (max {cfg.max_spread_frac_of_stop:.0%})")
     if snap.spread_points > cfg.max_spread_points:
         res.block(f"spread {snap.spread_points:.0f}pts above "
                   f"{cfg.max_spread_points:.0f}")
