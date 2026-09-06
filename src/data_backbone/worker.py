@@ -55,16 +55,47 @@ def refresh_all() -> None:
     log.info("refresh complete")
 
 
+def schedule_jobs(sched) -> None:
+    """Register every recurring job on `sched`.
+
+    Separate from `main()` so the wiring can be asserted: `main()` ends in
+    `sched.start()`, which blocks, so a job that is never registered would
+    otherwise be invisible — the collector imports fine, passes its own tests,
+    and simply never runs.
+    """
+    # after the US cash close (22:00 UTC ~ 17:00 ET) on weekdays
+    sched.add_job(refresh_all, "cron", day_of_week="mon-fri", hour=22, minute=0,
+                  id="daily_refresh", max_instances=1, coalesce=True)
+
+    # Treasury publishes Debt to the Penny once a day, after the refresh above.
+    # backfill stays False: the daily run fetches one page. Walking all ~4,000
+    # pages nightly would work, show nothing unusual, and hammer a free public
+    # endpoint for data that has not changed.
+    sched.add_job(_collect_fiscal, "cron", hour=23, minute=30,
+                  id="fiscal_debt", kwargs={"backfill": False},
+                  max_instances=1, coalesce=True)
+
+
+def _collect_fiscal(*, backfill: bool = False) -> None:
+    """Scheduler entry point. Never lets one collector take down the worker."""
+    try:
+        from src.data_backbone.fiscal_jobs import collect_debt_to_penny
+
+        written = collect_debt_to_penny(db.get_engine(), backfill=backfill)
+        log.info("fiscal: %d point(s) written", written)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("fiscal collection failed: %s", exc)
+
+
 def main() -> None:
     db.init_db()
     log.info("db initialised")
     refresh_all()  # warm the store immediately
 
     sched = BlockingScheduler(timezone="UTC")
-    # after the US cash close (22:00 UTC ~ 17:00 ET) on weekdays
-    sched.add_job(refresh_all, "cron", day_of_week="mon-fri", hour=22, minute=0,
-                  id="daily_refresh", max_instances=1, coalesce=True)
-    log.info("scheduler started — daily refresh weekdays 22:00 UTC")
+    schedule_jobs(sched)
+    log.info("scheduler started — daily refresh weekdays 22:00 UTC, "
+             "fiscal 23:30 UTC")
     sched.start()
 
 
