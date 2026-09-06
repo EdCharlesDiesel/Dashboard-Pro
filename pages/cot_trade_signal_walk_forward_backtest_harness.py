@@ -191,7 +191,7 @@ def simple_equity_curve(signal_df: pd.DataFrame, horizon: int = 1) -> pd.DataFra
     df["position_size"] = (df["score"] / 3.0).clip(-1, 1)
     df["strategy_ret"] = df["position_size"] * df["fwd_ret"]
     df["equity"] = (1 + df["strategy_ret"].fillna(0)).cumprod()
-    df["buy_hold_equity"] = (1 + df["price"].pct_change().fillna(0)).cumprod()
+    df["buy_hold_equity"] = (1 + df["price"].pct_change(fill_method=None).fillna(0)).cumprod()
     return df[["date", "state", "score", "fwd_ret", "strategy_ret", "equity", "buy_hold_equity"]]
 
 

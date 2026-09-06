@@ -75,7 +75,7 @@ class _CorrelationFetcher:
             close = cached_closes(list(tickers), period=period, interval=interval, ttl=600)
             if close is None or close.empty:
                 return None
-            return close.pct_change().dropna()
+            return close.pct_change(fill_method=None).dropna()
         except Exception:
             return None
 

@@ -226,7 +226,7 @@ def render_quant_models_tab() -> None:
             if px.empty:
                 st.warning("No data for this instrument.")
             else:
-                rets = px.pct_change().dropna()
+                rets = px.pct_change(fill_method=None).dropna()
                 try:
                     g = fit_garch(rets)
                 except (ImportError, ValueError) as exc:

@@ -19,13 +19,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Both real deploy targets, so neither becomes a blind spot:
-        #   3.12 -> runtime.txt (Streamlit Community Cloud)
-        #   3.14 -> Dockerfile (the containers, since 1.10.33)
-        # Testing only one of them is how the containers sat on 3.11 while every
-        # plan document claimed 3.14. See requirements.txt for why pandas stops
-        # at 2.3.3 rather than moving to 3.x.
-        python-version: ["3.12", "3.14"]
+        # 3.14 only — the version the containers actually run (Dockerfile,
+        # since 1.10.33) and the one the desk develops against.
+        #
+        # The quoting matters: `[3.14"]` parses as the *string* `3.14"`, so
+        # setup-python looks for a Python by that name, fails, and every run
+        # dies at "Set up Python" — build never passes, so deploy and release
+        # never run. It reads as "3.14 unavailable", not as a YAML fault.
+        #
+        # See requirements.txt for why pandas stops at 2.3.3 rather than 3.x.
+        python-version: ["3.14"]
 
     env:
       # Pages print ◇/emoji glyphs; force UTF-8 so stdout never crashes on CI.

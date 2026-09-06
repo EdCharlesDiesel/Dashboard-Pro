@@ -183,7 +183,7 @@ def _vol_regime(ticker: str) -> Optional[str]:
     try:
         from src.core.quant_models import fit_garch
         px = _daily(ticker)["Close"]
-        rets = px.pct_change().dropna()
+        rets = px.pct_change(fill_method=None).dropna()
         return fit_garch(rets)["regime"]
     except Exception:
         return None

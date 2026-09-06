@@ -23,15 +23,15 @@ def _aligned(a_close: pd.Series, b_close: pd.Series) -> pd.DataFrame:
 def daily_returns(a_close: pd.Series, b_close: pd.Series):
     """Aligned simple daily returns for both series (index-matched)."""
     df = _aligned(a_close, b_close)
-    return df["a"].pct_change().dropna(), df["b"].pct_change().dropna()
+    return df["a"].pct_change(fill_method=None).dropna(), df["b"].pct_change(fill_method=None).dropna()
 
 
 def rolling_correlation(a_close: pd.Series, b_close: pd.Series,
                         window: int) -> pd.Series:
     """Rolling Pearson correlation of the two series' daily returns."""
     df = _aligned(a_close, b_close)
-    ra = df["a"].pct_change()
-    rb = df["b"].pct_change()
+    ra = df["a"].pct_change(fill_method=None)
+    rb = df["b"].pct_change(fill_method=None)
     return ra.rolling(window).corr(rb)
 
 
