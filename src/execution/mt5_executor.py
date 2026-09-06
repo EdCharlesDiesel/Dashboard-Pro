@@ -96,6 +96,27 @@ def init_mt5():
     return mt5
 
 
+def atr14_from_rates(rates, period: int = 14) -> float:
+    """Mean true range over the last ``period`` bars, in price units.
+
+    Takes anything indexable by ``high``/``low``/``close`` - MT5 returns a
+    numpy recarray, tests pass dicts. Returns 0.0 when there is not enough
+    data, which the gate reads as "unknown" and falls back to point limits.
+    """
+    if rates is None or len(rates) < 2:
+        return 0.0
+    trs = []
+    for i in range(1, len(rates)):
+        cur, prev = rates[i], rates[i - 1]
+        hi, lo = float(cur["high"]), float(cur["low"])
+        pc = float(prev["close"])
+        trs.append(max(hi - lo, abs(hi - pc), abs(lo - pc)))
+    if not trs:
+        return 0.0
+    window = trs[-period:]
+    return sum(window) / len(window)
+
+
 def snapshot(mt5, symbol: str) -> MarketSnapshot | None:
     info = mt5.symbol_info(symbol)
     if info is None:
@@ -117,6 +138,16 @@ def snapshot(mt5, symbol: str) -> MarketSnapshot | None:
     except Exception:  # noqa: BLE001
         pass
 
+    # ATR14 on D1, in price units. Best-effort: the gate treats 0.0 as
+    # "unknown" and falls back to absolute point limits, so a terminal that
+    # will not serve rates degrades to today's behaviour rather than failing.
+    atr = 0.0
+    try:
+        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 1, 21)
+        atr = atr14_from_rates(rates)
+    except Exception:
+        log.warning("no D1 rates for %s - gate falls back to point limits", symbol)
+
     return MarketSnapshot(
         symbol=symbol,
         bid=float(tick.bid),
@@ -131,6 +162,7 @@ def snapshot(mt5, symbol: str) -> MarketSnapshot | None:
         trade_allowed=info.trade_mode != mt5.SYMBOL_TRADE_MODE_DISABLED,
         stops_level_points=float(getattr(info, "trade_stops_level", 0) or 0),
         margin_per_lot=margin_per_lot,
+        atr=atr,
     )
 
 
@@ -384,6 +416,31 @@ def reconcile(mt5, engine, lookback_hours: int = 48) -> None:
 # main loop
 # ---------------------------------------------------------------------------
 
+def build_gate_config() -> GateConfig:
+    """The executor's runtime GateConfig, from the environment.
+
+    Extracted from main() so it can be asserted on without a terminal or a
+    database. Any limit added here must stay consistent with GateConfig's
+    own defaults - an override that restores a superseded limit defeats the
+    gate's calibration while every unit test still passes.
+    """
+    return GateConfig(
+        symbol_whitelist=tuple(
+            s.strip().upper()
+            for s in os.environ.get("EXECUTOR_SYMBOLS", "XAUUSD,XAGUSD").split(",")
+            if s.strip()),
+        default_risk_pct=float(os.environ.get("EXECUTOR_RISK_PCT", "0.5")),
+        max_concurrent_positions=int(os.environ.get("EXECUTOR_MAX_POSITIONS", "3")),
+        max_daily_loss_r=float(os.environ.get("EXECUTOR_MAX_DAILY_LOSS_R", "3")),
+        # Spread is now judged against the stop it protects. The absolute
+        # points value stays only as a broken-quote backstop, so its default
+        # must match GateConfig's, not the superseded 40.
+        max_spread_points=float(os.environ.get("EXECUTOR_MAX_SPREAD_PTS", "100000")),
+        max_spread_frac_of_stop=float(
+            os.environ.get("EXECUTOR_MAX_SPREAD_FRAC", "0.10")),
+    )
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -398,16 +455,7 @@ def main() -> None:
     engine = create_engine(db_url, pool_pre_ping=True, pool_size=2)
     mt5 = init_mt5()
 
-    cfg = GateConfig(
-        symbol_whitelist=tuple(
-            s.strip().upper()
-            for s in os.environ.get("EXECUTOR_SYMBOLS", "XAUUSD,XAGUSD").split(",")
-            if s.strip()),
-        default_risk_pct=float(os.environ.get("EXECUTOR_RISK_PCT", "0.5")),
-        max_concurrent_positions=int(os.environ.get("EXECUTOR_MAX_POSITIONS", "3")),
-        max_daily_loss_r=float(os.environ.get("EXECUTOR_MAX_DAILY_LOSS_R", "3")),
-        max_spread_points=float(os.environ.get("EXECUTOR_MAX_SPREAD_PTS", "40")),
-    )
+    cfg = build_gate_config()
 
     _signal.signal(_signal.SIGINT, _stop)
     _signal.signal(_signal.SIGTERM, _stop)
