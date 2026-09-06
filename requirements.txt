@@ -12,8 +12,13 @@
 #    2.x API and avoiding the pandas-3 half of that combo. Do not "upgrade"
 #    pandas to 3.x here without re-testing that deploy.
 #
-# runtime.txt still pins 3.12 for Streamlit Community Cloud, so every version
-# here must also install on 3.12 — they all do.
+# Python 3.14 is the only target (Dockerfile, CI). runtime.txt — which pinned
+# 3.12 for Streamlit Community Cloud — was removed at 1.10.63 when that deploy
+# was retired.
+#
+# That does NOT unblock pandas 3.x. Two reasons were bundled above and only the
+# 3.12 one expired: 2.3.3 is what the containers run and what the whole suite is
+# verified against, and the segfault note stands on its own.
 plotly==6.7.0
 streamlit-autorefresh==1.0.1
 # TradingView lightweight-charts pilot — currently only the Leading Indicators

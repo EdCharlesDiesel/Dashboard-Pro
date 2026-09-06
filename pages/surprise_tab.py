@@ -275,7 +275,7 @@ def gold_oil_corr(window: int = 20) -> pd.Series | None:
                        axis=1, sort=True).dropna()
         if px.empty:
             return None
-        rets = px.pct_change().dropna()
+        rets = px.pct_change(fill_method=None).dropna()
         return rets["GC=F"].rolling(window).corr(rets["BZ=F"]).dropna()
     except Exception:
         return None

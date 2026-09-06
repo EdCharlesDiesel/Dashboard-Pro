@@ -469,7 +469,7 @@ def render_kpis(daily_data: Dict) -> None:
         with cols[i]:
             if df is not None and not df.empty:
                 price = df["Close"].iloc[-1]
-                change = df["Close"].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
+                change = df["Close"].pct_change(fill_method=None).iloc[-1] * 100 if len(df) > 1 else 0.0
                 # Domain convention: 5 decimals for FX (<100), 2–3 for JPY
                 # crosses / metals / indices.
                 fmt = f"{price:.5f}" if abs(price) < 100 else f"{price:,.2f}"
@@ -528,7 +528,7 @@ def render_overview_tab(daily_data: Dict):
         for pair, df in daily_data.items():
             if not df.empty:
                 price = df['Close'].iloc[-1]
-                change = df['Close'].pct_change().iloc[-1] * 100 if len(df) > 1 else 0.0
+                change = df['Close'].pct_change(fill_method=None).iloc[-1] * 100 if len(df) > 1 else 0.0
                 trend = "🟢 ▲" if change > 0 else ("🔴 ▼" if change < 0 else "⚪ –")
                 rows.append({"Pair": pair, "Price": _fmt_price(price),
                             "Change %": round(change, 2),

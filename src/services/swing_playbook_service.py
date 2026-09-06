@@ -188,7 +188,7 @@ def daily_sigma(instrument: str) -> Optional[float]:
     df = _daily_frame(inst.ticker, period="1y")
     if df is None or len(df) < 40:
         return None
-    rets = df["Close"].pct_change().dropna()
+    rets = df["Close"].pct_change(fill_method=None).dropna()
 
     try:
         from src.core.quant_models import fit_garch

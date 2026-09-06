@@ -258,7 +258,7 @@ def calculate_metrics(trades: list, equity_curve: list):
     profit_factor = wins["r_multiple"].sum() / loss_sum if loss_sum else np.inf
 
     eq = pd.Series(equity_curve)
-    rets = eq.pct_change().dropna()
+    rets = eq.pct_change(fill_method=None).dropna()
     sharpe = (rets.mean() / rets.std()) * np.sqrt(252) if rets.std() > 0 else 0
     cum_return = (equity_curve[-1] - initial_capital) / initial_capital * 100
     running_max = eq.expanding().max()

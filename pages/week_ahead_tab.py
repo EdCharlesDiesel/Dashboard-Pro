@@ -104,7 +104,7 @@ def _build_row(pair: str, events: list) -> dict:
     close = df["Close"].dropna()
     spot = float(close.iloc[-1])
     row["spot"] = spot
-    row["cone"] = wa.cone_from_returns(close.pct_change().dropna(), spot)
+    row["cone"] = wa.cone_from_returns(close.pct_change(fill_method=None).dropna(), spot)
     row["close"] = close
 
     view = get_house_view(pair)

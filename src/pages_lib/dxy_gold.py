@@ -80,7 +80,7 @@ class DxyGoldPage(BloombergPage):
             st.error("Could not load enough DXY / Gold data. Try Refresh.")
             return
 
-        returns = closes.pct_change().dropna()
+        returns = closes.pct_change(fill_method=None).dropna()
         period_corr = float(returns["DXY"].corr(returns["XAU/USD"]))
         rolling = returns["DXY"].rolling(window).corr(returns["XAU/USD"]).dropna()
         current_corr = float(rolling.iloc[-1])

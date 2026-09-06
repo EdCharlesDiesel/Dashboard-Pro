@@ -62,11 +62,38 @@ def daily_ohlc(ticker: str, period: str = DAILY_PERIOD) -> pd.DataFrame:
 
 
 def weekly_ohlc(ticker: str, period: str = WEEKLY_PERIOD) -> pd.DataFrame:
-    """Canonical weekly bars: daily bars resampled to W (default 2y, ttl 300).
+    """Canonical weekly bars: daily bars resampled **W-FRI** (default 2y, ttl 300).
 
     Resampling from daily (rather than pulling native ``1wk`` bars) is the
     master's convention — the in-progress week is included as a partial bar,
     identically for every page.
+
+    **Week-ending-Friday, not pandas' default week-ending-Sunday**, and that is
+    load-bearing. FX trades a partial Sunday session, and those rows flicker: the
+    daily history holds 4 Saturday and 4 Sunday bars in 220, present in some
+    recent weeks and absent from others. Under ``"W"`` that flickering row *is*
+    the week's Close, so a bar that closed a fortnight ago can still change value
+    while its label does not.
+
+    Measured on GBP/AUD, same daily data, both rules::
+
+        W      weeks whose Close changes if weekend bars vanish: 5 of 43
+        W-FRI  weeks whose Close changes if weekend bars vanish: 0 of 43
+
+    What it cost before the change: on 2026-09-05 ``biased_pivots`` read the bar
+    labelled 2026-08-23 twice, 46 minutes apart, and returned Long then Short —
+    1.90280 (Sunday's close) against 1.91631 (Friday's), opposite sides of a
+    pivot zone. Both persisted, because the dedupe key is
+    ``(pair, direction, period)`` and the direction differed. Four other sources
+    read the same frames: ``daily_macd``, ``weekly_ema``, ``predictive`` and
+    ``forecast_dashboard``.
+
+    W-FRI puts the Sunday session at the *start* of the next week, which is both
+    the FX convention — the week closes Friday, the new one opens Sunday evening
+    — and stable against a row that may never arrive.
+
+    Note ``monthly_ohlc`` below still has this flaw (1 of 11 closes move); it
+    needs the same treatment under its own change.
     """
     from src.db.market_cache import cached_ohlc
     try:
@@ -74,7 +101,7 @@ def weekly_ohlc(ticker: str, period: str = WEEKLY_PERIOD) -> pd.DataFrame:
                                 ttl=CANONICAL_TTL))
         if df.empty:
             return df
-        return _resample(df, "W")
+        return _resample(df, "W-FRI")
     except Exception:
         return pd.DataFrame()
 
@@ -98,8 +125,19 @@ def monthly_ohlc(ticker: str, period: str = MONTHLY_PERIOD) -> pd.DataFrame:
                                 ttl=CANONICAL_TTL))
         if df.empty:
             return df
-        # "ME", not the removed "M": month-end is the pandas 3.0 spelling.
-        return _resample(df, "ME")
+        # "BME" (business month end), not "ME". The same fault `weekly_ohlc`
+        # carried: under a calendar month-end, a month-ending Saturday or Sunday
+        # is the month's last row and therefore its Close — and those rows
+        # flicker between fetches, so a settled month could change value while
+        # its label did not. BME moves the bin boundary to the last business
+        # day, so the weekend session opens the *next* month instead, exactly as
+        # W-FRI does for weeks. Constructed settled months, weekend row removed:
+        #
+        #     ME   months that move: ['2026-05-31']
+        #     BME  months that move: none          (label becomes Fri 05-29)
+        #
+        # ("ME"/"BME", not the removed "M"/"BM" — the pandas 3.0 spelling.)
+        return _resample(df, "BME")
     except Exception:
         return pd.DataFrame()
 

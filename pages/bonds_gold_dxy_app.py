@@ -266,8 +266,8 @@ with tab_corr:
     else:
         # yield10 is already in % points; use diff for yields, pct for prices
         chg = pd.DataFrame({
-            "gold": df["gold"].pct_change(),
-            "dxy": df["dxy"].pct_change(),
+            "gold": df["gold"].pct_change(fill_method=None),
+            "dxy": df["dxy"].pct_change(fill_method=None),
             "yield10": df["yield10"].diff(),
         }).dropna()
 
@@ -326,8 +326,8 @@ with tab_scatter:
     else:
         wk = df.resample("W-FRI").last()
         wchg = pd.DataFrame({
-            "gold_ret": wk["gold"].pct_change() * 100,
-            "dxy_ret": wk["dxy"].pct_change() * 100,
+            "gold_ret": wk["gold"].pct_change(fill_method=None) * 100,
+            "dxy_ret": wk["dxy"].pct_change(fill_method=None) * 100,
             "yield_chg": wk["yield10"].diff() * 100,  # basis points
         }).dropna()
 

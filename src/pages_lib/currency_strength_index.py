@@ -262,7 +262,7 @@ class CurrencyStrengthIndexPage(BloombergPage):
             panel["GOLD"] = gold.reindex(panel.index)
         if not dxy.empty:
             panel["DXY"] = dxy.reindex(panel.index)
-        returns = panel.pct_change().dropna(how="all")
+        returns = panel.pct_change(fill_method=None).dropna(how="all")
         corr = returns.corr()
 
         labels = corr.columns.tolist()

@@ -77,7 +77,7 @@ def fetch_history(ticker: str, period: str) -> pd.DataFrame | None:
 def monthly_table(df: pd.DataFrame) -> pd.DataFrame:
     """Year × month grid of percentage returns (month-over-month close)."""
     monthly = df["Close"].resample("ME").last()
-    rets = monthly.pct_change() * 100
+    rets = monthly.pct_change(fill_method=None) * 100
     rets = rets.dropna()
     frame = pd.DataFrame({
         "year": rets.index.year,
@@ -92,7 +92,7 @@ def monthly_table(df: pd.DataFrame) -> pd.DataFrame:
 
 def dow_returns(df: pd.DataFrame) -> pd.DataFrame:
     """Average daily % return by weekday (Mon–Fri)."""
-    daily = df["Close"].pct_change() * 100
+    daily = df["Close"].pct_change(fill_method=None) * 100
     frame = pd.DataFrame({"dow": df.index.dayofweek, "ret": daily.values}).dropna()
     frame = frame[frame["dow"] < 5]
     agg = frame.groupby("dow")["ret"].agg(

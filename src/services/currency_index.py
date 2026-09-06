@@ -31,7 +31,14 @@ def daily_currency_returns(closes: pd.DataFrame) -> pd.DataFrame:
         ticker = INSTRUMENTS[pair]["ticker"]
         if ticker not in closes.columns:
             continue
-        ret = closes[ticker].pct_change()
+        # fill_method=None explicitly. The default is version-dependent and the
+        # two pandas in play disagree: 2.3.3 (the containers) pads, so a holiday
+        # gap becomes a *fake 0% move*; 3.0.2 (the dev venv) leaves it NaN. The
+        # docstring above promises the gap is "excluded via skipna" — under
+        # padding it is not NaN, so skipna excludes nothing and a missing pair
+        # contributes flat to that day's average. Production ran the padding
+        # version, so the local suite passing was the misleading half.
+        ret = closes[ticker].pct_change(fill_method=None)
         base, quote = pair.split("/")
         contributions.setdefault(base, []).append(ret)
         contributions.setdefault(quote, []).append(-ret)
